@@ -1,0 +1,20 @@
+{
+  "template": "https://github.com/funkelab/pycookie/",
+  "commit": "0c80c663d9e5d01e80eb1067e4a45722ee36eb36",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "full_name": "Funke Lab",
+      "email": "funkej@hhmi.org",
+      "github_username": "funkelab",
+      "project_name": "quac",
+      "project_slug": "quac",
+      "project_short_description": "Quantitative Attribution with Counterfactuals",
+      "_copy_without_render": [
+        ".github/workflows/tests.yaml"
+      ],
+      "_template": "https://github.com/funkelab/pycookie/"
+    }
+  },
+  "directory": null
+}
