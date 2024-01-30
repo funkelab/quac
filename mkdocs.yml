@@ -1,0 +1,57 @@
+# Project information
+site_name: QuAC
+site_url: https://funkelab.github.io/quac/
+site_author: Diane Adjavon
+site_description: >-
+  Documentation for QuAC
+
+# Repository
+repo_name: funkelab/quac
+repo_url: https://github.com/funkelab/quac
+
+# Configuration
+theme:
+  name: material
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: quac_light
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: quac_dark
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  logo: assets/quac.png
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - API: 
+    - Generate: api/generate.md
+    - Attributions: api/attributions.md
+    - Evaluation: api/evaluation.md
