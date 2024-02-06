@@ -1,25 +1,39 @@
+.md-header__button.md-logo img{
+    height: 2.4rem;
+}
+
 [data-md-color-scheme="quac_light"] {
     --md-primary-fg-color:           #8C6161;
     --md-primary-fg-color--light:    #FFCE00;
 
-    --md-default-bg-color:           #F2DEA2;
-    --md-default-fg-color:           #037353;
-    --md-default-fg-color--light:    #118060;
-    --md-default-fg-color--lighter:  #28d8a6;
-    --md-default-fg-color--lightest: #aef7e3;
-    --md-typeset-color:              var(--md-default-fg-color);
+    --md-default-bg-color:           whitesmoke;
+    /*--md-default-fg-color:           #037353;*/
+    --md-default-fg-color:           black;
+    /*--md-default-fg-color--light:    #118060;*/
+    --md-default-fg-color--light:    black;
+    --md-default-fg-color--lighter:  #22b361;
+    --md-default-fg-color--lightest: #b4f7ae;
+    --md-typeset-color:              black; 
     --md-typeset-a-color:            var(--md-primary-fg-color);
+    --md-accent-fg-color:            #037535;
 }
 
 [data-md-color-scheme="quac_dark"] {
-    --md-primary-fg-color:           #3F8D73;
+    --md-primary-fg-color:           #8C6161;
+    /*--md-primary-fg-color:           #3F8D73;*/
     --md-primary-fg-color--light:    #7D717B;
 
     --md-default-bg-color:           #070F1C;
+    --md-default-bg-color:           #333333;
     --md-default-fg-color:           #C17488;
     --md-default-fg-color--light:    #bf8292;
+    --md-default-fg-color--light:    white;
     --md-default-fg-color--lighter:  #c7a7af;
     --md-default-fg-color--lightest: #cabdc1;
-    --md-typeset-color:              var(--md-default-fg-color);
+    --md-footer-bg-color:            var(--md-primary-fg-color);
+    --md-footer-bg-color:            rgb(43, 17, 17);
+    --md-footer-bg-color:            #222;
+    --md-typeset-color:              white; /*var(--md-default-fg-color);*/
     --md-typeset-a-color:            var(--md-primary-fg-color);
+    --md-accent-fg-color:            #037535;
 }
