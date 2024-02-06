@@ -33,9 +33,14 @@ class BaseAttribution:
     """
     def __init__(self, classifier):
         self.classifier = classifier
+    
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class, **kwargs):
+        raise NotImplementedError("The base attribution class does not have an attribute method.")
 
     def attribute(self, real_img, counterfactual_img, real_class, target_class, **kwargs):
-        return NotImplementedError("The base attribution class does not have an attribute method.")
+        self.classifier.zero_grad()
+        attribution = self._attribute(real_img, counterfactual_img, real_class, target_class, **kwargs)
+        return attribution.detach().cpu().numpy()
 
 
 class DIntegratedGradients(BaseAttribution):
@@ -43,16 +48,17 @@ class DIntegratedGradients(BaseAttribution):
     Discriminative version of the Integrated Gradients attribution method.
     """
     def __init__(self, classifier):
+        super().__init__(classifier)
         self.ig = attr.IntegratedGradients(classifier)
 
-    def attribute(self, real_img, counterfactual_img, real_class, target_class):
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         # FIXME in the original DAPI code, the real and counterfactual were switched.
         attribution = self.ig.attribute(
-            real_img,
-            counterfactual_img, 
+            real_img[None, ...].cuda(),
+            baselines=counterfactual_img[None, ...].cuda(), 
             target=real_class
         )
-        return attribution
+        return attribution[0]
 
 
 class DDeepLift(BaseAttribution):
@@ -60,16 +66,17 @@ class DDeepLift(BaseAttribution):
     Discriminative version of the DeepLift attribution method.
     """
     def __init__(self, classifier):
+        super().__init__(classifier)
         self.dl = attr.DeepLift(classifier)
 
-    def attribute(self, real_img, counterfactual_img, real_class, target_class):
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         # FIXME in the original DAPI code, the real and counterfactual were switched.
         attribution = self.dl.attribute(
-            real_img,
-            counterfactual_img,
+            real_img[None, ...].cuda(),
+            baselines=counterfactual_img[None, ...].cuda(),
             target=real_class
         )
-        return attribution
+        return attribution[0]
 
 
 class DInGrad(BaseAttribution):
@@ -77,16 +84,15 @@ class DInGrad(BaseAttribution):
     Discriminative version of the InputxGradient attribution method.
     """
     def __init__(self, classifier):
-        self.classifier = classifier  
-        self.salicency = attr.Saliency(self.classifier)
+        super().__init__(classifier)
+        self.saliency = attr.Saliency(self.classifier)
 
-    def attribute(self, real_img, counterfactual_img, real_class, target_class):
-        self.classifier.zero_grad()  # TODO is this necessary?
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         # FIXME in the original DAPI code, the real and counterfactual were switched. See below.
         # grads_fake = self.saliency.attribute(counterfactual_img,
         #                                 target=target_class)
         # ingrad_diff_0 = grads_fake * (real_img - counterfactual_img)
-        grads_real = self.saliency.attribute(real_img,
-                                        target=real_class)
-        ingrad_diff_1 = grads_real * (counterfactual_img - real_img)
-        return ingrad_diff_1
+        grads_real = self.saliency.attribute(real_img[None, ...].cuda(),
+                                        target=real_class).detach().cpu()
+        ingrad_diff_1 = grads_real * (counterfactual_img[None, ...] - real_img[None, ...])
+        return ingrad_diff_1[0]
