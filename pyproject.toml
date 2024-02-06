@@ -16,7 +16,15 @@ authors = [
     { email = "funkej@hhmi.org", name = "Funke Lab" },
 ]
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+  "captum",
+  "numpy", 
+  "torch", 
+  "torchvision",
+  "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
+  "opencv-python",
+  "scipy"
+]
 
 [project.optional-dependencies]
 dev = [
@@ -24,7 +32,7 @@ dev = [
   'black',
   'mypy',
   'pdoc',
-  'pre-commit'
+  'pre-commit',
 ]
 
 [project.urls]
