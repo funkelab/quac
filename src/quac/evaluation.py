@@ -6,7 +6,7 @@ import torch
 
 def image_to_tensor(image, device=None):
     if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     image_tensor = torch.tensor(image, device=device)
     if len(np.shape(image)) == 2:
         image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
@@ -23,10 +23,18 @@ class Evaluator:
     It it is based on the assumption that there exists a counterfactual for each image.
     """
 
-    def __init__(self, classifier, sigma=11, struc=10, channel_wise=False, num_thresholds=200, device=None):
+    def __init__(
+        self,
+        classifier,
+        sigma=11,
+        struc=10,
+        channel_wise=False,
+        num_thresholds=200,
+        device=None,
+    ):
         self.device = device
         if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.classifier = classifier.to(self.device)
         self.sigma = sigma
         self.struc = struc
@@ -51,7 +59,12 @@ class Evaluator:
         # "real" changes into "fake_class"
         classification_real = predictions["original"]
 
-        results = {"thresholds": [], "hybrids": [], "mask_sizes": [], "score_change": []}
+        results = {
+            "thresholds": [],
+            "hybrids": [],
+            "mask_sizes": [],
+            "score_change": [],
+        }
         for threshold in np.arange(vmin, vmax, (vmax - vmin) / self.num_thresholds):
             # soft mask of the parts to copy
             mask, mask_size = self.create_mask(attribution, threshold)
@@ -64,7 +77,7 @@ class Evaluator:
             score_change = classification_hybrid[y_t] - classification_real[y_t]
 
             # Append results
-			# TODO Do we want to store the hybrid?
+            # TODO Do we want to store the hybrid?
             results["thresholds"].append(threshold)
             results["hybrids"].append(hybrid)
             results["mask_sizes"].append(mask_size / np.prod(x.shape))
@@ -83,6 +96,7 @@ class Evaluator:
 
     def create_mask(self, attribution, threshold):
         channels, _, _ = attribution.shape
+        # TODO find a way to get rid of this
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.struc, self.struc))
         mask_size = 0
         mask = []
@@ -107,4 +121,3 @@ class Evaluator:
                 )
             )
         return np.array(mask), mask_size
-

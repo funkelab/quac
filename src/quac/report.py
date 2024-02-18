@@ -9,8 +9,8 @@ from tqdm import tqdm
 
 class Report:
     """This class stores the results of the evaluation.
-    
-    It contains the following information for each accumulated sample: 
+
+    It contains the following information for each accumulated sample:
     - Thresholds: the thresholds used to generate masks from the attribution
     - Mask sizes: the size of the mask generated from the attribution, in pixels
     - Normed mask sizes: the size of the mask generated from the attribution, normalized between 0 and 1
@@ -27,7 +27,7 @@ class Report:
         else:
             self.name = name
         self.attribution_dir = None
-        # TODO check that the metadata is JSON serializable 
+        # TODO check that the metadata is JSON serializable
         self.metadata = metadata
         # Initialize as empty
         self.paths = []
@@ -53,7 +53,15 @@ class Report:
             self.attribution_dir = self.save_dir / self.name
             self.attribution_dir.mkdir(parents=True, exist_ok=True)
 
-    def accumulate(self, inputs, predictions, attribution, evaluation_results, save_attribution=True, save_intermediates=False):
+    def accumulate(
+        self,
+        inputs,
+        predictions,
+        attribution,
+        evaluation_results,
+        save_attribution=True,
+        save_intermediates=False,
+    ):
         """
         Store a new result.
         If `save_intermediates` is `True`, the hybrids are stored to disk.
@@ -75,7 +83,9 @@ class Report:
         if save_attribution:
             self.make_attribution_dir()
             filename = Path(inputs["sample_path"]).stem
-            attribution_path = self.attribution_dir / f"{filename}_{inputs['target_class_index']}.npy"
+            attribution_path = (
+                self.attribution_dir / f"{filename}_{inputs['target_class_index']}.npy"
+            )
             with open(attribution_path, "wb") as fd:
                 np.save(fd, attribution)
             self.attribution_paths.append(attribution_path)
@@ -92,11 +102,11 @@ class Report:
             return np.load(fd)
 
     def interpolate_score_values(self, normalized_mask_sizes, score_changes):
-        """Computes the score changes interpolated at the desired mask sizes
-        """
+        """Computes the score changes interpolated at the desired mask sizes"""
         f = interp1d(
             np.concatenate([[1], normalized_mask_sizes, [0]]),
-            np.concatenate([[score_changes[0]], score_changes, [0]]))
+            np.concatenate([[score_changes[0]], score_changes, [0]]),
+        )
         interp_score_values = [f(x) for x in self.interp_mask_values]
         return interp_score_values
 
@@ -109,13 +119,17 @@ class Report:
         quac_score = np.trapz(interp_score_values, self.interp_mask_values)
         return quac_score
 
-    def compute_scores(self): 
+    def compute_scores(self):
         """Compute all QuAC scores"""
         if self.quac_scores is None:
             quac_scores = []
-            for normalized_mask_sizes, score_changes in tqdm(zip(self.normalized_mask_sizes, self.score_changes), 
-                                                             total=len(self.normalized_mask_sizes)):
-                interp_score_values = self.interpolate_score_values(normalized_mask_sizes, score_changes)
+            for normalized_mask_sizes, score_changes in tqdm(
+                zip(self.normalized_mask_sizes, self.score_changes),
+                total=len(self.normalized_mask_sizes),
+            ):
+                interp_score_values = self.interpolate_score_values(
+                    normalized_mask_sizes, score_changes
+                )
                 quac_scores.append(self.get_quac_score(interp_score_values))
             self.quac_scores = quac_scores
         return self.quac_scores
@@ -139,21 +153,27 @@ class Report:
     def store(self):
         """Store report to disk"""
         self.save_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.save_dir / f"{self.name}.json", "w") as fd: 
+        with open(self.save_dir / f"{self.name}.json", "w") as fd:
             json.dump(
                 {
-                    "thresholds": self.make_json_serializable(self.thresholds), 
-                    "normalized_mask_sizes": self.make_json_serializable(self.normalized_mask_sizes),
+                    "thresholds": self.make_json_serializable(self.thresholds),
+                    "normalized_mask_sizes": self.make_json_serializable(
+                        self.normalized_mask_sizes
+                    ),
                     "score_changes": self.make_json_serializable(self.score_changes),
                     "paths": self.make_json_serializable(self.paths),
                     "target_paths": self.make_json_serializable(self.target_paths),
                     "labels": self.make_json_serializable(self.labels),
                     "target_labels": self.make_json_serializable(self.target_labels),
                     "predictions": self.make_json_serializable(self.predictions),
-                    "target_predictions": self.make_json_serializable(self.target_predictions),
-                    "attribution_paths": self.make_json_serializable(self.attribution_paths)
-                }, 
-                fd
+                    "target_predictions": self.make_json_serializable(
+                        self.target_predictions
+                    ),
+                    "attribution_paths": self.make_json_serializable(
+                        self.attribution_paths
+                    ),
+                },
+                fd,
             )
 
     def load(self, filename):
@@ -171,7 +191,6 @@ class Report:
             self.target_predictions = data.get("target_predictions", [])
             self.attribution_paths = data.get("attribution_paths", [])
 
-
     def plot_curve(self, ax=None):
         """Plot the QuAC curve
 
@@ -186,8 +205,12 @@ class Report:
             fig, ax = plt.subplots()
 
         plot_values = []
-        for normalized_mask_sizes, score_changes in zip(self.normalized_mask_sizes, self.score_changes):
-            interp_score_values = self.interpolate_score_values(normalized_mask_sizes, score_changes)
+        for normalized_mask_sizes, score_changes in zip(
+            self.normalized_mask_sizes, self.score_changes
+        ):
+            interp_score_values = self.interpolate_score_values(
+                normalized_mask_sizes, score_changes
+            )
             plot_values.append(interp_score_values)
         plot_values = np.array(plot_values)
         mean = np.mean(plot_values, axis=0)
@@ -196,3 +219,13 @@ class Report:
         ax.fill_between(self.interp_mask_values, mean - std, mean + std, alpha=0.2)
         if ax is None:
             plt.show()
+
+    def get_optimal_threshold(self, index, return_index=False):
+        mask_scores = np.array(self.score_changes[index])
+        mask_sizes = np.array(self.normalized_mask_sizes[index])
+
+        pareto_scores = mask_sizes**2 + (1 - mask_scores) ** 2
+        thr_idx = np.argmin(pareto_scores)
+        if return_index:
+            return thr_idx, self.thresholds[index][thr_idx]
+        return self.thresholds[index][thr_idx]

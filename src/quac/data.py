@@ -1,15 +1,19 @@
 import os
 from torch.utils.data import Dataset
-from torchvision.datasets.folder import default_loader, is_image_file, has_file_allowed_extension
+from torchvision.datasets.folder import (
+    default_loader,
+    is_image_file,
+    has_file_allowed_extension,
+)
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
 
 
 def find_classes(directory):
     """Finds the class folders in a dataset.
-    
+
     Args:
         directory (string): Root directory path.
-    
+
     Returns:
         tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
     """
@@ -25,7 +29,7 @@ def make_dataset(
     class_to_idx: Optional[Dict[str, int]] = None,
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
     is_valid_file: Optional[Callable[[str], bool]] = None,
-) -> List[Tuple[str, int]]:
+) -> List[Tuple[str, str, int, int]]:
     """Generates a list of samples of a form (path_to_sample, class).
 
     See :class:`DatasetFolder` for details.
@@ -38,12 +42,16 @@ def make_dataset(
     if class_to_idx is None:
         _, class_to_idx = find_classes(directory)
     elif not class_to_idx:
-        raise ValueError("'class_to_index' must have at least one entry to collect any samples.")
+        raise ValueError(
+            "'class_to_index' must have at least one entry to collect any samples."
+        )
 
     both_none = extensions is None and is_valid_file is None
     both_something = extensions is not None and is_valid_file is not None
     if both_none or both_something:
-        raise ValueError("Both extensions and is_valid_file cannot be None or not None at the same time")
+        raise ValueError(
+            "Both extensions and is_valid_file cannot be None or not None at the same time"
+        )
 
     if extensions is not None:
 
@@ -73,7 +81,12 @@ def make_dataset(
                     for target_class, target_dir in target_directories.items():
                         target_path = os.path.join(target_dir, fname)
                         if os.path.isfile(target_path) and is_valid_file(target_path):
-                            item = path, target_path, class_index, class_to_idx[target_class]
+                            item = (
+                                path,
+                                target_path,
+                                class_index,
+                                class_to_idx[target_class],
+                            )
                             instances.append(item)
 
                             if source_class not in available_classes:
@@ -81,7 +94,9 @@ def make_dataset(
 
     empty_classes = set(class_to_idx.keys()) - available_classes
     if empty_classes:
-        msg = f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
+        msg = (
+            f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
+        )
         if extensions is not None:
             msg += f"Supported extensions are: {extensions if isinstance(extensions, str) else ', '.join(extensions)}"
         raise FileNotFoundError(msg)
@@ -89,12 +104,12 @@ def make_dataset(
     return instances
 
 
-class PairedImageFolders(Dataset): 
+class PairedImageFolders(Dataset):
     def __init__(self, source_directory, paired_directory, transform=None):
-        """A dataset that loads images from paired directories, where one has images 
+        """A dataset that loads images from paired directories, where one has images
         generated based on the other.
 
-        Source directory is expected to be of the form: 
+        Source directory is expected to be of the form:
         ```
         directory/
         ├── class_x
@@ -107,7 +122,7 @@ class PairedImageFolders(Dataset):
             └── ...
             └── asd932_.ext
         ```
-            
+
         Paired directory should be:
         ```
         directory/
@@ -128,7 +143,12 @@ class PairedImageFolders(Dataset):
         classes, class_to_idx = find_classes(source_directory)
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_dataset(source_directory, paired_directory, class_to_idx, is_valid_file=is_image_file)
+        self.samples = make_dataset(
+            source_directory,
+            paired_directory,
+            class_to_idx,
+            is_valid_file=is_image_file,
+        )
         self.transform = transform
 
     def __getitem__(self, index):
@@ -139,4 +159,15 @@ class PairedImageFolders(Dataset):
         if self.transform is not None:
             sample = self.transform(sample)
             target_sample = self.transform(target_sample)
-        return sample, target_sample, class_index, target_class_index 
+        output = {
+            "sample_path": path,
+            "target_path": target_path,
+            "sample": sample,
+            "target_sample": target_sample,
+            "class_index": class_index,
+            "target_class_index": target_class_index,
+        }
+        return output
+
+    def __len__(self):
+        return len(self.samples)
