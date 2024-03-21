@@ -147,17 +147,17 @@ class AdainResBlk(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, img_size=256, style_dim=64, max_conv_dim=512):
+    def __init__(self, img_size=256, style_dim=64, max_conv_dim=512, input_dim=1):
         super().__init__()
         dim_in = 2**14 // img_size
         self.img_size = img_size
-        self.from_rgb = nn.Conv2d(1, dim_in, 3, 1, 1)
+        self.from_rgb = nn.Conv2d(input_dim, dim_in, 3, 1, 1)
         self.encode = nn.ModuleList()
         self.decode = nn.ModuleList()
         self.to_rgb = nn.Sequential(
             nn.InstanceNorm2d(dim_in, affine=True),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(dim_in, 1, 1, 1, 0),
+            nn.Conv2d(dim_in, input_dim, 1, 1, 0),
         )
         self.final_activation = nn.Tanh()
 
@@ -223,14 +223,22 @@ class MappingNetwork(nn.Module):
 
 
 class StyleEncoder(nn.Module):
-    def __init__(self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512):
+    def __init__(
+        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+    ):
         super().__init__()
         dim_in = 2**14 // img_size
+
+        self.nearest_power = None
+        if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
+            self.nearest_power = int(np.log2(img_size))
+
         blocks = []
-        blocks += [nn.Conv2d(1, dim_in, 3, 1, 1)]
+        blocks += [nn.Conv2d(input_dim, dim_in, 3, 1, 1)]
 
         repeat_num = int(np.log2(img_size)) - 2
         for _ in range(repeat_num):
+            # For img_size = 224, repeat_num = 5, dim_out = 256, 512, 512, 512, 512
             dim_out = min(dim_in * 2, max_conv_dim)
             blocks += [ResBlk(dim_in, dim_out, downsample=True)]
             dim_in = dim_out
@@ -245,6 +253,10 @@ class StyleEncoder(nn.Module):
             self.unshared += [nn.Linear(dim_out, style_dim)]
 
     def forward(self, x, y):
+        if self.nearest_power is not None:
+            # Required for img_size=224 in the retina case
+            # Resize input image to nearest power of 2
+            x = F.interpolate(x, size=2**self.nearest_power, mode="bilinear")
         h = self.shared(x)
         h = h.view(h.size(0), -1)
         out = []
@@ -253,6 +265,47 @@ class StyleEncoder(nn.Module):
         out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
         s = out[idx, y]  # (batch, style_dim)
+        return s
+
+
+class SingleOutputStyleEncoder(nn.Module):
+    def __init__(
+        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+    ):
+        super().__init__()
+        dim_in = 2**14 // img_size
+
+        self.nearest_power = None
+        if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
+            self.nearest_power = int(np.log2(img_size))
+
+        blocks = []
+        blocks += [nn.Conv2d(input_dim, dim_in, 3, 1, 1)]
+
+        repeat_num = int(np.log2(img_size)) - 2
+        for _ in range(repeat_num):
+            # For img_size = 224, repeat_num = 5, dim_out = 256, 512, 512, 512, 512
+            dim_out = min(dim_in * 2, max_conv_dim)
+            blocks += [ResBlk(dim_in, dim_out, downsample=True)]
+            dim_in = dim_out
+
+        blocks += [nn.LeakyReLU(0.2)]
+        blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
+        blocks += [nn.LeakyReLU(0.2)]
+        self.shared = nn.Sequential(*blocks)
+
+        # Making this shared again, to try to learn new things from data
+        self.output = nn.Linear(dim_out, style_dim)
+
+    def forward(self, x, y):
+        if self.nearest_power is not None:
+            # Required for img_size=224 in the retina case
+            # Resize input image to nearest power of 2
+            x = F.interpolate(x, size=2**self.nearest_power, mode="bilinear")
+        h = self.shared(x)
+        h = h.view(h.size(0), -1)
+        out = []
+        s = self.output(h)
         return s
 
 
@@ -283,12 +336,43 @@ class Discriminator(nn.Module):
         return out
 
 
-def build_model(args):
-    # TODO use timm to add EMA
-    generator = Generator(args.img_size, args.style_dim)
-    mapping_network = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains)
-    style_encoder = StyleEncoder(args.img_size, args.style_dim, args.num_domains)
-    discriminator = Discriminator(args.img_size, args.num_domains)
+def build_model(args, gpu_ids=[0]):
+    generator = nn.DataParallel(
+        Generator(args.img_size, args.style_dim, input_dim=args.input_dim),
+        device_ids=gpu_ids,
+    )
+    mapping_network = nn.DataParallel(
+        MappingNetwork(args.latent_dim, args.style_dim, args.num_domains),
+        device_ids=gpu_ids,
+    )
+    if args.single_output_style_encoder:
+        print("Using single output style encoder")
+        style_encoder = nn.DataParallel(
+            SingleOutputStyleEncoder(
+                args.img_size,
+                args.style_dim,
+                args.num_domains,
+                input_dim=args.input_dim,
+            ),
+            device_ids=gpu_ids,
+        )
+    else:
+        style_encoder = nn.DataParallel(
+            StyleEncoder(
+                args.img_size,
+                args.style_dim,
+                args.num_domains,
+                input_dim=args.input_dim,
+            ),
+            device_ids=gpu_ids,
+        )
+    discriminator = nn.DataParallel(
+        Discriminator(args.img_size, args.num_domains, input_dim=args.input_dim),
+        device_ids=gpu_ids,
+    )
+    generator_ema = copy.deepcopy(generator)
+    mapping_network_ema = copy.deepcopy(mapping_network)
+    style_encoder_ema = copy.deepcopy(style_encoder)
 
     nets = Munch(
         generator=generator,
@@ -296,4 +380,10 @@ def build_model(args):
         style_encoder=style_encoder,
         discriminator=discriminator,
     )
-    return nets
+    nets_ema = Munch(
+        generator=generator_ema,
+        mapping_network=mapping_network_ema,
+        style_encoder=style_encoder_ema,
+    )
+
+    return nets, nets_ema
