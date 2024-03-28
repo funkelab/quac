@@ -92,7 +92,7 @@ Although the structure is similar as above, there are a few key differences.
 The first thing we need to do is to get the reference images.
 
 ```python
-reference_data_directory = Path("root_directory/val/1_Mild")
+reference_data_directory = Path(f"{root_directory}/val/1_Mild")
 reference_dataset = load_data(reference_data_directory, img_size, grayscale=False)
 ```
 

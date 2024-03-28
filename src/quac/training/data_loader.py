@@ -10,6 +10,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 from pathlib import Path
 from itertools import chain
+import glob
 import os
 import random
 
@@ -71,7 +72,7 @@ class AugmentedDataset(data.Dataset):
         self.augment = augment
 
     def _make_dataset(self, root):
-        domains = os.listdir(root)
+        domains = glob.glob(os.path.join(root, "*"))
         fnames, labels = [], []
         for idx, domain in enumerate(sorted(domains)):
             class_dir = os.path.join(root, domain)
@@ -126,13 +127,22 @@ class ReferenceDataset(data.Dataset):
 
 def _make_balanced_sampler(labels):
     class_counts = np.bincount(labels)
+    assert np.all(class_counts > 0), f"Some of the classes are empty. {class_counts}"
     class_weights = 1.0 / class_counts
     weights = class_weights[labels]
     return WeightedRandomSampler(weights, len(weights))
 
 
 def get_train_loader(
-    root, which="source", img_size=256, batch_size=8, prob=0.5, num_workers=4
+    root,
+    which="source",
+    img_size=256,
+    batch_size=8,
+    prob=0.5,
+    num_workers=4,
+    grayscale=False,
+    mean=0.5,
+    std=0.5,
 ):
     print(
         "Preparing DataLoader to fetch %s images "
@@ -142,15 +152,18 @@ def get_train_loader(
     crop = transforms.RandomResizedCrop(img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
     rand_crop = transforms.Lambda(lambda x: crop(x) if random.random() < prob else x)
 
+    transform_list = [rand_crop]
+    if grayscale:
+        transform_list.append(transforms.Grayscale())
+
     transform = transforms.Compose(
         [
-            rand_crop,
-            transforms.Grayscale(),
+            *transform_list,
             transforms.Resize([img_size, img_size]),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=0.5, std=0.5),
+            transforms.Normalize(mean=mean, std=std),
         ]
     )
 
@@ -181,6 +194,7 @@ def get_eval_loader(
     shuffle=True,
     num_workers=4,
     drop_last=False,
+    grayscale=False,
 ):
     print("Preparing DataLoader for the evaluation phase...")
     if imagenet_normalize:
@@ -192,10 +206,13 @@ def get_eval_loader(
         mean = 0.5
         std = 0.5
 
+    transform_list = []
+    if grayscale:
+        transform_list.append(transforms.Grayscale())
+
     transform = transforms.Compose(
         [
-            transforms.Grayscale(),
-            transforms.Resize([img_size, img_size]),
+            *transform_list,
             transforms.Resize([height, width]),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
@@ -213,14 +230,26 @@ def get_eval_loader(
     )
 
 
-def get_test_loader(root, img_size=256, batch_size=32, shuffle=True, num_workers=4):
+def get_test_loader(
+    root,
+    img_size=256,
+    batch_size=32,
+    shuffle=True,
+    num_workers=4,
+    grayscale=False,
+    mean=0.5,
+    std=0.5,
+):
     print("Preparing DataLoader for the generation phase...")
+    transform_list = []
+    if grayscale:
+        transform_list.append(transforms.Grayscale())
     transform = transforms.Compose(
         [
-            transforms.Grayscale(),
+            *transform_list,
             transforms.Resize([img_size, img_size]),
             transforms.ToTensor(),
-            transforms.Normalize(mean=0.5, std=0.5),
+            transforms.Normalize(mean=mean, std=std),
         ]
     )
 
