@@ -26,7 +26,7 @@ class Evaluator:
     def __init__(
         self,
         classifier,
-        sigma=11,
+        gaussian_kernel_size=11,
         struc=10,
         channel_wise=False,
         num_thresholds=200,
@@ -36,7 +36,7 @@ class Evaluator:
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.classifier = classifier.to(self.device)
-        self.sigma = sigma
+        self.gaussian_kernel_size = gaussian_kernel_size
         self.struc = struc
         self.channel_wise = channel_wise
         self.num_thresholds = num_thresholds
@@ -117,7 +117,11 @@ class Evaluator:
             # Blur
             mask.append(
                 cv2.GaussianBlur(
-                    channel_mask.astype(np.float32), (self.sigma, self.sigma), 0
+                    channel_mask.astype(np.float32),
+                    (self.gaussian_kernel_size, self.gaussian_kernel_size),
+                    0,
                 )
             )
+            # TODO should we do this instead?
+            # mask_size += np.sum(mask)
         return np.array(mask), mask_size
