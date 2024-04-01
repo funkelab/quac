@@ -136,7 +136,9 @@ def get_counterfactual(
     max_tries=100,
     best_pred_so_far=0,
     best_cf_so_far=None,
+    best_cf_path_so_far=None,
     error_if_not_found=False,
+    return_path=False,
 ) -> torch.Tensor:
     """
     Tries to find a counterfactual for the given sample, given the target.
@@ -153,6 +155,8 @@ def get_counterfactual(
         device: the device to use
         max_tries: the maximum number of tries to find a counterfactual
         error_if_not_found: whether to raise an error if no counterfactual is found, if set to False, the best counterfactual found so far is returned
+        return_path: whether to return the path of the reference used to create best counterfactual found so far,
+            only used if kind is "reference"
 
     Returns:
         a counterfactual
@@ -172,12 +176,13 @@ def get_counterfactual(
                 f"Not enough reference images, reducing max_tries to {max_tries}."
             )
         # Get a batch of reference images, starting from batch_size * max_tries, of size batch_size
-        ref_batch = torch.stack(
-            [
-                dataset_ref[i][0]
+        ref_batch, ref_paths = zip(
+            *[
+                dataset_ref[i]
                 for i in range(batch_size * (max_tries - 1), batch_size * max_tries)
             ]
         )
+        ref_batch = torch.stack(ref_batch)
         # Generate batch_size counterfactuals
         xcf = latent_inference_model(
             x_multiple.to(device),
@@ -200,6 +205,7 @@ def get_counterfactual(
     if p[best_idx_so_far, target] > best_pred_so_far:
         best_pred_so_far = p[best_idx_so_far, target]
         best_cf_so_far = xcf[best_idx_so_far].cpu().numpy()
+        best_cf_path_so_far = ref_paths[best_idx_so_far]
     # Get the indices of the correct predictions
     indices = torch.where(predictions == target)[0]
 
@@ -220,6 +226,8 @@ def get_counterfactual(
                 max_tries - 1,
                 best_pred_so_far=best_pred_so_far,
                 best_cf_so_far=best_cf_so_far,
+                best_cf_path_so_far=best_cf_path_so_far,
+                return_path=return_path,
             )
         else:
             if error_if_not_found:
@@ -230,4 +238,6 @@ def get_counterfactual(
                 f"Counterfactual not found after {max_tries} tries, using best so far."
             )
     # Return the best counterfactual so far
+    if return_path and kind == "reference":
+        return best_cf_so_far, best_cf_path_so_far
     return best_cf_so_far
