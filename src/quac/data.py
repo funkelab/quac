@@ -1,4 +1,8 @@
+from dataclasses import dataclass
+import numpy as np
 import os
+from pathlib import Path
+import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import (
     default_loader,
@@ -23,7 +27,111 @@ def find_classes(directory):
     return classes, class_to_idx
 
 
-def make_dataset(
+def check_requirements(
+    directory: str,
+    class_to_idx: Optional[Dict[str, int]] = None,
+    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
+    is_valid_file: Optional[Callable[[str], bool]] = None,
+):
+    if class_to_idx is None:
+        _, class_to_idx = find_classes(directory)
+    elif not class_to_idx:
+        raise ValueError(
+            "'class_to_index' must have at least one entry to collect any samples."
+        )
+
+    both_none = extensions is None and is_valid_file is None
+    both_something = extensions is not None and is_valid_file is not None
+
+    both_none = extensions is None and is_valid_file is None
+    both_something = extensions is not None and is_valid_file is not None
+    if both_none or both_something:
+        raise ValueError(
+            "Both extensions and is_valid_file cannot be None or not None at the same time"
+        )
+
+    if extensions is not None:
+
+        def is_valid_file(x: str) -> bool:
+            return has_file_allowed_extension(x, extensions)  # type: ignore[arg-type]
+
+    is_valid_file = cast(Callable[[str], bool], is_valid_file)
+
+    return is_valid_file
+
+
+def make_counterfactual_dataset(
+    counterfactual_directory: str,
+    class_to_idx: Optional[Dict[str, int]] = None,
+    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
+    is_valid_file: Optional[Callable[[str], bool]] = None,
+) -> List[Tuple[str, int]]:
+    """Generates a list of samples of a form (path_to_sample, class)
+    for data organized in a counterfactual style directory.
+
+    The dataset is organized in the following way:
+    ```
+    root_directory/
+    ├── class_x
+    |   └── class_y
+    │       ├── xxx.ext
+    │       ├── xxy.ext
+    │       └── xxz.ext
+    └── class_y
+        └── class_x
+            ├── 123.ext
+            ├── nsdf3.ext
+            └── ...
+            └── asd932_.ext
+    ```
+
+    We want to use the most nested subdirectories as the class labels.
+    """
+    directory = os.path.expanduser(counterfactual_directory)
+
+    is_valid_file = check_requirements(
+        counterfactual_directory,
+        class_to_idx,
+        extensions,
+        is_valid_file,
+    )
+
+    instances = []
+    available_classes = set()
+    for source_class in sorted(class_to_idx.keys()):
+        source_dir = os.path.join(directory, source_class)
+        if not os.path.isdir(source_dir):
+            continue
+        target_directories = {}
+        for target_class in sorted(class_to_idx.keys()):
+            if target_class == source_class:
+                continue
+            target_dir = os.path.join(directory, source_class, target_class)
+            if os.path.isdir(target_dir):
+                target_directories[target_class] = target_dir
+        for root, _, fnames in sorted(os.walk(target_dir, followlinks=True)):
+            for fname in sorted(fnames):
+                path = os.path.join(root, fname)
+                if is_valid_file(path):
+                    item = (path, class_to_idx[target_class])
+                    instances.append(item)
+
+                    if target_class not in available_classes:
+                        available_classes.add(source_class)
+
+    empty_classes = set(class_to_idx.keys()) - available_classes
+    if empty_classes:
+        msg = (
+            f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
+        )
+        if extensions is not None:
+            msg += f"Supported extensions are: {extensions if isinstance(extensions, str) else ', '.join(extensions)}"
+        raise FileNotFoundError(msg)
+
+    return instances
+
+
+def make_paired_dataset(
     directory: str,
     paired_directory: str,
     class_to_idx: Optional[Dict[str, int]] = None,
@@ -39,26 +147,9 @@ def make_dataset(
     """
     directory = os.path.expanduser(directory)
 
-    if class_to_idx is None:
-        _, class_to_idx = find_classes(directory)
-    elif not class_to_idx:
-        raise ValueError(
-            "'class_to_index' must have at least one entry to collect any samples."
-        )
-
-    both_none = extensions is None and is_valid_file is None
-    both_something = extensions is not None and is_valid_file is not None
-    if both_none or both_something:
-        raise ValueError(
-            "Both extensions and is_valid_file cannot be None or not None at the same time"
-        )
-
-    if extensions is not None:
-
-        def is_valid_file(x: str) -> bool:
-            return has_file_allowed_extension(x, extensions)  # type: ignore[arg-type]
-
-    is_valid_file = cast(Callable[[str], bool], is_valid_file)
+    is_valid_file = check_requirements(
+        directory, class_to_idx, extensions, is_valid_file
+    )
 
     instances = []
     available_classes = set()
@@ -143,7 +234,7 @@ class PairedImageFolders(Dataset):
         classes, class_to_idx = find_classes(source_directory)
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_dataset(
+        self.samples = make_paired_dataset(
             source_directory,
             paired_directory,
             class_to_idx,
@@ -159,15 +250,72 @@ class PairedImageFolders(Dataset):
         if self.transform is not None:
             sample = self.transform(sample)
             target_sample = self.transform(target_sample)
-        output = {
-            "sample_path": path,
-            "target_path": target_path,
-            "sample": sample,
-            "target_sample": target_sample,
-            "class_index": class_index,
-            "target_class_index": target_class_index,
-        }
+        output = Sample(
+            path=Path(path),
+            counterfactual_path=Path(target_path),
+            image=sample,
+            counterfactual=target_sample,
+            source_class_index=class_index,
+            target_class_index=target_class_index,
+            source_class=self.classes[class_index],
+            target_class=self.classes[target_class_index],
+        )
         return output
 
     def __len__(self):
         return len(self.samples)
+
+
+class CounterfactualDataset(Dataset):
+    def __init__(self, counterfactual_directory, transform=None):
+        classes, class_to_idx = find_classes(counterfactual_directory)
+        self.classes = classes
+        self.class_to_idx = class_to_idx
+        self.samples = make_counterfactual_dataset(
+            counterfactual_directory,
+            class_to_idx,
+            is_valid_file=is_image_file,
+        )
+        self.transform = transform
+
+    def __getitem__(self, index):
+        path, class_index = self.samples[index]
+        sample = default_loader(path)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        output = CounterfactualSample(
+            counterfactual_path=Path(path),
+            counterfactual=sample,
+            target_class_index=class_index,
+            target_class=self.classes[class_index],
+        )
+        return output
+
+    def __len__(self):
+        return len(self.samples)
+
+
+@dataclass
+class Sample:
+    path: Path
+    image: torch.Tensor
+    source_class_index: int
+    source_class: str
+
+
+@dataclass
+class CounterfactualSample:
+    counterfactual_path: Path
+    counterfactual: torch.Tensor
+    target_class_index: int
+    target_class: str
+
+
+@dataclass
+class PairedSample(Sample, CounterfactualSample):
+    pass
+
+
+@dataclass
+class SampleWithAttribution(PairedSample):
+    attribution: np.array

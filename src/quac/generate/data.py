@@ -4,6 +4,7 @@ import torch
 
 
 class LabelFreePngFolder(torch.utils.data.Dataset):
+    # TODO Move to quac.data
     """Get all images in a folder, no subfolders, no labels."""
 
     def __init__(self, root, transform=None):

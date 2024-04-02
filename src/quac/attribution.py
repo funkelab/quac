@@ -1,8 +1,11 @@
 """Holds all of the discriminative attribution methods that are accepted by QuAC."""
+
 from captum import attr
-import torch
 import numpy as np
 import scipy
+from pathlib import Path
+from quac.data import PairedImageDataset
+from tqdm import tqdm
 
 
 def residual(real_img, fake_img):
@@ -113,3 +116,44 @@ class DInGrad(BaseAttribution):
             counterfactual_img[None, ...] - real_img[None, ...]
         )
         return ingrad_diff_1[0]
+
+
+class AttributionIO:
+    """
+    Running the attribution methods on the images.
+    Storing the results in the output directory.
+
+    """
+
+    def __init__(self, attributions: dict[str, BaseAttribution], output_directory: str):
+        self.attributions = attributions
+        self.output_directory = Path(output_directory)
+
+    def get_directory(self, attr_name: str, source_class: str, target_class: str):
+        directory = self.output_directory / f"{attr_name}/{source_class}/{target_class}"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def run(
+        self, source_directory: str, counterfactual_directory: str, transform: callable
+    ):
+        dataset = PairedImageDataset(
+            source_directory, counterfactual_directory, transform=transform
+        )
+
+        for sample in tqdm(dataset):
+            for attr_name, attribution in self.attributions.items():
+                attr = attribution.attribute(
+                    sample.image,
+                    sample.counterfactual,
+                    sample.class_index,
+                    sample.target_class_index,
+                )
+                # Store the attribution
+                np.save(
+                    self.get_directory(
+                        attr_name, sample.source_class, sample.target_class
+                    )
+                    / f"{sample.path.name}.npy",
+                    attr,
+                )
