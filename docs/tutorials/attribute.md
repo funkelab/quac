@@ -2,8 +2,14 @@
 
 ## Attribution
 ```python
+# Load the classifier
+from quac.generate import load_classifier
+classifier = load_classifier(
+
+)
+
 # Defining attributions
-from quac.attribute import (
+from quac.attribution import (
     DDeepLift,
     DIntegratedGradients,
     AttributionIO
@@ -45,6 +51,7 @@ In this example, we evaluate the results from the DeepLift attribution method.
 ```python
 # Defining processors and evaluators
 from quac.evaluate import Processor, Evaluator
+from sklearn.metrics import ConfusionMatrixDisplay
 
 classifier = load_classifier(...)
 
@@ -61,12 +68,16 @@ cf_confusion_matrix = evaluator.classification_report(
                         data="counterfactuals",  # this is the default
                         return_classifications=False,
                         print_report=True,
-                        split_by_source=False,
-                        split_by_target=False
                     )
 
-# TODO plot the confusion matrix
+# Plot the confusion matrix
+disp = ConfusionMatrixDisplay(
+    confusion_matrix=cf_confusion_matrix,
+)
+disp.show()
 
+# Run QuAC evaluation on your attribution and store a report
 report = evaluator.quantify(processor=Processor())
-report.store("where_my_report_goes")
+# The report will be stored based on the processor's name, which is "default" by default
+report.store("my_attributions_directory/deeplift/reports")
 ```

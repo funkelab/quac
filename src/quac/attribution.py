@@ -35,8 +35,23 @@ class BaseAttribution:
     Basic format of an attribution class.
     """
 
-    def __init__(self, classifier):
+    def __init__(self, classifier, normalize=True):
         self.classifier = classifier
+        self.normalize = normalize
+
+    def _normalize(self, attribution):
+        """Scale the attribution to be between 0 and 1.
+
+        Note that this also takes the absolute value of the attribution.
+        Generally in this frameowrk, we only care about the absolute value of the attribution,
+        because if "negative changes" need to be made, this should be inherent in
+        the counterfactual image.
+        """
+        attribution = np.abs(attribution)
+        # We scale the attribution to be between 0 and 1
+        return (attribution - np.min(attribution)) / (
+            np.max(attribution) - np.min(attribution)
+        )
 
     def _attribute(
         self, real_img, counterfactual_img, real_class, target_class, **kwargs
@@ -52,7 +67,10 @@ class BaseAttribution:
         attribution = self._attribute(
             real_img, counterfactual_img, real_class, target_class, **kwargs
         )
-        return attribution.detach().cpu().numpy()
+        attribution = attribution.detach().cpu().numpy()
+        if self.normalize:
+            attribution = self._normalize(attribution)
+        return attribution
 
 
 class DIntegratedGradients(BaseAttribution):
@@ -141,12 +159,12 @@ class AttributionIO:
             source_directory, counterfactual_directory, transform=transform
         )
 
-        for sample in tqdm(dataset):
+        for sample in tqdm(dataset, total=len(dataset)):
             for attr_name, attribution in self.attributions.items():
                 attr = attribution.attribute(
                     sample.image,
                     sample.counterfactual,
-                    sample.class_index,
+                    sample.source_class_index,
                     sample.target_class_index,
                 )
                 # Store the attribution
@@ -154,6 +172,6 @@ class AttributionIO:
                     self.get_directory(
                         attr_name, sample.source_class, sample.target_class
                     )
-                    / f"{sample.path.name}.npy",
+                    / f"{sample.path.stem}.npy",
                     attr,
                 )

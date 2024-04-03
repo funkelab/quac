@@ -1,10 +1,14 @@
 import cv2
+from dataclasses import dataclass
 import numpy as np
+from pathlib import Path
+from quac.data import PairedImageDataset, CounterfactualDataset, PairedWithAttribution
+from quac.report import Report
+from sklearn.metrics import classification_report, confusion_matrix
 from torchvision.datasets import ImageFolder
 from torch.nn import functional as F
 import torch
-from quac.data import PairedImageFolder, CounterfactualDataset
-from quac.report import Report
+from tqdm import tqdm
 
 
 def image_to_tensor(image, device=None):
@@ -23,10 +27,13 @@ def image_to_tensor(image, device=None):
 class Processor:
     """Class the turns attributions into masks."""
 
-    def __init__(self, gaussian_kernel_size=11, struc=10, channel_wise=False):
+    def __init__(
+        self, gaussian_kernel_size=11, struc=10, channel_wise=True, name="default"
+    ):
         self.gaussian_kernel_size = gaussian_kernel_size
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struc, struc))
         self.channel_wise = channel_wise
+        self.name = name
 
     def create_mask(self, attribution, threshold, return_size=True):
         channels, _, _ = attribution.shape
@@ -39,7 +46,8 @@ class Processor:
                 channel_mask = attribution[c, :, :] > threshold
             else:
                 channel_mask = np.any(attribution > threshold, axis=0)
-            # morphological closing
+            # TODO explain the reasoning behind the morphological closing
+            # Morphological closing
             channel_mask = cv2.morphologyEx(
                 channel_mask.astype(np.uint8), cv2.MORPH_CLOSE, self.kernel
             )
@@ -64,7 +72,8 @@ class Processor:
 class Evaluator:
     """This class evaluates the quality of an attribution using the QuAC method.
 
-    It it is based on the assumption that there exists a counterfactual for each image.
+    Raises:
+        FileNotFoundError: If the source, counterfactual or attribution directories do not exist.
     """
 
     def __init__(
@@ -83,7 +92,14 @@ class Evaluator:
         self.classifier = classifier.to(self.device)
         self.num_thresholds = num_thresholds
 
-        # TODO Check that they all exist
+        # Check that they all exist
+        for directory in [
+            source_directory,
+            counterfactual_directory,
+            attribution_directory,
+        ]:
+            if not Path(directory).exists():
+                raise FileNotFoundError(f"Directory {directory} does not exist")
         self.source_directory = source_directory
         self.counterfactual_directory = counterfactual_directory
         self.attribution_directory = attribution_directory
@@ -91,20 +107,22 @@ class Evaluator:
 
     @property
     def source_dataset(self):
-        # Note: Recomputed each time
+        # NOTE: Recomputed each time, but should be used sparingly.
         dataset = ImageFolder(self.source_directory, transform=self.transform)
         return dataset
 
     @property
     def counterfactual_dataset(self):
+        # NOTE: Recomputed each time, but should be used sparingly.
         dataset = CounterfactualDataset(
-            self.counterfactual_dataset, transform=self.transform
+            self.counterfactual_directory, transform=self.transform
         )
         return dataset
 
     @property
     def paired_dataset(self):
-        dataset = PairedImageFolder(
+        # NOTE: Recomputed each time, but should be used sparingly.
+        dataset = PairedImageDataset(
             self.source_directory,
             self.counterfactual_directory,
             transform=self.transform,
@@ -113,17 +131,88 @@ class Evaluator:
 
     @property
     def dataset_with_attribution(self):
-        dataset = ...  # TODO implement
+        dataset = PairedWithAttribution(
+            self.source_directory,
+            self.counterfactual_directory,
+            self.attribution_directory,
+            transform=self.transform,
+        )
         return dataset
+
+    def _source_classification_report(
+        self, return_classification=False, print_report=True
+    ):
+        """
+        Classify the source data and return the confusion matrix.
+        """
+        pred = []
+        target = []
+        for sample in tqdm(self.source_dataset):
+            pred.append(self.run_inference(sample.image).argmax())
+            target.append(sample.source_class_index)
+
+        if print_report:
+            print(classification_report(target, pred))
+
+        cm = confusion_matrix(target, pred, normalize="true")
+        if return_classification:
+            return cm, pred, target
+        return cm
+
+    def _counterfactual_classification_report(
+        self,
+        return_classification=False,
+        print_report=True,
+    ):
+        """
+        Classify the counterfactual data and return the confusion matrix.
+        """
+        pred = []
+        source = []
+        target = []
+        for sample in tqdm(self.counterfactual_dataset):
+            pred.append(self.run_inference(sample.counterfactual).argmax())
+            target.append(sample.target_class_index)
+            source.append(sample.source_class_index)
+
+        if print_report:
+            print(classification_report(target, pred))
+
+        cm = confusion_matrix(target, pred, normalize="true")
+        if return_classification:
+            return cm, pred, source, target
+        return cm
+
+    def classification_report(
+        self,
+        data="counterfactuals",
+        return_classification=False,
+        print_report=True,
+    ):
+        """
+        Classify the data and return the confusion matrix.
+        """
+        if data == "counterfactuals":
+            return self._counterfactual_classification_report(
+                return_classification=return_classification,
+                print_report=print_report,
+            )
+        elif data == "source":
+            return self._source_classification_report(
+                return_classification=return_classification,
+                print_report=print_report,
+            )
+        else:
+            raise ValueError(f"Data must be 'counterfactuals' or 'source', not {data}")
 
     def quantify(self, processor=None):
         if processor is None:
             processor = Processor()
         report = Report(name=processor.name)
-        for inputs in self.dataset_with_attribution:
+        for inputs in tqdm(self.dataset_with_attribution):
             predictions = {
-                "original": self.run_inference(inputs.image),
-                "counterfactual": self.run_inference(inputs.counterfactual),
+                "original": self.run_inference(inputs.image)[0],
+                "counterfactual": self.run_inference(inputs.counterfactual)[0],
             }
             results = self.evaluate(
                 inputs.image,
@@ -134,10 +223,10 @@ class Evaluator:
                 predictions,
                 processor,
             )
-            report.accumuate(
+            report.accumulate(
                 inputs,
-                results,
                 predictions,
+                results,
             )
         return report
 
