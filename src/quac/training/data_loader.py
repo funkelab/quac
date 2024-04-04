@@ -86,6 +86,7 @@ class AugmentedDataset(data.Dataset):
         label = self.targets[index]
         img = Image.open(fname)
         img2 = self.augment(img)
+        label = torch.tensor(label)
         if self.transform is not None:
             img = self.transform(img)
             img2 = self.transform(img2)
