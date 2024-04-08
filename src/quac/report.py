@@ -56,6 +56,7 @@ class Report:
         self.target_paths.append(inputs.counterfactual_path)
         self.labels.append(inputs.source_class_index)
         self.target_labels.append(inputs.target_class_index)
+        self.attribution_paths.append(inputs.attribution_path)
         # Store the prediction results
         self.predictions.append(predictions["original"])
         self.target_predictions.append(predictions["counterfactual"])
@@ -160,6 +161,22 @@ class Report:
             self.predictions = data.get("predictions", [])
             self.target_predictions = data.get("target_predictions", [])
             self.attribution_paths = data.get("attribution_paths", [])
+            self.quac_scores = data.get("quac_scores", None)
+
+    def get_curve(self):
+        """Gets the mean and standard deviation of the QuAC curve"""
+        plot_values = []
+        for normalized_mask_sizes, score_changes in zip(
+            self.normalized_mask_sizes, self.score_changes
+        ):
+            interp_score_values = self.interpolate_score_values(
+                normalized_mask_sizes, score_changes
+            )
+            plot_values.append(interp_score_values)
+        plot_values = np.array(plot_values)
+        mean = np.mean(plot_values, axis=0)
+        std = np.std(plot_values, axis=0)
+        return mean, std
 
     def plot_curve(self, ax=None):
         """Plot the QuAC curve
@@ -174,17 +191,8 @@ class Report:
         if ax is None:
             fig, ax = plt.subplots()
 
-        plot_values = []
-        for normalized_mask_sizes, score_changes in zip(
-            self.normalized_mask_sizes, self.score_changes
-        ):
-            interp_score_values = self.interpolate_score_values(
-                normalized_mask_sizes, score_changes
-            )
-            plot_values.append(interp_score_values)
-        plot_values = np.array(plot_values)
-        mean = np.mean(plot_values, axis=0)
-        std = np.std(plot_values, axis=0)
+        mean, std = self.get_curve()
+
         ax.plot(self.interp_mask_values, mean, label=self.name)
         ax.fill_between(self.interp_mask_values, mean - std, mean + std, alpha=0.2)
         if ax is None:
@@ -198,5 +206,5 @@ class Report:
         pareto_scores = mask_sizes**2 + (1 - mask_scores) ** 2
         thr_idx = np.argmin(pareto_scores)
         if return_index:
-            return thr_idx, self.thresholds[index][thr_idx]
+            return self.thresholds[index][thr_idx], thr_idx
         return self.thresholds[index][thr_idx]

@@ -242,7 +242,7 @@ class Evaluator:
                 x_t: the counterfactual image
                 y: the class of the input image
                 y_t: the class of the counterfactual image
-                attrihbution: the attribution map
+                attribution: the attribution map
                 predictions: the predictions of the classifier
                 processor: the attribution processing function (to get mask)
                 vmin: the minimal possible value of the attribution, to be used for thresholding. Defaults to -1
