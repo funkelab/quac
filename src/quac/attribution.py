@@ -78,8 +78,8 @@ class DIntegratedGradients(BaseAttribution):
     Discriminative version of the Integrated Gradients attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.ig = attr.IntegratedGradients(classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -97,8 +97,8 @@ class DDeepLift(BaseAttribution):
     Discriminative version of the DeepLift attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.dl = attr.DeepLift(classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -116,8 +116,8 @@ class DInGrad(BaseAttribution):
     Discriminative version of the InputxGradient attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.saliency = attr.Saliency(self.classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -134,6 +134,40 @@ class DInGrad(BaseAttribution):
             counterfactual_img[None, ...] - real_img[None, ...]
         )
         return ingrad_diff_1[0]
+
+
+class VanillaIntegratedGradient(BaseAttribution):
+    """Wrapper class for Integrated Gradients from Captum.
+
+    Allows us to use it as a baseline.
+    """
+
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
+        self.ig = attr.IntegratedGradients(classifier)
+
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+        batched_attribution = (
+            self.ig.attribute(real_img[None, ...], target=real_class).detach().cpu()
+        )
+        return batched_attribution[0]
+
+
+class VanillaDeepLift(BaseAttribution):
+    """Wrapper class for DeepLift from Captum.
+
+    Allows us to use it as a baseline.
+    """
+
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
+        self.dl = attr.DeepLift(classifier)
+
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+        batched_attribution = (
+            self.dl.attribute(real_img[None, ...], target=real_class).detach().cpu()
+        )
+        return batched_attribution[0]
 
 
 class AttributionIO:
