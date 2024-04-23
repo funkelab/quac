@@ -8,16 +8,19 @@ class ClassifierWrapper(torch.nn.Module):
     for how to convert a model to torchscript.
     """
 
-    def __init__(self, model_checkpoint, mean, std):
+    def __init__(self, model_checkpoint, mean: None, std: None):
         """Wraps a torchscript model, and applies normalization."""
         super().__init__()
         self.model = torch.jit.load(model_checkpoint)
         self.model.eval()
         self.transform = transforms.Normalize(mean, std)
+        if mean is None:
+            self.transform = lambda x: x
 
-    def forward(self, x):
+    def forward(self, x, assume_normalized=False):
         """Assumes that x is between -1 and 1."""
         # TODO it would be even better if the range was between 0 and 1 so we wouldn't have to do the below
-        x = (x + 1) / 2
+        if not assume_normalized:
+            x = (x + 1) / 2
         x = self.transform(x)
         return self.model(x)

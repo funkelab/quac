@@ -189,6 +189,7 @@ class Generator(nn.Module):
 class MappingNetwork(nn.Module):
     def __init__(self, latent_dim=16, style_dim=64, num_domains=2):
         super().__init__()
+        self.latent_dim = latent_dim
         layers = []
         layers += [nn.Linear(latent_dim, 512)]
         layers += [nn.ReLU()]
