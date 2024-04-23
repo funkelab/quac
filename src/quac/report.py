@@ -150,7 +150,7 @@ class Report:
         """Load report from disk"""
         with open(filename, "r") as fd:
             data = json.load(fd)
-            self.metadata = data["metadata"]
+            self.metadata = data.get("metadata", {})
             self.thresholds = data["thresholds"]
             self.normalized_mask_sizes = data["normalized_mask_sizes"]
             self.score_changes = data["score_changes"]
@@ -165,6 +165,7 @@ class Report:
 
     def get_curve(self):
         """Gets the mean and standard deviation of the QuAC curve"""
+        # TODO Cache the results, takes forever otherwise
         plot_values = []
         for normalized_mask_sizes, score_changes in zip(
             self.normalized_mask_sizes, self.score_changes
