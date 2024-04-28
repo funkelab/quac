@@ -2,6 +2,11 @@ import torch
 from torchvision import transforms
 
 
+class Identity(torch.nn.Module):
+    def forward(self, x):
+        return x
+
+
 class ClassifierWrapper(torch.nn.Module):
     """
     This class expects a torchscript model. See [here](https://pytorch.org/tutorials/beginner/saving_loading_models.html#export-load-model-in-torchscript-format)
@@ -15,7 +20,7 @@ class ClassifierWrapper(torch.nn.Module):
         self.model.eval()
         self.transform = transforms.Normalize(mean, std)
         if mean is None:
-            self.transform = lambda x: x
+            self.transform = Identity()
 
     def forward(self, x, assume_normalized=False):
         """Assumes that x is between -1 and 1."""

@@ -8,22 +8,22 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
+import datetime
+from munch import Munch
+import numpy as np
 import os
 from os.path import join as ospj
 from pathlib import Path
-from munch import Munch
+from quac.training.data_loader import AugmentedInputFetcher
+from quac.training.checkpoint import CheckpointIO
+import quac.training.utils as utils
+from quac.training.classification import ClassifierWrapper
 import shutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from tqdm import tqdm
-
-
-from quac.training.checkpoint import CheckpointIO
-import quac.training.utils as utils
-from quac.training.eval import calculate_metrics
-
 import wandb
 
 
@@ -53,8 +53,8 @@ class Solver(nn.Module):
         self.nets = nets
         self.nets_ema = nets_ema
         self.run = run
-        self.root_dir = root_dir
-        self.checkpoint_dir = Path(root_dir) / "checkpoints"
+        self.root_dir = Path(root_dir)
+        self.checkpoint_dir = self.root_dir / "checkpoints"
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
         checkpoint_dir = str(self.checkpoint_dir)
@@ -116,6 +116,15 @@ class Solver(nn.Module):
         for optim in self.optims.values():
             optim.zero_grad()
 
+    @property
+    def latent_dim(self):
+        try:
+            latent_dim = self.nets.mapping_network.latent_dim
+        except AttributeError:
+            # it's a data parallel model
+            latent_dim = self.nets.mapping_network.module.latent_dim
+        return latent_dim
+
     def train(
         self,
         loader,
@@ -130,13 +139,20 @@ class Solver(nn.Module):
         lambda_reg: float = 1.0,
         lambda_sty: float = 1.0,
         lambda_cyc: float = 1.0,
+        # Validation things
+        val_loader=None,
+        val_config=None,
     ):
         nets = self.nets
         nets_ema = self.nets_ema
         optims = self.optims
 
-        # fetch random validation images for debugging
-        fetcher = loader.train_fetcher
+        fetcher = AugmentedInputFetcher(
+            loader.src,
+            loader.reference,
+            latent_dim=self.latent_dim,
+            mode="train",
+        )
 
         # resume training if necessary
         if resume_iter > 0:
@@ -207,10 +223,12 @@ class Solver(nn.Module):
             if lambda_ds > 0:
                 lambda_ds -= initial_lambda_ds / ds_iter
 
-            if (i + 1) % eval_every == 0:
-                self.evaluate(loader, iteration=i + 1, mode="latent", val_config=None)
+            if (i + 1) % eval_every == 0 and val_loader is not None:
                 self.evaluate(
-                    loader, iteration=i + 1, mode="reference", val_config=None
+                    val_loader, iteration=i + 1, mode="latent", val_config=val_config
+                )
+                self.evaluate(
+                    val_loader, iteration=i + 1, mode="reference", val_config=val_config
                 )
 
             # save model checkpoints
@@ -229,7 +247,10 @@ class Solver(nn.Module):
                     x_ref,
                     fake_x_latent,
                     fake_x_reference,
+                    y_org,  # Source classes
+                    y_trg,  # Target classes
                     step=i + 1,
+                    total_iters=total_iters,
                 )
 
     def log(
@@ -243,7 +264,10 @@ class Solver(nn.Module):
         x_ref,
         fake_x_latent,
         fake_x_reference,
+        y_source,
+        y_target,
         step,
+        total_iters,
     ):
         all_losses = dict()
         for loss, prefix in zip(
@@ -256,16 +280,47 @@ class Solver(nn.Module):
         # log all losses to wandb or print them
         if self.run:
             self.run.log(all_losses, step=step)
-            for name, img in zip(
+            for name, img, label in zip(
                 ["x_real", "x_ref", "fake_x_latent", "fake_x_reference"],
                 [x_real, x_ref, fake_x_latent, fake_x_reference],
+                [y_source, y_target, y_target, y_target],
             ):
-                self.run.log({name: [wandb.Image(img)]}, step=step)
-        else:
-            print(all_losses)
-            # TODO store images
+                # Make a caption of labels
+                caption = " ".join([str(x) for x in label.cpu().tolist()])
+                self.run.log({name: [wandb.Image(img, caption=caption)]}, step=step)
 
-    def generate_images(self, val_loader, eval_dir, num_outs_per_domain, mode="latent"):
+        else:
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            print(
+                f"[{now}]: {step}/{total_iters}",
+                flush=True,
+            )
+            g_losses = "\t".join(
+                [
+                    f"{key}: {value:.4f}"
+                    for key, value in all_losses.items()
+                    if not key.startswith("D/")
+                ]
+            )
+            d_losses = "\t".join(
+                [
+                    f"{key}: {value:.4f}"
+                    for key, value in all_losses.items()
+                    if key.startswith("D/")
+                ]
+            )
+            print(f"G Losses: {g_losses}", flush=True)
+            print(f"D Losses: {d_losses}", flush=True)
+
+    @torch.no_grad()
+    def evaluate(
+        self,
+        val_loader,
+        iteration=None,
+        num_outs_per_domain=4,
+        mode="latent",
+        val_config=None,
+    ):
         """
         Generates images for evaluation and stores them to disk.
 
@@ -273,6 +328,18 @@ class Solver(nn.Module):
         ----------
         val_loader
         """
+        if iteration is None:  # Choose the iteration to evaluate
+            resume_iter = resume_iter
+            self._load_checkpoint(resume_iter)
+
+        # Generate images for evaluation
+        eval_dir = self.root_dir / "eval"
+        eval_dir.mkdir(exist_ok=True, parents=True)
+
+        # Load classifier
+        classifier = ClassifierWrapper(
+            val_config.classifier_checkpoint, val_config.mean, val_config.std
+        )
         assert mode in ["latent", "reference"]
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -281,12 +348,15 @@ class Solver(nn.Module):
         domains = val_loader.available_targets
         print("Number of domains: %d" % len(domains))
 
+        conversion_rate_values = {}
+        translation_rate_values = {}
+
         for trg_idx, trg_domain in enumerate(domains):
             src_domains = [x for x in val_loader.available_sources if x != trg_domain]
             val_loader.set_target(trg_domain)
 
             for src_idx, src_domain in enumerate(src_domains):
-                task = "%s_to_%s" % (src_domain, trg_domain)
+                task = "%s/%s" % (src_domain, trg_domain)
                 # Creating the path
                 path_fake = os.path.join(eval_dir, task)
                 shutil.rmtree(path_fake, ignore_errors=True)
@@ -301,17 +371,17 @@ class Solver(nn.Module):
                     x_src = x_src.to(device)
                     y_trg = torch.tensor([trg_idx] * N).to(device)
 
+                    predictions = []
                     # generate num_outs_per_domain outputs from the same input
                     for j in range(num_outs_per_domain):
                         if mode == "latent":
-                            latent_dim = self.nets_ema.mapping_network.latent_dim
-                            z_trg = torch.randn(N, latent_dim).to(device)
+                            z_trg = torch.randn(N, self.latent_dim).to(device)
                             s_trg = self.nets_ema.mapping_network(z_trg, y_trg)
                         else:
                             try:
                                 x_ref = next(iter_ref).to(device)
                             except:
-                                iter_ref = iter(loader_ref)
+                                iter_ref = iter(val_loader.loader_ref)
                                 x_ref = next(iter_ref).to(device)
 
                             if x_ref.size(0) > N:
@@ -319,45 +389,47 @@ class Solver(nn.Module):
                             s_trg = self.nets_ema.style_encoder(x_ref, y_trg)
 
                         x_fake = self.nets_ema.generator(x_src, s_trg)
-
-                        for k in range(N):
-                            # Get the index of the image as:
-                            # i * batch_size * spot_in_batch
-                            # Append to it the index of this output for the given batch
-                            filename = os.path.join(
-                                path_fake,
-                                "%.4i_%.2i.png" % (i * N + (k + 1), j + 1),
+                        # Run the classification
+                        predictions.append(
+                            classifier(
+                                x_fake, assume_normalized=val_config.assume_normalized
                             )
-                            utils.save_image(x_fake[k], ncol=1, filename=filename)
-                del loader_src
-                if mode == "reference":
-                    del loader_ref
-                    del iter_ref
+                            .cpu()
+                            .numpy()
+                        )
+                predictions = np.stack(predictions, axis=0)
+                assert len(predictions) > 0
+                # Do it in a vectorized way, by reshaping the predictions
+                predictions = predictions.reshape(
+                    -1, num_outs_per_domain, predictions.shape[-1]
+                )
+                predictions = predictions.argmax(axis=-1)
+                #
+                at_least_one = np.any(predictions == trg_idx, axis=1)
+                #
+                conversion_rate = np.mean(at_least_one)
+                translation_rate = np.mean(predictions == trg_idx)
 
-    @torch.no_grad()
-    def evaluate(
-        self,
-        loader,
-        iteration=None,
-        num_outs_per_domain=4,
-        mode="latent",
-        val_config=None,
-    ):
-        if iteration is None:  # Choose the iteration to evaluate
-            resume_iter = resume_iter
-            self._load_checkpoint(resume_iter)
-        # Generate images for evaluation
-        eval_dir = self.root_dir / "eval"
-        eval_dir.mkdir(exist_ok=True, parents=True)  # TODO add iteration?
-        self.generate_images(loader, eval_dir, num_outs_per_domain, mode=mode)
-        # Calculate metrics
-        # TODO maybe launch a subprocess for evaluation?
-        calculate_metrics(eval_dir, step=iteration, mode=mode, **val_config)
+                # STORE
+                conversion_rate_values["conversion_rate/" + task] = conversion_rate
+                translation_rate_values["translation_rate/" + task] = translation_rate
+
+        # report conversion rate values
+        filename = os.path.join(
+            eval_dir, "conversion_rate_%.5i_%s.json" % (iteration, mode)
+        )
+        utils.save_json(conversion_rate_values, filename)
+        # report translation rate values
+        filename = os.path.join(
+            eval_dir, "translation_rate_%.5i_%s.json" % (iteration, mode)
+        )
+        utils.save_json(translation_rate_values, filename)
+        if self.run is not None:
+            self.run.log(conversion_rate_values, step=iteration)
+            self.run.log(translation_rate_values, step=iteration)
 
 
-def compute_d_loss(
-    nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, masks=None, lambda_reg=1.0
-):
+def compute_d_loss(nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, lambda_reg=1.0):
     assert (z_trg is None) != (x_ref is None)
     # with real images
     x_real.requires_grad_()
@@ -372,7 +444,7 @@ def compute_d_loss(
         else:  # x_ref is not None
             s_trg = nets.style_encoder(x_ref, y_trg)
 
-        x_fake = nets.generator(x_real, s_trg, masks=masks)
+        x_fake = nets.generator(x_real, s_trg)
     out = nets.discriminator(x_fake, y_trg)
     loss_fake = adv_loss(out, 0)
 

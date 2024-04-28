@@ -13,25 +13,28 @@ from collections import OrderedDict
 
 import numpy as np
 from pathlib import Path
-from starganv2.metrics.conversion import calculate_conversion_given_path
-from starganv2.core import utils
+from quac.training import utils
+from quac.training.classification import ClassifierWrapper
+from quac.training.data_loader import get_eval_loader
 import torch
+from tqdm import tqdm
 
 
 @torch.no_grad()
 def calculate_metrics(
     eval_dir,
-    step,
-    mode,
-    classifier_checkpoint,
-    img_size,
-    val_batch_size,
-    num_outs_per_domain,
-    mean,
-    std,
+    step=0,
+    mode="latent",
+    classifier_checkpoint=None,
+    img_size=128,
+    val_batch_size=16,
+    num_outs_per_domain=10,
+    mean=None,
+    std=None,
     input_dim=3,
+    run=None,
 ):
-    print("Calculating conversion rate for all tasks...")
+    print("Calculating conversion rate for all tasks...", flush=True)
     translation_rate_values = (
         OrderedDict()
     )  # How many output images are of the right class
@@ -42,17 +45,17 @@ def calculate_metrics(
     domains = [subdir.name for subdir in Path(eval_dir).iterdir() if subdir.is_dir()]
 
     for subdir in Path(eval_dir).iterdir():
-        if not subdir.is_dir() or subdir.startswith("."):  # Skip hidden files
+        if not subdir.is_dir() or subdir.name.startswith("."):  # Skip hidden files
             continue
         src_domain = subdir.name
 
         for subdir2 in Path(subdir).iterdir():
-            if not subdir2.is_dir() or subdir2.startswith("."):
+            if not subdir2.is_dir() or subdir2.name.startswith("."):
                 continue
             trg_domain = subdir2.name
 
-            task = "%s_to_%s" % (src_domain, trg_domain)
-            print("Calculating conversion rate for %s..." % task)
+            task = "%s/%s" % (src_domain, trg_domain)
+            print("Calculating conversion rate for %s..." % task, flush=True)
             target_class = domains.index(trg_domain)
 
             translation_rate, conversion_rate = calculate_conversion_given_path(
@@ -90,3 +93,49 @@ def calculate_metrics(
     # report translation rate values
     filename = os.path.join(eval_dir, "translation_rate_%.5i_%s.json" % (step, mode))
     utils.save_json(translation_rate_values, filename)
+    if run is not None:
+        run.log(conversion_rate_values, step=step)
+        run.log(translation_rate_values, step=step)
+
+
+@torch.no_grad()
+def calculate_conversion_given_path(
+    path,
+    model_checkpoint,
+    target_class,
+    img_size=128,
+    batch_size=50,
+    num_outs_per_domain=10,
+    mean=0.5,
+    std=0.5,
+    grayscale=False,
+):
+    print("Calculating conversion given path %s..." % path, flush=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    classifier = ClassifierWrapper(model_checkpoint, mean=mean, std=std)
+    classifier.to(device)
+    classifier.eval()
+
+    loader = get_eval_loader(
+        path,
+        img_size=img_size,
+        batch_size=batch_size,
+        imagenet_normalize=False,
+        shuffle=False,
+        grayscale=grayscale,
+    )
+
+    predictions = []
+    for x in tqdm(loader, total=len(loader)):
+        x = x.to(device)
+        predictions.append(classifier(x).cpu().numpy())
+    predictions = np.concatenate(predictions, axis=0)
+    # Do it in a vectorized way, by reshaping the predictions
+    predictions = predictions.reshape(-1, num_outs_per_domain, predictions.shape[-1])
+    predictions = predictions.argmax(axis=-1)
+    #
+    at_least_one = np.any(predictions == target_class, axis=1)
+    #
+    conversion_rate = np.mean(at_least_one)  # (sum(at_least_one) / len(at_least_one)
+    translation_rate = np.mean(predictions == target_class)
+    return translation_rate, conversion_rate

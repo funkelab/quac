@@ -101,7 +101,7 @@ class ReferenceDataset(data.Dataset):
         self.transform = transform
 
     def _make_dataset(self, root):
-        domains = os.listdir(root)
+        domains = glob.glob(os.path.join(root, "*"))
         fnames, fnames2, labels = [], [], []
         for idx, domain in enumerate(sorted(domains)):
             class_dir = os.path.join(root, domain)
@@ -366,9 +366,7 @@ class TrainingData:
         batch_size=8,
         num_workers=4,
         grayscale=False,
-        latent_dim=16,
     ):
-        self.latent_dim = latent_dim
         self.src = get_train_loader(
             root=source,
             which="source",
@@ -386,14 +384,6 @@ class TrainingData:
             grayscale=grayscale,
         )
 
-    # NOTE: Made these properties so that they are recomputed
-    # Not sure if this is necessary
-    @property
-    def data_fetcher(self):
-        return AugmentedInputFetcher(
-            self.src, self.reference, mode="train", latent_dim=self.latent_dim
-        )
-
 
 class ValidationData:
     """
@@ -403,10 +393,10 @@ class ValidationData:
 
     def __init__(
         self,
-        source_directory,
-        ref_directory=None,
+        source,
+        reference=None,
         mode="latent",
-        image_size=128,
+        img_size=128,
         batch_size=32,
         num_workers=4,
         grayscale=False,
@@ -435,7 +425,7 @@ class ValidationData:
         """
         assert mode in ["latent", "reference"]
         # parameters
-        self.image_size = image_size
+        self.image_size = img_size
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.grayscale = grayscale
@@ -445,17 +435,15 @@ class ValidationData:
         self.source = None
         self.target = None
         # The roots of the source and target directories
-        self.source_root = Path(source_directory)
-        if ref_directory is not None:
-            self.ref_root = Path(ref_directory)
+        self.source_root = Path(source)
+        if reference is not None:
+            self.ref_root = Path(reference)
         else:
-            self.ref_root = source_directory
+            self.ref_root = self.source_root
 
         # Available classes
         self.available_sources = [
-            subdir.name
-            for subdir in Path(source_directory).iterdir()
-            if subdir.is_dir()
+            subdir.name for subdir in self.source_root.iterdir() if subdir.is_dir()
         ]
         self._available_targets = None
         self.set_mode(mode)

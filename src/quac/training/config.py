@@ -7,22 +7,22 @@ class ModelConfig(BaseModel):
     style_dim: int = 64
     latent_dim: int = 16
     num_domains: int = 5
+    input_dim: int = 3
+    final_activation: str = "tanh"
 
 
 class DataConfig(BaseModel):
     source: str
     reference: str
-    validation: str
     img_size: int = 128
-    batch_size: int = 16
+    batch_size: int = 1
     num_workers: int = 4
     grayscale: bool = False
-    latent_dim: int = 16
 
 
 class RunConfig(BaseModel):
     resume_iter: int = 0
-    total_iter: int = 100000
+    total_iters: int = 100000
     log_every: int = 1000
     save_every: int = 10000
     eval_every: int = 10000
@@ -33,6 +33,9 @@ class ValConfig(BaseModel):
     num_outs_per_domain: int = 10
     mean: Optional[float] = 0.5
     std: Optional[float] = 0.5
+    img_size: int = 128
+    val_batch_size: int = 16
+    assume_normalized: bool = False
 
 
 class LossConfig(BaseModel):
@@ -44,7 +47,7 @@ class LossConfig(BaseModel):
 
 
 class SolverConfig(BaseModel):
-    checkpoint_dir: str
+    root_dir: str
     f_lr: float = 1e-4
     lr: float = 1e-4
     beta1: float = 0.5
@@ -53,10 +56,16 @@ class SolverConfig(BaseModel):
 
 
 class ExperimentConfig(BaseModel):
+    # Metadata for keeping track of experiments
+    project: str = "default"
+    name: str = "default"
+    notes: str = ""
+    tags: list = []
     # Some input required
     data: DataConfig
     solver: SolverConfig
-    val: ValConfig
+    validation_data: DataConfig
+    validation_config: ValConfig
     # No input required
     model: ModelConfig = ModelConfig()
     run: RunConfig = RunConfig()
