@@ -156,16 +156,15 @@ def get_train_loader(
     if grayscale:
         transform_list.append(transforms.Grayscale())
 
-    transform = transforms.Compose(
-        [
-            *transform_list,
-            transforms.Resize([img_size, img_size]),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    )
+    transform_list += [
+        transforms.Resize([img_size, img_size]),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.ToTensor(),
+    ]
+    if mean is not None and std is not None:
+        transform_list.append(transforms.Normalize(mean=mean, std=std))
+    transform = transforms.Compose(transform_list)
 
     if which == "source":
         # dataset = ImageFolder(root, transform)
@@ -249,14 +248,14 @@ def get_test_loader(
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale())
-    transform = transforms.Compose(
-        [
-            *transform_list,
-            transforms.Resize([img_size, img_size]),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    )
+
+    transform_list += [
+        transforms.Resize([img_size, img_size]),
+        transforms.ToTensor(),
+    ]
+    if mean is not None and std is not None:
+        transform_list.append(transforms.Normalize(mean=mean, std=std))
+    transform = transforms.Compose(transform_list)
 
     dataset = ImageFolder(root, transform)
     return data.DataLoader(
@@ -366,6 +365,8 @@ class TrainingData:
         batch_size=8,
         num_workers=4,
         grayscale=False,
+        mean=None,
+        std=None,
     ):
         self.src = get_train_loader(
             root=source,
@@ -374,6 +375,8 @@ class TrainingData:
             batch_size=batch_size,
             num_workers=num_workers,
             grayscale=grayscale,
+            mean=mean,
+            std=std,
         )
         self.reference = get_train_loader(
             root=reference,
@@ -382,6 +385,8 @@ class TrainingData:
             batch_size=batch_size,
             num_workers=num_workers,
             grayscale=grayscale,
+            mean=mean,
+            std=std,
         )
 
 
@@ -513,6 +518,7 @@ class ValidationData:
             grayscale=self.grayscale,
             mean=self.mean,
             std=self.std,
+            drop_last=False,
         )
 
     @property
@@ -525,4 +531,5 @@ class ValidationData:
             grayscale=self.grayscale,
             mean=self.mean,
             std=self.std,
+            drop_last=True,
         )

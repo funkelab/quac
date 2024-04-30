@@ -25,7 +25,10 @@ from quac.training.data import TrainingDataset
 dataset = TrainingDataset(
     source="path/to/training/data",
     reference="path/to/training/data",
-    validation="path/to/validation/data"
+    img_size=128,
+    batch_size=4,
+    num_workers=4
+
 )
 ```
 

@@ -18,6 +18,8 @@ class DataConfig(BaseModel):
     batch_size: int = 1
     num_workers: int = 4
     grayscale: bool = False
+    mean: Optional[float] = 0.5
+    std: Optional[float] = 0.5
 
 
 class RunConfig(BaseModel):
@@ -39,7 +41,7 @@ class ValConfig(BaseModel):
 
 
 class LossConfig(BaseModel):
-    lambda_ds: float = 1.0
+    lambda_ds: float = 0.0  # No diversity by default
     lambda_sty: float = 1.0
     lambda_cyc: float = 1.0
     lambda_reg: float = 1.0
@@ -48,11 +50,11 @@ class LossConfig(BaseModel):
 
 class SolverConfig(BaseModel):
     root_dir: str
-    f_lr: float = 1e-4
+    f_lr: float = 1e-6
     lr: float = 1e-4
-    beta1: float = 0.5
+    beta1: float = 0.0
     beta2: float = 0.99
-    weight_decay: float = 0.1
+    weight_decay: float = 1e-4
 
 
 class ExperimentConfig(BaseModel):

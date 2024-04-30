@@ -143,6 +143,7 @@ class Solver(nn.Module):
         val_loader=None,
         val_config=None,
     ):
+        start = datetime.datetime.now()
         nets = self.nets
         nets_ema = self.nets_ema
         optims = self.optims
@@ -217,7 +218,9 @@ class Solver(nn.Module):
             optims.generator.step()
 
             # compute moving average of network parameters
-            nets_ema.update(nets)
+            moving_average(nets.generator, nets_ema.generator, beta=0.999)
+            moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
+            moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
 
             # decay weight for diversity sensitive loss
             if lambda_ds > 0:
@@ -225,10 +228,10 @@ class Solver(nn.Module):
 
             if (i + 1) % eval_every == 0 and val_loader is not None:
                 self.evaluate(
-                    val_loader, iteration=i + 1, mode="latent", val_config=val_config
+                    val_loader, iteration=i + 1, mode="reference", val_config=val_config
                 )
                 self.evaluate(
-                    val_loader, iteration=i + 1, mode="reference", val_config=val_config
+                    val_loader, iteration=i + 1, mode="latent", val_config=val_config
                 )
 
             # save model checkpoints
@@ -237,6 +240,7 @@ class Solver(nn.Module):
 
             # print out log losses, images
             if (i + 1) % log_every == 0:
+                elapsed = datetime.datetime.now() - start
                 self.log(
                     d_losses_latent,
                     d_losses_ref,
@@ -251,6 +255,7 @@ class Solver(nn.Module):
                     y_trg,  # Target classes
                     step=i + 1,
                     total_iters=total_iters,
+                    elapsed_time=elapsed,
                 )
 
     def log(
@@ -268,6 +273,7 @@ class Solver(nn.Module):
         y_target,
         step,
         total_iters,
+        elapsed_time,
     ):
         all_losses = dict()
         for loss, prefix in zip(
@@ -289,28 +295,26 @@ class Solver(nn.Module):
                 caption = " ".join([str(x) for x in label.cpu().tolist()])
                 self.run.log({name: [wandb.Image(img, caption=caption)]}, step=step)
 
-        else:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            print(
-                f"[{now}]: {step}/{total_iters}",
-                flush=True,
-            )
-            g_losses = "\t".join(
-                [
-                    f"{key}: {value:.4f}"
-                    for key, value in all_losses.items()
-                    if not key.startswith("D/")
-                ]
-            )
-            d_losses = "\t".join(
-                [
-                    f"{key}: {value:.4f}"
-                    for key, value in all_losses.items()
-                    if key.startswith("D/")
-                ]
-            )
-            print(f"G Losses: {g_losses}", flush=True)
-            print(f"D Losses: {d_losses}", flush=True)
+        print(
+            f"[{elapsed_time}]: {step}/{total_iters}",
+            flush=True,
+        )
+        g_losses = "\t".join(
+            [
+                f"{key}: {value:.4f}"
+                for key, value in all_losses.items()
+                if not key.startswith("D/")
+            ]
+        )
+        d_losses = "\t".join(
+            [
+                f"{key}: {value:.4f}"
+                for key, value in all_losses.items()
+                if key.startswith("D/")
+            ]
+        )
+        print(f"G Losses: {g_losses}", flush=True)
+        print(f"D Losses: {d_losses}", flush=True)
 
     @torch.no_grad()
     def evaluate(
@@ -354,6 +358,8 @@ class Solver(nn.Module):
         for trg_idx, trg_domain in enumerate(domains):
             src_domains = [x for x in val_loader.available_sources if x != trg_domain]
             val_loader.set_target(trg_domain)
+            if mode == "reference":
+                loader_ref = val_loader.loader_ref
 
             for src_idx, src_domain in enumerate(src_domains):
                 task = "%s/%s" % (src_domain, trg_domain)
@@ -378,25 +384,37 @@ class Solver(nn.Module):
                             z_trg = torch.randn(N, self.latent_dim).to(device)
                             s_trg = self.nets_ema.mapping_network(z_trg, y_trg)
                         else:
+                            # x_ref = x_trg.clone()
                             try:
+                                # TODO don't need to re-do this every time, just use
+                                # the same set of reference images for the whole dataset!
                                 x_ref = next(iter_ref).to(device)
                             except:
-                                iter_ref = iter(val_loader.loader_ref)
+                                iter_ref = iter(loader_ref)
                                 x_ref = next(iter_ref).to(device)
 
                             if x_ref.size(0) > N:
                                 x_ref = x_ref[:N]
+                            elif x_ref.size(0) < N:
+                                raise ValueError(
+                                    "Not enough reference images."
+                                    "Make sure that the batch size of the validation loader is bigger than `num_outs_per_domain`."
+                                )
                             s_trg = self.nets_ema.style_encoder(x_ref, y_trg)
 
                         x_fake = self.nets_ema.generator(x_src, s_trg)
                         # Run the classification
-                        predictions.append(
-                            classifier(
-                                x_fake, assume_normalized=val_config.assume_normalized
-                            )
-                            .cpu()
-                            .numpy()
+                        pred = classifier(
+                            x_fake, assume_normalized=val_config.assume_normalized
                         )
+                        predictions.append(pred.cpu().numpy())
+                        # predictions.append(
+                        #     classifier(
+                        #         x_fake, assume_normalized=val_config.assume_normalized
+                        #     )
+                        #     .cpu()
+                        #     .numpy()
+                        # )
                 predictions = np.stack(predictions, axis=0)
                 assert len(predictions) > 0
                 # Do it in a vectorized way, by reshaping the predictions
