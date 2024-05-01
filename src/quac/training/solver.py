@@ -291,9 +291,8 @@ class Solver(nn.Module):
                 [x_real, x_ref, fake_x_latent, fake_x_reference],
                 [y_source, y_target, y_target, y_target],
             ):
-                # Make a caption of labels
-                caption = " ".join([str(x) for x in label.cpu().tolist()])
-                self.run.log({name: [wandb.Image(img, caption=caption)]}, step=step)
+                # TODO put captions back in somehow
+                self.run.log_images({name: img}, step=step)
 
         print(
             f"[{elapsed_time}]: {step}/{total_iters}",

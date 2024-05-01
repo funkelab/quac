@@ -16,7 +16,9 @@ data_folder/
         raven2.png
 ```
 
-A training dataset is defined in `quac.training.data` which will need to be given three directories: a `source` a `reference` and a `validation`. The `source` and `reference` directories can be the same.
+A training dataset is defined in `quac.training.data` which will need to be given two directories: a `source` and a `reference`. These directories can be the same.
+
+The validation dataset will need the same information.
 
 For example:
 ```python
@@ -28,10 +30,18 @@ dataset = TrainingDataset(
     img_size=128,
     batch_size=4,
     num_workers=4
-
 )
-```
 
+# Setup data for validation
+val_dataset = ValidationData(
+    source="path/to/training/data",
+    reference="path/to/training/data",
+    img_size=128,
+    batch_size=16,
+    num_workers=16
+)
+
+```
 ## Defining the models
 
 The models can be built using a function in `quac.training.stargan`.
@@ -47,6 +57,9 @@ nets, nets_ema = build_model(
     num_domains=4,  # Number of classes
     single_output_style_encoder=False
 )
+## Defining the models
+nets, nets_ema = build_model(**experiment.model.model_dump())
+
 ```
 
 If using multiple or specific GPUs, it may be necessary to add the `gpu_ids` argument.
@@ -54,8 +67,21 @@ If using multiple or specific GPUs, it may be necessary to add the `gpu_ids` arg
 The `nets_ema` are a copy of the `nets` that will not be trained but rather will be an exponential moving average of the weight of the `nets`.
 The sub-networks of both can be accessed in a dictionary-like manner.
 
-- [ ] Add instructions for custom networks (what are the necessary parts).
+## Creating a logger
+```python
+# Example using WandB
+logger = Logger.create(
+    log_type="wandb",
+    project="project-name",
+    name="experiment name",
+    tags=["experiment", "project", "test", "quac", "stargan"],
+    hparams={ # this holds all of the hyperparameters you want to store for your run
+        "hyperparameter_key": "Hyperparameter values"
+    }
+)
 
+# TODO example using tensorboard
+```
 
 ## Defining the Solver
 
@@ -73,6 +99,9 @@ solver = Solver(
     beta2=0.99,
     weight_decay=0.1,
 )
+
+# TODO
+solver = Solver(nets, nets_ema, **experiment.solver.model_dump(), run=logger)
 ```
 
 ## Training
@@ -90,19 +119,7 @@ solver.train(dataset, val_config)
 All results will be stored in the `checkpoint_directory` defined above.
 Validation will be done during training at regular intervals (by default, every 10000 iterations).
 
-## Visualizing a run
-After it has been run, we typically like to visualize the classification metrics, to get a good idea of what's going on.
-
-```python
-from quac.training.eval import plot_metrics
-
-plot_metrics("checkpoint_path", show=True, save=False)
-```
-
-If you, instead, have `save=True`, the plots will be saved in the checkpoint directory, in the same place where the evaluation metrics CSV actually sits.
-
-
-## BONUS: Training, detailed
+## BONUS: Training with a Config file
 
 ```python
 run_config=RunConfig(

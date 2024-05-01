@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union, Literal
 
 
 class ModelConfig(BaseModel):
@@ -57,12 +57,22 @@ class SolverConfig(BaseModel):
     weight_decay: float = 1e-4
 
 
-class ExperimentConfig(BaseModel):
-    # Metadata for keeping track of experiments
+class WandBLogConfig(BaseModel):
     project: str = "default"
     name: str = "default"
     notes: str = ""
     tags: list = []
+
+
+class TensorboardLogConfig(BaseModel):
+    log_dir: str
+    comment: str = ""
+
+
+class ExperimentConfig(BaseModel):
+    # Metadata for keeping track of experiments
+    log_type: Literal["wandb", "tensorboard"] = "wandb"
+    log: Union[WandBLogConfig, TensorboardLogConfig] = WandBLogConfig()
     # Some input required
     data: DataConfig
     solver: SolverConfig
