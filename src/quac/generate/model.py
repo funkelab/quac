@@ -20,9 +20,12 @@ class LatentInferenceModel(torch.nn.Module):
         latent_dim,
         input_dim=1,
         num_domains=6,
+        final_activation=None,
     ) -> None:
         super().__init__()
-        generator = Generator(img_size, style_dim, input_dim=input_dim)
+        generator = Generator(
+            img_size, style_dim, input_dim=input_dim, final_activation=final_activation
+        )
         mapping_network = MappingNetwork(latent_dim, style_dim, num_domains=num_domains)
 
         self.nets = torch.nn.ModuleDict(
@@ -63,9 +66,12 @@ class ReferenceInferenceModel(torch.nn.Module):
         input_dim=1,
         num_domains=6,
         single_output_encoder=False,
+        final_activation=None,
     ) -> None:
         super().__init__()
-        generator = Generator(img_size, style_dim, input_dim=input_dim)
+        generator = Generator(
+            img_size, style_dim, input_dim=input_dim, final_activation=final_activation
+        )
         if single_output_encoder:
             style_encoder = SingleOutputStyleEncoder(
                 img_size, style_dim, num_domains, input_dim=input_dim

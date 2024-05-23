@@ -167,8 +167,10 @@ class Generator(nn.Module):
             nn.Conv2d(dim_in, input_dim, 1, 1, 0),
         )
         if final_activation == "sigmoid":
+            # print("Using sigmoid")
             self.final_activation = nn.Sigmoid()
         else:
+            # print("Using tanh")
             self.final_activation = nn.Tanh()
 
         # down/up-sampling blocks
@@ -188,7 +190,7 @@ class Generator(nn.Module):
 
     def forward(self, x, s):
         x = self.from_rgb(x)
-        cache = {}
+        # cache = {}
         for block in self.encode:
             x = block(x)
         for block in self.decode:
