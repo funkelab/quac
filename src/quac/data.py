@@ -89,6 +89,8 @@ def make_counterfactual_dataset(
     We want to use the most nested subdirectories as the class labels.
     """
     directory = os.path.expanduser(counterfactual_directory)
+    if class_to_idx is None:
+        _, class_to_idx = find_classes(directory)
 
     is_valid_file = check_requirements(
         counterfactual_directory,
@@ -140,7 +142,7 @@ def make_counterfactual_dataset(
 def make_paired_dataset(
     directory: str,
     paired_directory: str,
-    class_to_idx: Optional[Dict[str, int]] = None,
+    class_to_idx: Optional[Dict[str, int]],
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
     is_valid_file: Optional[Callable[[str], bool]] = None,
     allow_empty: bool = False,
@@ -153,6 +155,9 @@ def make_paired_dataset(
     by default.
     """
     directory = os.path.expanduser(directory)
+
+    if class_to_idx is None:
+        _, class_to_idx = find_classes(directory)
 
     is_valid_file = check_requirements(
         directory, class_to_idx, extensions, is_valid_file
@@ -221,6 +226,9 @@ def make_paired_attribution_dataset(
     by default.
     """
     directory = os.path.expanduser(directory)
+
+    if class_to_idx is None:
+        _, class_to_idx = find_classes(directory)
 
     is_valid_file = check_requirements(
         directory, class_to_idx, extensions, is_valid_file

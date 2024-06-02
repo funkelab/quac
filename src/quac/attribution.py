@@ -6,6 +6,8 @@ import scipy
 from pathlib import Path
 from quac.data import PairedImageDataset
 from tqdm import tqdm
+import torch
+from typing import Callable
 
 
 def residual(real_img, fake_img):
@@ -61,11 +63,21 @@ class BaseAttribution:
         )
 
     def attribute(
-        self, real_img, counterfactual_img, real_class, target_class, **kwargs
+        self,
+        real_img,
+        counterfactual_img,
+        real_class,
+        target_class,
+        device="cuda",
+        **kwargs,
     ):
         self.classifier.zero_grad()
         attribution = self._attribute(
-            real_img, counterfactual_img, real_class, target_class, **kwargs
+            real_img.to(device),
+            counterfactual_img.to(device),
+            real_class,
+            target_class,
+            **kwargs,
         )
         attribution = attribution.detach().cpu().numpy()
         if self.normalize:
@@ -187,12 +199,20 @@ class AttributionIO:
         return directory
 
     def run(
-        self, source_directory: str, counterfactual_directory: str, transform: callable
+        self,
+        source_directory: str,
+        counterfactual_directory: str,
+        transform: Callable,
+        device: str = "cuda",
     ):
+        if device == "cuda":
+            if not torch.cuda.is_available():
+                raise ValueError("CUDA is not available on this machine.")
+        print("Loading paired data")
         dataset = PairedImageDataset(
             source_directory, counterfactual_directory, transform=transform
         )
-
+        print("Running attributions")
         for sample in tqdm(dataset, total=len(dataset)):
             for attr_name, attribution in self.attributions.items():
                 attr = attribution.attribute(
@@ -200,6 +220,7 @@ class AttributionIO:
                     sample.counterfactual,
                     sample.source_class_index,
                     sample.target_class_index,
+                    device=device,
                 )
                 # Store the attribution
                 np.save(

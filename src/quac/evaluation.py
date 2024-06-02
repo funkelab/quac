@@ -19,8 +19,10 @@ def image_to_tensor(image, device=None):
         image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
     elif len(np.shape(image)) == 3:
         image_tensor = image_tensor.unsqueeze(0)
+    elif len(np.shape(image)) == 4:
+        return image_tensor.float()
     else:
-        raise ValueError("Input shape not understood")
+        raise ValueError(f"Input shape not understood, {image.shape}")
     return image_tensor.float()
 
 
@@ -147,9 +149,9 @@ class Evaluator:
         """
         pred = []
         target = []
-        for sample in tqdm(self.source_dataset):
-            pred.append(self.run_inference(sample.image).argmax())
-            target.append(sample.source_class_index)
+        for image, source_class_index in tqdm(self.source_dataset):
+            pred.append(self.run_inference(image).argmax())
+            target.append(source_class_index)
 
         if print_report:
             print(classification_report(target, pred))
@@ -262,20 +264,22 @@ class Evaluator:
         for threshold in np.arange(vmin, vmax, (vmax - vmin) / self.num_thresholds):
             # soft mask of the parts to copy
             mask, mask_size = processor.create_mask(attribution, threshold)
-
             # hybrid = real parts copied to fake
             hybrid = x_t * mask + x * (1.0 - mask)
-
-            classification_hybrid = self.run_inference(hybrid)[0]
-
-            score_change = classification_hybrid[y_t] - classification_real[y_t]
-
             # Append results
             # TODO Do we want to store the hybrid?
             results["thresholds"].append(threshold)
             results["hybrids"].append(hybrid)
             results["mask_sizes"].append(mask_size / np.prod(x.shape))
-            results["score_change"].append(score_change)
+
+            # Classification
+            # classification_hybrid = self.run_inference(hybrid)[0]
+            # score_change = classification_hybrid[y_t] - classification_real[y_t]
+            # results["score_change"].append(score_change)
+        hybrid = np.stack(results["hybrids"], axis=0)
+        classification_hybrid = self.run_inference(hybrid)
+        score_change = classification_hybrid[:, y_t] - classification_real[y_t]
+        results["score_change"] = score_change
         return results
 
     @torch.no_grad()

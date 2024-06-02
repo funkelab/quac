@@ -50,7 +50,7 @@ In this example, we evaluate the results from the DeepLift attribution method.
 
 ```python
 # Defining processors and evaluators
-from quac.evaluate import Processor, Evaluator
+from quac.evaluation import Processor, Evaluator
 from sklearn.metrics import ConfusionMatrixDisplay
 
 classifier = load_classifier(...)
