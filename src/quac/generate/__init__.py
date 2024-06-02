@@ -140,11 +140,12 @@ def get_counterfactual(
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far=0,
+    best_pred_so_far=None,
     best_cf_so_far=None,
     best_cf_path_so_far=None,
     error_if_not_found=False,
     return_path=False,
+    return_pred=False,
 ) -> torch.Tensor:
     """
     Tries to find a counterfactual for the given sample, given the target.
@@ -170,6 +171,8 @@ def get_counterfactual(
     Raises:
         CounterfactualNotFound: if no counterfactual is found after max_tries tries
     """
+    if best_pred_so_far is None:
+        best_pred_so_far = torch.zeros(target + 1)
     # Copy x batch_size times
     x_multiple = torch.stack([x] * batch_size)
     if kind == "reference":
@@ -208,8 +211,8 @@ def get_counterfactual(
     predictions = torch.argmax(p, dim=-1)
     # Get best so far
     best_idx_so_far = torch.argmax(p[:, target])
-    if p[best_idx_so_far, target] > best_pred_so_far:
-        best_pred_so_far = p[best_idx_so_far, target]
+    if p[best_idx_so_far, target] > best_pred_so_far[target]:
+        best_pred_so_far = p[best_idx_so_far]  # , target]
         best_cf_so_far = xcf[best_idx_so_far].cpu()
         if kind == "reference":
             best_cf_path_so_far = ref_paths[best_idx_so_far]
@@ -237,6 +240,7 @@ def get_counterfactual(
                 best_cf_so_far=best_cf_so_far,
                 best_cf_path_so_far=best_cf_path_so_far,
                 return_path=return_path,
+                return_pred=return_pred,
             )
         else:
             if error_if_not_found:
@@ -248,5 +252,9 @@ def get_counterfactual(
             )
     # Return the best counterfactual so far
     if return_path and kind == "reference":
+        if return_pred:
+            return best_cf_so_far, best_cf_path_so_far, best_pred_so_far
         return best_cf_so_far, best_cf_path_so_far
+    if return_pred:
+        return best_cf_so_far, best_pred_so_far
     return best_cf_so_far
