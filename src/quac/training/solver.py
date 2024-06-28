@@ -339,12 +339,13 @@ class Solver(nn.Module):
         eval_dir = self.root_dir / "eval"
         eval_dir.mkdir(exist_ok=True, parents=True)
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Load classifier
         classifier = ClassifierWrapper(
             val_config.classifier_checkpoint, val_config.mean, val_config.std
         )
+        classifier.to(device)
         assert mode in ["latent", "reference"]
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         val_loader.set_mode(mode)
 

@@ -300,31 +300,48 @@ def make_paired_attribution_dataset(
 
 @dataclass
 class Sample:
-    path: Path
     image: torch.Tensor
     source_class_index: int
-    source_class: str
+    path: Path = None
+    source_class: str = None
 
 
+# TODO remove?
 @dataclass
 class CounterfactualSample:
-    counterfactual_path: Path
     counterfactual: torch.Tensor
     target_class_index: int
-    target_class: str
     source_class_index: int
-    source_class: str
+    path: Path = None
+    counterfactual_path: Path = None
+    source_class: str = None
+    target_class: str = None
 
 
 @dataclass
-class PairedSample(Sample, CounterfactualSample):
-    pass
+class PairedSample:
+    image: torch.Tensor
+    counterfactual: torch.Tensor
+    source_class_index: int
+    target_class_index: int
+    path: Path = None
+    counterfactual_path: Path = None
+    source_class: str = None
+    target_class: str = None
 
 
 @dataclass
-class SampleWithAttribution(PairedSample):
-    attribution_path: Path
+class SampleWithAttribution:
     attribution: np.ndarray
+    image: torch.Tensor
+    counterfactual: torch.Tensor
+    source_class_index: int
+    target_class_index: int
+    path: Path = None
+    counterfactual_path: Path = None
+    source_class: str = None
+    target_class: str = None
+    attribution_path: Path = None
 
 
 class PairedImageDataset(Dataset):

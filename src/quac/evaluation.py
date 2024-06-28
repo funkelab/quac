@@ -71,75 +71,57 @@ class Processor:
         return np.array(mask), mask_size
 
 
-class Evaluator:
-    """This class evaluates the quality of an attribution using the QuAC method.
-
-    Raises:
-        FileNotFoundError: If the source, counterfactual or attribution directories do not exist.
-    """
+class BaseEvaluator:
+    """Base class for evaluating attributions."""
 
     def __init__(
         self,
         classifier,
-        source_directory,
-        counterfactual_directory,
-        attribution_directory,
-        transform=None,
+        source_dataset=None,
+        paired_dataset=None,
+        attribution_dataset=None,
         num_thresholds=200,
         device=None,
     ):
+        """Initializes the evaluator.
+
+        It requires three different datasets: the source dataset, the counterfactual dataset and the attribution dataset.
+        All of them must return objects in the forms of the dataclasses in `quac.data`.
+
+
+        Parameters
+        ----------
+        classifier:
+            The classifier to be used for the evaluation.
+        source_dataset:
+            The source dataset must returns a `quac.data.Sample` object in its `__getitem__` method.
+        paired_dataset:
+            The paired dataset must returns a `quac.data.PairedSample` object in its `__getitem__` method.
+        attribution_dataset:
+            The attribution dataset must returns a `quac.data.SampleWithAttribution` object in its `__getitem__` method.
+        """
         self.device = device
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.classifier = classifier.to(self.device)
         self.num_thresholds = num_thresholds
+        self.classifier = classifier
 
-        # Check that they all exist
-        for directory in [
-            source_directory,
-            counterfactual_directory,
-            attribution_directory,
-        ]:
-            if not Path(directory).exists():
-                raise FileNotFoundError(f"Directory {directory} does not exist")
-        self.source_directory = source_directory
-        self.counterfactual_directory = counterfactual_directory
-        self.attribution_directory = attribution_directory
-        self.transform = transform
+        self._source_dataset = source_dataset
+        self._paired_dataset = paired_dataset
+        self._dataset_with_attribution = attribution_dataset
 
     @property
     def source_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = ImageFolder(self.source_directory, transform=self.transform)
-        return dataset
-
-    @property
-    def counterfactual_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = CounterfactualDataset(
-            self.counterfactual_directory, transform=self.transform
-        )
-        return dataset
+        return self._source_dataset
 
     @property
     def paired_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = PairedImageDataset(
-            self.source_directory,
-            self.counterfactual_directory,
-            transform=self.transform,
-        )
-        return dataset
+        return self._paired_dataset
 
     @property
     def dataset_with_attribution(self):
-        dataset = PairedWithAttribution(
-            self.source_directory,
-            self.counterfactual_directory,
-            self.attribution_directory,
-            transform=self.transform,
-        )
-        return dataset
+        return self._dataset_with_attribution
 
     def _source_classification_report(
         self, return_classification=False, print_report=True
@@ -291,3 +273,72 @@ class Evaluator:
         im_tensor = image_to_tensor(im, device=self.device)
         class_probs = F.softmax(self.classifier(im_tensor), dim=1).cpu().numpy()
         return class_probs
+
+
+class Evaluator(BaseEvaluator):
+    """This class evaluates the quality of an attribution using the QuAC method.
+
+    Raises:
+        FileNotFoundError: If the source, counterfactual or attribution directories do not exist.
+    """
+
+    def __init__(
+        self,
+        classifier,
+        source_directory,
+        counterfactual_directory,
+        attribution_directory,
+        transform=None,
+        num_thresholds=200,
+        device=None,
+    ):
+        # Check that they all exist
+        for directory in [
+            source_directory,
+            counterfactual_directory,
+            attribution_directory,
+        ]:
+            if not Path(directory).exists():
+                raise FileNotFoundError(f"Directory {directory} does not exist")
+
+        super().__init__(
+            classifier, None, None, None, num_thresholds=num_thresholds, device=device
+        )
+        self.transform = transform
+        self.source_directory = source_directory
+        self.counterfactual_directory = counterfactual_directory
+        self.attribution_directory = attribution_directory
+
+    @property
+    def source_dataset(self):
+        # NOTE: Recomputed each time, but should be used sparingly.
+        dataset = ImageFolder(self.source_directory, transform=self.transform)
+        return dataset
+
+    @property
+    def counterfactual_dataset(self):
+        # NOTE: Recomputed each time, but should be used sparingly.
+        dataset = CounterfactualDataset(
+            self.counterfactual_directory, transform=self.transform
+        )
+        return dataset
+
+    @property
+    def paired_dataset(self):
+        # NOTE: Recomputed each time, but should be used sparingly.
+        dataset = PairedImageDataset(
+            self.source_directory,
+            self.counterfactual_directory,
+            transform=self.transform,
+        )
+        return dataset
+
+    @property
+    def dataset_with_attribution(self):
+        dataset = PairedWithAttribution(
+            self.source_directory,
+            self.counterfactual_directory,
+            self.attribution_directory,
+            transform=self.transform,
+        )
+        return dataset

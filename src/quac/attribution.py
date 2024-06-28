@@ -45,7 +45,7 @@ class BaseAttribution:
         """Scale the attribution to be between 0 and 1.
 
         Note that this also takes the absolute value of the attribution.
-        Generally in this frameowrk, we only care about the absolute value of the attribution,
+        Generally in this framework, we only care about the absolute value of the attribution,
         because if "negative changes" need to be made, this should be inherent in
         the counterfactual image.
         """
@@ -148,7 +148,7 @@ class DInGrad(BaseAttribution):
         return ingrad_diff_1[0]
 
 
-class VanillaIntegratedGradient(BaseAttribution):
+class VanillaIntegratedGradients(BaseAttribution):
     """Wrapper class for Integrated Gradients from Captum.
 
     Allows us to use it as a baseline.

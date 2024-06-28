@@ -164,7 +164,7 @@ class Report:
             self.quac_scores = data.get("quac_scores", None)
 
     def get_curve(self):
-        """Gets the mean and standard deviation of the QuAC curve"""
+        """Gets the median and IQR of the QuAC curve"""
         # TODO Cache the results, takes forever otherwise
         plot_values = []
         for normalized_mask_sizes, score_changes in zip(
@@ -175,14 +175,17 @@ class Report:
             )
             plot_values.append(interp_score_values)
         plot_values = np.array(plot_values)
-        mean = np.mean(plot_values, axis=0)
-        std = np.std(plot_values, axis=0)
-        return mean, std
+        # mean = np.mean(plot_values, axis=0)
+        # std = np.std(plot_values, axis=0)
+        median = np.median(plot_values, axis=0)
+        p25 = np.percentile(plot_values, 25, axis=0)
+        p75 = np.percentile(plot_values, 75, axis=0)
+        return median, p25, p75
 
     def plot_curve(self, ax=None):
         """Plot the QuAC curve
 
-        We plot the mean and standard deviation of the QuAC curve acrosss all accumulated results.
+        We plot the median and IQR of the QuAC curve acrosss all accumulated results.
 
         Parameters
         ----------
@@ -192,15 +195,46 @@ class Report:
         if ax is None:
             fig, ax = plt.subplots()
 
-        mean, std = self.get_curve()
+        mean, p25, p75 = self.get_curve()
 
         ax.plot(self.interp_mask_values, mean, label=self.name)
-        ax.fill_between(self.interp_mask_values, mean - std, mean + std, alpha=0.2)
+        ax.fill_between(self.interp_mask_values, p25, p75, alpha=0.2)
         if ax is None:
             plt.show()
 
+    def optimal_thresholds(self, min_percentage=0.0):
+        """Get the optimal threshold for each sample
+
+        The optimal threshold is the one that minimizes the Euclidean distance to the top-left corner of the mask-size vs. score-change curve.
+
+        Parameters
+        ----------
+        min_percentage: float
+            The optimal threshold chosen needs to account for at least this percentage of total score change.
+            Increasing this value will favor high percentage changes even when they require larger masks.
+        """
+        mask_scores = np.array(self.score_changes)
+        mask_sizes = np.array(self.normalized_mask_sizes)
+        thresholds = np.array(self.thresholds)
+        tradeoff_scores = mask_sizes**2 + (1 - mask_scores) ** 2
+        # Determine what to ignore
+        if min_percentage > 0.0:
+            min_value = np.min(mask_scores, axis=1)
+            max_value = np.max(mask_scores, axis=1)
+            threshold = min_value + min_percentage * (max_value - min_value)
+            below_threshold = mask_scores < threshold[:, None]
+            tradeoff_scores[
+                below_threshold
+            ] = np.inf  # Ignores the points with not enough score change
+        thr_idx = np.argmin(tradeoff_scores, axis=1)
+
+        optimal_thresholds = np.take_along_axis(
+            thresholds, thr_idx[:, None], axis=1
+        ).squeeze()
+        return optimal_thresholds
+
     def get_optimal_threshold(self, index, return_index=False):
-        # TODO Check this function
+        # TODO Deprecate, use vectorized version!
         mask_scores = np.array(self.score_changes[index])
         mask_sizes = np.array(self.normalized_mask_sizes[index])
 
