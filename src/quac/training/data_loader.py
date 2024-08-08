@@ -367,6 +367,7 @@ class TrainingData:
         grayscale=False,
         mean=None,
         std=None,
+        rand_crop_prob=0,
     ):
         self.src = get_train_loader(
             root=source,
@@ -377,6 +378,7 @@ class TrainingData:
             grayscale=grayscale,
             mean=mean,
             std=std,
+            prob=rand_crop_prob,
         )
         self.reference = get_train_loader(
             root=reference,
@@ -387,6 +389,7 @@ class TrainingData:
             grayscale=grayscale,
             mean=mean,
             std=std,
+            prob=rand_crop_prob,
         )
 
 
@@ -407,6 +410,7 @@ class ValidationData:
         grayscale=False,
         mean=None,
         std=None,
+        **kwargs,
     ):
         """
         Parameters
@@ -427,6 +431,12 @@ class ValidationData:
             The number of workers for the data loader.
         grayscale : bool
             Whether the images are grayscale.
+        mean: float
+            The mean for normalization, for the classifier.
+        std: float
+            The standard deviation for normalization, for the classifier.
+        kwargs : dict
+            Unused keyword arguments, for compatibility with configuration.
         """
         assert mode in ["latent", "reference"]
         # parameters

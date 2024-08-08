@@ -20,6 +20,7 @@ class DataConfig(BaseModel):
     grayscale: bool = False
     mean: Optional[float] = 0.5
     std: Optional[float] = 0.5
+    rand_crop_prob: Optional[float] = 0
 
 
 class RunConfig(BaseModel):
