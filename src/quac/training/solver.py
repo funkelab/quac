@@ -241,6 +241,14 @@ class Solver(nn.Module):
             # print out log losses, images
             if (i + 1) % log_every == 0:
                 elapsed = datetime.datetime.now() - start
+                # Log the images made by the EMA model!
+                with torch.no_grad():
+                    ema_fake_x_latent = nets_ema.generator(
+                        x_real, nets_ema.mapping_network(z_trg, y_trg)
+                    )
+                    ema_fake_x_reference = nets_ema.generator(
+                        x_real, nets_ema.style_encoder(x_ref, y_trg)
+                    )
                 self.log(
                     d_losses_latent,
                     d_losses_ref,
@@ -251,6 +259,8 @@ class Solver(nn.Module):
                     x_ref,
                     fake_x_latent,
                     fake_x_reference,
+                    ema_fake_x_latent,
+                    ema_fake_x_reference,
                     y_org,  # Source classes
                     y_trg,  # Target classes
                     step=i + 1,
@@ -269,6 +279,8 @@ class Solver(nn.Module):
         x_ref,
         fake_x_latent,
         fake_x_reference,
+        ema_fake_x_latent,
+        ema_fake_x_reference,
         y_source,
         y_target,
         step,
@@ -287,9 +299,23 @@ class Solver(nn.Module):
         if self.run:
             self.run.log(all_losses, step=step)
             for name, img, label in zip(
-                ["x_real", "x_ref", "fake_x_latent", "fake_x_reference"],
-                [x_real, x_ref, fake_x_latent, fake_x_reference],
-                [y_source, y_target, y_target, y_target],
+                [
+                    "x_real",
+                    "x_ref",
+                    "fake_x_latent",
+                    "fake_x_reference",
+                    "ema_fake_x_latent",
+                    "ema_fake_x_reference",
+                ],
+                [
+                    x_real,
+                    x_ref,
+                    fake_x_latent,
+                    fake_x_reference,
+                    ema_fake_x_latent,
+                    ema_fake_x_reference,
+                ],
+                [y_source, y_target, y_target, y_target, y_target, y_target],
             ):
                 # TODO put captions back in somehow
                 self.run.log_images({name: img}, step=step)
@@ -408,16 +434,11 @@ class Solver(nn.Module):
                         x_fake = self.nets_ema.generator(x_src, s_trg)
                         # Run the classification
                         pred = classifier(
-                            x_fake, assume_normalized=val_config.assume_normalized
+                            x_fake,
+                            assume_normalized=val_config.assume_normalized,
+                            do_nothing=val_config.do_nothing,
                         )
                         predictions.append(pred.cpu().numpy())
-                        # predictions.append(
-                        #     classifier(
-                        #         x_fake, assume_normalized=val_config.assume_normalized
-                        #     )
-                        #     .cpu()
-                        #     .numpy()
-                        # )
                 predictions = np.stack(predictions, axis=0)
                 assert len(predictions) > 0
                 # Do it in a vectorized way, by reshaping the predictions
@@ -434,6 +455,14 @@ class Solver(nn.Module):
                 # STORE
                 conversion_rate_values["conversion_rate/" + task] = conversion_rate
                 translation_rate_values["translation_rate/" + task] = translation_rate
+
+        # Add average conversion rate and translation rate
+        conversion_rate_values["conversion_rate/average"] = np.mean(
+            [conversion_rate_values[key] for key in conversion_rate_values.keys()]
+        )
+        translation_rate_values["translation_rate/average"] = np.mean(
+            [translation_rate_values[key] for key in translation_rate_values.keys()]
+        )
 
         # report conversion rate values
         filename = os.path.join(
