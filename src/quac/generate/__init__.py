@@ -1,4 +1,4 @@
-"""Utilities for generating counterfacual images."""
+"""Utilities for generating counterfactual images."""
 
 from .model import LatentInferenceModel, ReferenceInferenceModel
 from .data import LabelFreePngFolder
