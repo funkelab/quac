@@ -147,7 +147,14 @@ class AdainResBlk(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, img_size=256, style_dim=64, max_conv_dim=512, input_dim=1):
+    def __init__(
+        self,
+        img_size=256,
+        style_dim=64,
+        max_conv_dim=512,
+        input_dim=1,
+        final_activation=None,
+    ):
         super().__init__()
         dim_in = 2**14 // img_size
         self.img_size = img_size
@@ -159,7 +166,12 @@ class Generator(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Conv2d(dim_in, input_dim, 1, 1, 0),
         )
-        self.final_activation = nn.Tanh()
+        if final_activation == "sigmoid":
+            # print("Using sigmoid")
+            self.final_activation = nn.Sigmoid()
+        else:
+            # print("Using tanh")
+            self.final_activation = nn.Tanh()
 
         # down/up-sampling blocks
         repeat_num = int(np.log2(img_size)) - 4
@@ -178,7 +190,7 @@ class Generator(nn.Module):
 
     def forward(self, x, s):
         x = self.from_rgb(x)
-        cache = {}
+        # cache = {}
         for block in self.encode:
             x = block(x)
         for block in self.decode:
@@ -189,6 +201,7 @@ class Generator(nn.Module):
 class MappingNetwork(nn.Module):
     def __init__(self, latent_dim=16, style_dim=64, num_domains=2):
         super().__init__()
+        self.latent_dim = latent_dim
         layers = []
         layers += [nn.Linear(latent_dim, 512)]
         layers += [nn.ReLU()]
@@ -310,11 +323,11 @@ class SingleOutputStyleEncoder(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, img_size=256, num_domains=2, max_conv_dim=512):
+    def __init__(self, img_size=256, num_domains=2, max_conv_dim=512, input_dim=3):
         super().__init__()
         dim_in = 2**14 // img_size
         blocks = []
-        blocks += [nn.Conv2d(1, dim_in, 3, 1, 1)]
+        blocks += [nn.Conv2d(input_dim, dim_in, 3, 1, 1)]
 
         repeat_num = int(np.log2(img_size)) - 2
         for _ in range(repeat_num):
@@ -336,38 +349,49 @@ class Discriminator(nn.Module):
         return out
 
 
-def build_model(args, gpu_ids=[0]):
+def build_model(
+    img_size=128,
+    style_dim=64,
+    input_dim=3,
+    latent_dim=16,
+    num_domains=4,
+    single_output_style_encoder=False,
+    final_activation=None,
+    gpu_ids=[0],
+):
     generator = nn.DataParallel(
-        Generator(args.img_size, args.style_dim, input_dim=args.input_dim),
+        Generator(
+            img_size, style_dim, input_dim=input_dim, final_activation=final_activation
+        ),
         device_ids=gpu_ids,
     )
     mapping_network = nn.DataParallel(
-        MappingNetwork(args.latent_dim, args.style_dim, args.num_domains),
+        MappingNetwork(latent_dim, style_dim, num_domains),
         device_ids=gpu_ids,
     )
-    if args.single_output_style_encoder:
+    if single_output_style_encoder:
         print("Using single output style encoder")
         style_encoder = nn.DataParallel(
             SingleOutputStyleEncoder(
-                args.img_size,
-                args.style_dim,
-                args.num_domains,
-                input_dim=args.input_dim,
+                img_size,
+                style_dim,
+                num_domains,
+                input_dim=input_dim,
             ),
             device_ids=gpu_ids,
         )
     else:
         style_encoder = nn.DataParallel(
             StyleEncoder(
-                args.img_size,
-                args.style_dim,
-                args.num_domains,
-                input_dim=args.input_dim,
+                img_size,
+                style_dim,
+                num_domains,
+                input_dim=input_dim,
             ),
             device_ids=gpu_ids,
         )
     discriminator = nn.DataParallel(
-        Discriminator(args.img_size, args.num_domains, input_dim=args.input_dim),
+        Discriminator(img_size, num_domains, input_dim=input_dim),
         device_ids=gpu_ids,
     )
     generator_ema = copy.deepcopy(generator)

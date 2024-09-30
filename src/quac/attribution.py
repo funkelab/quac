@@ -1,8 +1,13 @@
 """Holds all of the discriminative attribution methods that are accepted by QuAC."""
+
 from captum import attr
-import torch
 import numpy as np
 import scipy
+from pathlib import Path
+from quac.data import PairedImageDataset
+from tqdm import tqdm
+import torch
+from typing import Callable
 
 
 def residual(real_img, fake_img):
@@ -32,8 +37,23 @@ class BaseAttribution:
     Basic format of an attribution class.
     """
 
-    def __init__(self, classifier):
+    def __init__(self, classifier, normalize=True):
         self.classifier = classifier
+        self.normalize = normalize
+
+    def _normalize(self, attribution):
+        """Scale the attribution to be between 0 and 1.
+
+        Note that this also takes the absolute value of the attribution.
+        Generally in this framework, we only care about the absolute value of the attribution,
+        because if "negative changes" need to be made, this should be inherent in
+        the counterfactual image.
+        """
+        attribution = np.abs(attribution)
+        # We scale the attribution to be between 0 and 1
+        return (attribution - np.min(attribution)) / (
+            np.max(attribution) - np.min(attribution)
+        )
 
     def _attribute(
         self, real_img, counterfactual_img, real_class, target_class, **kwargs
@@ -43,13 +63,26 @@ class BaseAttribution:
         )
 
     def attribute(
-        self, real_img, counterfactual_img, real_class, target_class, **kwargs
+        self,
+        real_img,
+        counterfactual_img,
+        real_class,
+        target_class,
+        device="cuda",
+        **kwargs,
     ):
         self.classifier.zero_grad()
         attribution = self._attribute(
-            real_img, counterfactual_img, real_class, target_class, **kwargs
+            real_img.to(device),
+            counterfactual_img.to(device),
+            real_class,
+            target_class,
+            **kwargs,
         )
-        return attribution.detach().cpu().numpy()
+        attribution = attribution.detach().cpu().numpy()
+        if self.normalize:
+            attribution = self._normalize(attribution)
+        return attribution
 
 
 class DIntegratedGradients(BaseAttribution):
@@ -57,8 +90,8 @@ class DIntegratedGradients(BaseAttribution):
     Discriminative version of the Integrated Gradients attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.ig = attr.IntegratedGradients(classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -76,8 +109,8 @@ class DDeepLift(BaseAttribution):
     Discriminative version of the DeepLift attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.dl = attr.DeepLift(classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -95,8 +128,8 @@ class DInGrad(BaseAttribution):
     Discriminative version of the InputxGradient attribution method.
     """
 
-    def __init__(self, classifier):
-        super().__init__(classifier)
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
         self.saliency = attr.Saliency(self.classifier)
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
@@ -113,3 +146,87 @@ class DInGrad(BaseAttribution):
             counterfactual_img[None, ...] - real_img[None, ...]
         )
         return ingrad_diff_1[0]
+
+
+class VanillaIntegratedGradients(BaseAttribution):
+    """Wrapper class for Integrated Gradients from Captum.
+
+    Allows us to use it as a baseline.
+    """
+
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
+        self.ig = attr.IntegratedGradients(classifier)
+
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+        batched_attribution = (
+            self.ig.attribute(real_img[None, ...], target=real_class).detach().cpu()
+        )
+        return batched_attribution[0]
+
+
+class VanillaDeepLift(BaseAttribution):
+    """Wrapper class for DeepLift from Captum.
+
+    Allows us to use it as a baseline.
+    """
+
+    def __init__(self, classifier, normalize=True):
+        super().__init__(classifier, normalize=normalize)
+        self.dl = attr.DeepLift(classifier)
+
+    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+        batched_attribution = (
+            self.dl.attribute(real_img[None, ...], target=real_class).detach().cpu()
+        )
+        return batched_attribution[0]
+
+
+class AttributionIO:
+    """
+    Running the attribution methods on the images.
+    Storing the results in the output directory.
+
+    """
+
+    def __init__(self, attributions: dict[str, BaseAttribution], output_directory: str):
+        self.attributions = attributions
+        self.output_directory = Path(output_directory)
+
+    def get_directory(self, attr_name: str, source_class: str, target_class: str):
+        directory = self.output_directory / f"{attr_name}/{source_class}/{target_class}"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def run(
+        self,
+        source_directory: str,
+        counterfactual_directory: str,
+        transform: Callable,
+        device: str = "cuda",
+    ):
+        if device == "cuda":
+            if not torch.cuda.is_available():
+                raise ValueError("CUDA is not available on this machine.")
+        print("Loading paired data")
+        dataset = PairedImageDataset(
+            source_directory, counterfactual_directory, transform=transform
+        )
+        print("Running attributions")
+        for sample in tqdm(dataset, total=len(dataset)):
+            for attr_name, attribution in self.attributions.items():
+                attr = attribution.attribute(
+                    sample.image,
+                    sample.counterfactual,
+                    sample.source_class_index,
+                    sample.target_class_index,
+                    device=device,
+                )
+                # Store the attribution
+                np.save(
+                    self.get_directory(
+                        attr_name, sample.source_class, sample.target_class
+                    )
+                    / f"{sample.path.stem}.npy",
+                    attr,
+                )

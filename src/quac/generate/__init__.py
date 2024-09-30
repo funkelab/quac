@@ -7,6 +7,7 @@ import logging
 from quac.training.classification import ClassifierWrapper
 import torch
 from torchvision import transforms
+from typing import Union
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -16,7 +17,9 @@ class CounterfactualNotFound(Exception):
     pass
 
 
-def load_classifier(checkpoint, mean=0.5, std=0.5, eval=True, device=None):
+def load_classifier(
+    checkpoint, mean=0.5, std=0.5, eval=True, assume_normalized=False, device=None
+):
     """
     Load a classifier from a torchscript checkpoint.
 
@@ -81,6 +84,7 @@ def load_stargan(
     checkpoint_iter: int = 100000,
     kind="latent",
     single_output_encoder: bool = False,
+    final_activation: Union[str, None] = None,
 ) -> torch.nn.Module:
     """
     Load an inference version of the StarGANv2 model from a checkpoint.
@@ -108,6 +112,7 @@ def load_stargan(
             latent_dim=latent_dim,
             num_domains=num_domains,
             single_output_encoder=single_output_encoder,
+            final_activation=final_activation,
         )
     else:
         latent_inference_model = LatentInferenceModel(
@@ -117,6 +122,7 @@ def load_stargan(
             style_dim=style_dim,
             latent_dim=latent_dim,
             num_domains=num_domains,
+            final_activation=final_activation,
         )
     latent_inference_model.load_checkpoint(checkpoint_iter)
     latent_inference_model.eval()
@@ -134,11 +140,12 @@ def get_counterfactual(
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far=0,
+    best_pred_so_far=None,
     best_cf_so_far=None,
     best_cf_path_so_far=None,
     error_if_not_found=False,
     return_path=False,
+    return_pred=False,
 ) -> torch.Tensor:
     """
     Tries to find a counterfactual for the given sample, given the target.
@@ -164,6 +171,8 @@ def get_counterfactual(
     Raises:
         CounterfactualNotFound: if no counterfactual is found after max_tries tries
     """
+    if best_pred_so_far is None:
+        best_pred_so_far = torch.zeros(target + 1)
     # Copy x batch_size times
     x_multiple = torch.stack([x] * batch_size)
     if kind == "reference":
@@ -202,10 +211,13 @@ def get_counterfactual(
     predictions = torch.argmax(p, dim=-1)
     # Get best so far
     best_idx_so_far = torch.argmax(p[:, target])
-    if p[best_idx_so_far, target] > best_pred_so_far:
-        best_pred_so_far = p[best_idx_so_far, target]
-        best_cf_so_far = xcf[best_idx_so_far].cpu().numpy()
-        best_cf_path_so_far = ref_paths[best_idx_so_far]
+    if p[best_idx_so_far, target] > best_pred_so_far[target]:
+        best_pred_so_far = p[best_idx_so_far]  # , target]
+        best_cf_so_far = xcf[best_idx_so_far].cpu()
+        if kind == "reference":
+            best_cf_path_so_far = ref_paths[best_idx_so_far]
+        else:
+            best_cf_path_so_far = None
     # Get the indices of the correct predictions
     indices = torch.where(predictions == target)[0]
 
@@ -228,6 +240,7 @@ def get_counterfactual(
                 best_cf_so_far=best_cf_so_far,
                 best_cf_path_so_far=best_cf_path_so_far,
                 return_path=return_path,
+                return_pred=return_pred,
             )
         else:
             if error_if_not_found:
@@ -239,5 +252,9 @@ def get_counterfactual(
             )
     # Return the best counterfactual so far
     if return_path and kind == "reference":
+        if return_pred:
+            return best_cf_so_far, best_cf_path_so_far, best_pred_so_far
         return best_cf_so_far, best_cf_path_so_far
+    if return_pred:
+        return best_cf_so_far, best_pred_so_far
     return best_cf_so_far

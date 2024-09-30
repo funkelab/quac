@@ -8,20 +8,15 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
-import os
-from os.path import join as ospj
 import json
-import glob
-from shutil import copyfile
-
-from tqdm import tqdm
-import ffmpeg
-
+import matplotlib.pyplot as plt
 import numpy as np
+from os.path import join as ospj
+from pathlib import Path
+import pandas as pd
+import re
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torchvision
 import torchvision.utils as vutils
 
 
@@ -59,235 +54,211 @@ def save_image(x, ncol, filename):
     vutils.save_image(x.cpu(), filename, nrow=ncol, padding=0)
 
 
-@torch.no_grad()
-def translate_and_reconstruct(nets, args, x_src, y_src, x_ref, y_ref, filename):
-    N, C, H, W = x_src.size()
-    s_ref = nets.style_encoder(x_ref, y_ref)
-    masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
-    x_fake = nets.generator(x_src, s_ref, masks=masks)
-    s_src = nets.style_encoder(x_src, y_src)
-    masks = nets.fan.get_heatmap(x_fake) if args.w_hpf > 0 else None
-    x_rec = nets.generator(x_fake, s_src, masks=masks)
-    x_concat = [x_src, x_ref, x_fake, x_rec]
-    x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N, filename)
-    del x_concat
+class Logger:
+    def __init__(self, log_dir, nets, num_outs_per_domain=10) -> None:
+        self.log_dir = Path(log_dir)
+        if not self.log_dir.exists():
+            self.log_dir.mkdir(parents=True)
+        self.nets = nets
+
+    @torch.no_grad()
+    def translate_and_reconstruct(self, x_src, y_src, x_ref, y_ref, filename):
+        N, C, H, W = x_src.size()
+        s_ref = self.nets.style_encoder(x_ref, y_ref)
+        x_fake = self.nets.generator(x_src, s_ref)
+        s_src = self.nets.style_encoder(x_src, y_src)
+        x_rec = self.nets.generator(x_fake, s_src)
+        x_concat = [x_src, x_ref, x_fake, x_rec]
+        x_concat = torch.cat(x_concat, dim=0)
+        save_image(x_concat, N, filename)
+        del x_concat
+
+    @torch.no_grad()
+    def translate_using_latent(self, x_src, y_trg_list, z_trg_list, psi, filename):
+        N, C, H, W = x_src.size()
+        latent_dim = z_trg_list[0].size(1)
+        x_concat = [x_src]
+
+        for i, y_trg in enumerate(y_trg_list):
+            z_many = torch.randn(10000, latent_dim).to(x_src.device)
+            y_many = torch.LongTensor(10000).to(x_src.device).fill_(y_trg[0])
+            s_many = self.nets.mapping_network(z_many, y_many)
+            s_avg = torch.mean(s_many, dim=0, keepdim=True)
+            s_avg = s_avg.repeat(N, 1)
+
+            for z_trg in z_trg_list:
+                s_trg = self.nets.mapping_network(z_trg, y_trg)
+                s_trg = torch.lerp(s_avg, s_trg, psi)
+                x_fake = self.nets.generator(x_src, s_trg)
+                x_concat += [x_fake]
+
+        x_concat = torch.cat(x_concat, dim=0)
+        save_image(x_concat, N, filename)
+
+    @torch.no_grad()
+    def translate_using_reference(self, x_src, x_ref, y_ref, filename):
+        N, C, H, W = x_src.size()
+        wb = torch.ones(1, C, H, W).to(x_src.device)
+        x_src_with_wb = torch.cat([wb, x_src], dim=0)
+
+        masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
+        s_ref = nets.style_encoder(x_ref, y_ref)
+        s_ref_list = s_ref.unsqueeze(1).repeat(1, N, 1)
+        x_concat = [x_src_with_wb]
+        for i, s_ref in enumerate(s_ref_list):
+            x_fake = nets.generator(x_src, s_ref, masks=masks)
+            x_fake_with_ref = torch.cat([x_ref[i : i + 1], x_fake], dim=0)
+            x_concat += [x_fake_with_ref]
+
+        x_concat = torch.cat(x_concat, dim=0)
+        save_image(x_concat, N + 1, filename)
+        del x_concat
+
+    @torch.no_grad()
+    def debug_image(self, inputs, step):
+        x_src, y_src = inputs.x_src, inputs.y_src
+        x_ref, y_ref = inputs.x_ref, inputs.y_ref
+
+        device = inputs.x_src.device
+        N = inputs.x_src.size(0)
+
+        # translate and reconstruct (reference-guided)
+        filename = ospj(self.sample_dir, "%06d_cycle_consistency.jpg" % (step))
+        self.translate_and_reconstruct(x_src, y_src, x_ref, y_ref, filename)
+
+        # latent-guided image synthesis
+        y_trg_list = [
+            torch.tensor(y).repeat(N).to(device)
+            for y in range(min(args.num_domains, 5))
+        ]
+        z_trg_list = (
+            torch.randn(self.num_outs_per_domain, 1, args.latent_dim)
+            .repeat(1, N, 1)
+            .to(device)
+        )
+        for psi in [0.5, 0.7, 1.0]:
+            filename = ospj(self.sample_dir, "%06d_latent_psi_%.1f.jpg" % (step, psi))
+            self.translate_using_latent(x_src, y_trg_list, z_trg_list, psi, filename)
+
+        # reference-guided image synthesis
+        filename = ospj(self.sample_dir, "%06d_reference.jpg" % (step))
+        self.translate_using_reference(x_src, x_ref, y_ref, filename)
 
 
-@torch.no_grad()
-def translate_using_latent(nets, args, x_src, y_trg_list, z_trg_list, psi, filename):
-    N, C, H, W = x_src.size()
-    latent_dim = z_trg_list[0].size(1)
-    x_concat = [x_src]
-    masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
-
-    for i, y_trg in enumerate(y_trg_list):
-        z_many = torch.randn(10000, latent_dim).to(x_src.device)
-        y_many = torch.LongTensor(10000).to(x_src.device).fill_(y_trg[0])
-        s_many = nets.mapping_network(z_many, y_many)
-        s_avg = torch.mean(s_many, dim=0, keepdim=True)
-        s_avg = s_avg.repeat(N, 1)
-
-        for z_trg in z_trg_list:
-            s_trg = nets.mapping_network(z_trg, y_trg)
-            s_trg = torch.lerp(s_avg, s_trg, psi)
-            x_fake = nets.generator(x_src, s_trg, masks=masks)
-            x_concat += [x_fake]
-
-    x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N, filename)
+###########################
+# LOSS PLOTTING FUNCTIONS #
+###########################
+def get_epoch_number(f):
+    # Get the epoch number from the filename and sort the files by epoch
+    # The epoch number is the only number in the filename, and can be 5 or 6 digits long
+    return int(re.findall(r"\d+", f.name)[0])
 
 
-@torch.no_grad()
-def translate_using_reference(nets, args, x_src, x_ref, y_ref, filename):
-    N, C, H, W = x_src.size()
-    wb = torch.ones(1, C, H, W).to(x_src.device)
-    x_src_with_wb = torch.cat([wb, x_src], dim=0)
+def load_json_files(files):
+    # Load the data from the json files, store everything into a dictionary, with the epoch number as the key
+    data = {}
+    for f in files:
+        with open(f, "r") as file:
+            data[get_epoch_number(f)] = json.load(file)
 
-    masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
-    s_ref = nets.style_encoder(x_ref, y_ref)
-    s_ref_list = s_ref.unsqueeze(1).repeat(1, N, 1)
-    x_concat = [x_src_with_wb]
-    for i, s_ref in enumerate(s_ref_list):
-        x_fake = nets.generator(x_src, s_ref, masks=masks)
-        x_fake_with_ref = torch.cat([x_ref[i : i + 1], x_fake], dim=0)
-        x_concat += [x_fake_with_ref]
-
-    x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N + 1, filename)
-    del x_concat
+    df = pd.DataFrame.from_dict(data, orient="index")
+    df.columns = [col.split("/")[-1] for col in df.columns]
+    df.sort_index(inplace=True)
+    return df
 
 
-@torch.no_grad()
-def debug_image(nets, args, inputs, step):
-    x_src, y_src = inputs.x_src, inputs.y_src
-    x_ref, y_ref = inputs.x_ref, inputs.y_ref
-
-    device = inputs.x_src.device
-    N = inputs.x_src.size(0)
-
-    # translate and reconstruct (reference-guided)
-    filename = ospj(args.sample_dir, "%06d_cycle_consistency.jpg" % (step))
-    translate_and_reconstruct(nets, args, x_src, y_src, x_ref, y_ref, filename)
-
-    # latent-guided image synthesis
-    y_trg_list = [
-        torch.tensor(y).repeat(N).to(device) for y in range(min(args.num_domains, 5))
-    ]
-    z_trg_list = (
-        torch.randn(args.num_outs_per_domain, 1, args.latent_dim)
-        .repeat(1, N, 1)
-        .to(device)
+def plot_from_data(
+    reference_conversion_data,
+    latent_conversion_data,
+    reference_translation_data,
+    latent_translation_data,
+):
+    n_cols = int(np.ceil(len(reference_conversion_data.columns) / 7))
+    fig, axes = plt.subplots(7, n_cols, figsize=(15, 15))
+    for col, ax in zip(reference_conversion_data.columns, axes.ravel()):
+        reference_conversion_data[col].plot(
+            ax=ax, label="Reference Conversion", color="black"
+        )
+        latent_conversion_data[col].plot(
+            ax=ax, label="Latent Conversion", color="black", linestyle="--"
+        )
+        reference_translation_data[col].plot(
+            ax=ax, label="Reference Translation", color="gray"
+        )
+        latent_translation_data[col].plot(
+            ax=ax, label="Latent Translation", color="gray", linestyle="--"
+        )
+        ax.set_ylim(0, 1)
+        # format the title only if there are any non-numeric characters in the column name
+        alphabetic_title = any([c.isalpha() for c in col])
+        if alphabetic_title:
+            # Split the words in the column by the underscore, remove all numbers, and add the word "to" between the words
+            title = " to ".join(
+                [word.capitalize() for word in col.split("_") if not word.isdigit()]
+            )
+            # Remove all remaining numbers from the title
+            title = "".join([i for i in title if not i.isdigit()])
+        else:
+            # The title is \d2\d and we want it to be \d to \d, unfortunately sometimes \d is the number 2, so we need to be careful
+            title = re.sub(r"(\d)2(\d)", r"\1 to \2", col)
+        ax.set_title(title)
+    # Hide all of the extra axes if any
+    for ax in axes.ravel()[len(reference_conversion_data.columns) :]:
+        ax.axis("off")
+    # Add an x-axis label to the bottom row of plots that still has a visible x-axis
+    num_axes = len(reference_conversion_data.columns)
+    for ax in axes.ravel()[num_axes - n_cols :]:
+        ax.set_xlabel("Iteration")
+    # Add a y-axis label to the left column of plots
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Rate")
+    # Make a legend for the whole figure, assuming that the labels are the same for all subplots
+    fig.legend(
+        *ax.get_legend_handles_labels(), loc="upper right", bbox_to_anchor=(1.15, 1)
     )
-    for psi in [0.5, 0.7, 1.0]:
-        filename = ospj(args.sample_dir, "%06d_latent_psi_%.1f.jpg" % (step, psi))
-        translate_using_latent(nets, args, x_src, y_trg_list, z_trg_list, psi, filename)
+    fig.tight_layout()
 
-    # reference-guided image synthesis
-    filename = ospj(args.sample_dir, "%06d_reference.jpg" % (step))
-    translate_using_reference(nets, args, x_src, x_ref, y_ref, filename)
+    return fig
 
 
-# ======================= #
-# Video-related functions #
-# ======================= #
-
-
-def sigmoid(x, w=1):
-    return 1.0 / (1 + np.exp(-w * x))
-
-
-def get_alphas(start=-5, end=5, step=0.5, len_tail=10):
-    return (
-        [0] + [sigmoid(alpha) for alpha in np.arange(start, end, step)] + [1] * len_tail
-    )
-
-
-def interpolate(nets, args, x_src, s_prev, s_next):
-    """returns T x C x H x W"""
-    B = x_src.size(0)
-    frames = []
-    masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
-    alphas = get_alphas()
-
-    for alpha in alphas:
-        s_ref = torch.lerp(s_prev, s_next, alpha)
-        x_fake = nets.generator(x_src, s_ref, masks=masks)
-        entries = torch.cat([x_src.cpu(), x_fake.cpu()], dim=2)
-        frame = torchvision.utils.make_grid(
-            entries, nrow=B, padding=0, pad_value=-1
-        ).unsqueeze(0)
-        frames.append(frame)
-    frames = torch.cat(frames)
-    return frames
-
-
-def slide(entries, margin=32):
-    """Returns a sliding reference window.
-    Args:
-        entries: a list containing two reference images, x_prev and x_next,
-                 both of which has a shape (1, 3, 256, 256)
-    Returns:
-        canvas: output slide of shape (num_frames, 3, 256*2, 256+margin)
+def plot_metrics(root, show: bool = True, save: str = ""):
     """
-    _, C, H, W = entries[0].shape
-    alphas = get_alphas()
-    T = len(alphas)  # number of frames
+    root: str
+        The root directory containing the json files with the metrics.
+    show: bool
+        Whether to show the plot.
+    save: str
+        The path to save the plot to.
+    """
+    # Goal is to get a better idea of the success/failure of conversion as training goes on.
+    # Will be useful to understand how it changes over time, and how the translation/conversion/diversity tradeoff plays out.
 
-    canvas = -torch.ones((T, C, H * 2, W + margin))
-    merged = torch.cat(entries, dim=2)  # (1, 3, 512, 256)
-    for t, alpha in enumerate(alphas):
-        top = int(H * (1 - alpha))  # top, bottom for canvas
-        bottom = H * 2
-        m_top = 0  # top, bottom for merged
-        m_bottom = 2 * H - top
-        canvas[t, :, top:bottom, :W] = merged[:, :, m_top:m_bottom, :]
-    return canvas
+    files = list(Path(root).rglob("*.json"))
 
+    # Split files by whether they are LPIPS, conversion_rate, or translation_rate
+    conversion_files = [f for f in files if "conversion_rate" in f.name]
+    translation_files = [f for f in files if "translation_rate" in f.name]
 
-@torch.no_grad()
-def video_ref(nets, args, x_src, x_ref, y_ref, fname):
-    video = []
-    s_ref = nets.style_encoder(x_ref, y_ref)
-    s_prev = None
-    for data_next in tqdm(zip(x_ref, y_ref, s_ref), "video_ref", len(x_ref)):
-        x_next, y_next, s_next = [d.unsqueeze(0) for d in data_next]
-        if s_prev is None:
-            x_prev, y_prev, s_prev = x_next, y_next, s_next
-            continue
-        if y_prev != y_next:
-            x_prev, y_prev, s_prev = x_next, y_next, s_next
-            continue
+    # Split files by whether they are reference or latent
+    reference_conversion = [f for f in conversion_files if "reference" in f.name]
+    latent_conversion = [f for f in conversion_files if "latent" in f.name]
 
-        interpolated = interpolate(nets, args, x_src, s_prev, s_next)
-        entries = [x_prev, x_next]
-        slided = slide(entries)  # (T, C, 256*2, 256)
-        frames = torch.cat(
-            [slided, interpolated], dim=3
-        ).cpu()  # (T, C, 256*2, 256*(batch+1))
-        video.append(frames)
-        x_prev, y_prev, s_prev = x_next, y_next, s_next
+    reference_translation = [f for f in translation_files if "reference" in f.name]
+    latent_translation = [f for f in translation_files if "latent" in f.name]
 
-    # append last frame 10 time
-    for _ in range(10):
-        video.append(frames[-1:])
-    video = tensor2ndarray255(torch.cat(video))
-    save_video(fname, video)
+    # Load the data from the json files
+    reference_conversion_data = load_json_files(reference_conversion)
+    latent_conversion_data = load_json_files(latent_conversion)
+    reference_translation_data = load_json_files(reference_translation)
+    latent_translation_data = load_json_files(latent_translation)
 
-
-@torch.no_grad()
-def video_latent(nets, args, x_src, y_list, z_list, psi, fname):
-    latent_dim = z_list[0].size(1)
-    s_list = []
-    for i, y_trg in enumerate(y_list):
-        z_many = torch.randn(10000, latent_dim).to(x_src.device)
-        y_many = torch.LongTensor(10000).to(x_src.device).fill_(y_trg[0])
-        s_many = nets.mapping_network(z_many, y_many)
-        s_avg = torch.mean(s_many, dim=0, keepdim=True)
-        s_avg = s_avg.repeat(x_src.size(0), 1)
-
-        for z_trg in z_list:
-            s_trg = nets.mapping_network(z_trg, y_trg)
-            s_trg = torch.lerp(s_avg, s_trg, psi)
-            s_list.append(s_trg)
-
-    s_prev = None
-    video = []
-    # fetch reference images
-    for idx_ref, s_next in enumerate(tqdm(s_list, "video_latent", len(s_list))):
-        if s_prev is None:
-            s_prev = s_next
-            continue
-        if idx_ref % len(z_list) == 0:
-            s_prev = s_next
-            continue
-        frames = interpolate(nets, args, x_src, s_prev, s_next).cpu()
-        video.append(frames)
-        s_prev = s_next
-    for _ in range(10):
-        video.append(frames[-1:])
-    video = tensor2ndarray255(torch.cat(video))
-    save_video(fname, video)
-
-
-def save_video(fname, images, output_fps=30, vcodec="libx264", filters=""):
-    assert isinstance(images, np.ndarray), "images should be np.array: NHWC"
-    num_frames, height, width, channels = images.shape
-    stream = ffmpeg.input(
-        "pipe:", format="rawvideo", pix_fmt="rgb24", s="{}x{}".format(width, height)
+    fig = plot_from_data(
+        reference_conversion_data,
+        latent_conversion_data,
+        reference_translation_data,
+        latent_translation_data,
     )
-    stream = ffmpeg.filter(stream, "setpts", "2*PTS")  # 2*PTS is for slower playback
-    stream = ffmpeg.output(
-        stream, fname, pix_fmt="yuv420p", vcodec=vcodec, r=output_fps
-    )
-    stream = ffmpeg.overwrite_output(stream)
-    process = ffmpeg.run_async(stream, pipe_stdin=True)
-    for frame in tqdm(images, desc="writing video to %s" % fname):
-        process.stdin.write(frame.astype(np.uint8).tobytes())
-    process.stdin.close()
-    process.wait()
-
-
-def tensor2ndarray255(images):
-    images = torch.clamp(images * 0.5 + 0.5, 0, 1)
-    return images.cpu().numpy().transpose(0, 2, 3, 1) * 255
+    if show:
+        plt.show()
+    if save is not None:
+        fig.savefig(save)
