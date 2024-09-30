@@ -39,6 +39,7 @@ class ValConfig(BaseModel):
     img_size: int = 128
     val_batch_size: int = 16
     assume_normalized: bool = False
+    do_nothing: bool = False
 
 
 class LossConfig(BaseModel):
