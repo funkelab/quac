@@ -13,7 +13,14 @@ class ClassifierWrapper(torch.nn.Module):
     for how to convert a model to torchscript.
     """
 
-    def __init__(self, model_checkpoint, mean=None, std=None, assume_normalized=False):
+    def __init__(
+        self,
+        model_checkpoint,
+        mean=None,
+        std=None,
+        assume_normalized=False,
+        do_nothing=False,
+    ):
         """Wraps a torchscript model, and applies normalization."""
         super().__init__()
         self.model = torch.jit.load(model_checkpoint)
@@ -22,10 +29,11 @@ class ClassifierWrapper(torch.nn.Module):
         if mean is None:
             self.transform = Identity()
         self.assume_normalized = assume_normalized  # TODO Remove this, it's in forward
+        self.do_nothing = do_nothing
 
     def forward(self, x, assume_normalized=False, do_nothing=False):
         """Assumes that x is between -1 and 1."""
-        if do_nothing:
+        if do_nothing or self.do_nothing:
             return self.model(x)
         # TODO it would be even better if the range was between 0 and 1 so we wouldn't have to do the below
         if not self.assume_normalized and not assume_normalized:
