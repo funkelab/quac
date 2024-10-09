@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Union
+from typing import Union, Optional
 import torch
 import numpy as np
 
@@ -19,7 +19,7 @@ class Logger:
         if log_type == "wandb":
             if wandb is None:
                 raise ImportError("wandb is not installed.")
-            resume = resume_iter > 0
+            resume = "must" if resume_iter > 0 else False
             return WandBLogger(hparams=hparams, resume=resume, **kwargs)
         elif log_type == "tensorboard":
             if SummaryWriter is None:
@@ -39,6 +39,7 @@ class WandBLogger:
         notes: str,
         tags: list,
         resume: bool = False,
+        id: Optional[str] = None,
     ):
         self.run = wandb.init(
             project=project,
@@ -47,6 +48,7 @@ class WandBLogger:
             tags=tags,
             config=hparams,
             resume=resume,
+            id=id,
         )
 
     def log(self, data: dict[str, Number], step: int = 0):
