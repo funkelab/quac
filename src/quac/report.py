@@ -5,6 +5,7 @@ from pathlib import Path
 from scipy.interpolate import interp1d
 import torch
 from tqdm import tqdm
+import warnings
 
 
 class Report:
@@ -205,7 +206,8 @@ class Report:
     def optimal_thresholds(self, min_percentage=0.0):
         """Get the optimal threshold for each sample
 
-        The optimal threshold is the one that minimizes the Euclidean distance to the top-left corner of the mask-size vs. score-change curve.
+        The optimal threshold has a minimal mask size, and maximizes the score change.
+        We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.
 
         Parameters
         ----------
@@ -216,7 +218,7 @@ class Report:
         mask_scores = np.array(self.score_changes)
         mask_sizes = np.array(self.normalized_mask_sizes)
         thresholds = np.array(self.thresholds)
-        tradeoff_scores = mask_sizes**2 + (1 - mask_scores) ** 2
+        tradeoff_scores = np.abs(mask_sizes) - mask_scores
         # Determine what to ignore
         if min_percentage > 0.0:
             min_value = np.min(mask_scores, axis=1)
@@ -235,6 +237,10 @@ class Report:
 
     def get_optimal_threshold(self, index, return_index=False):
         # TODO Deprecate, use vectorized version!
+        warnings.warn(
+            "This function is deprecated, please use the vectorized version instead.",
+            DeprecationWarning,
+        )
         mask_scores = np.array(self.score_changes[index])
         mask_sizes = np.array(self.normalized_mask_sizes[index])
 
