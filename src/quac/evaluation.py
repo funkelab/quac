@@ -27,7 +27,7 @@ def image_to_tensor(image, device=None):
 
 
 class Processor:
-    """Class the turns attributions into masks."""
+    """Class that turns attributions into masks."""
 
     def __init__(
         self, gaussian_kernel_size=11, struc=10, channel_wise=True, name="default"
@@ -66,6 +66,38 @@ class Processor:
             )
             # TODO should we do this instead?
             # mask_size += np.sum(mask)
+        if not return_size:
+            return np.array(mask)
+        return np.array(mask), mask_size
+
+
+class UnblurredProcessor(Processor):
+    """
+    Processor without any blurring
+    """
+
+    def __init__(self, struc=10, channel_wise=True, name="no_blur"):
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struc, struc))
+        self.channel_wise = channel_wise
+        self.name = name
+
+    def create_mask(self, attribution, threshold, return_size=True):
+        channels, _, _ = attribution.shape
+        mask_size = 0
+        mask = []
+        # construct mask channel by channel
+        for c in range(channels):
+            # threshold
+            if self.channel_wise:
+                channel_mask = attribution[c, :, :] > threshold
+            else:
+                channel_mask = np.any(attribution > threshold, axis=0)
+            # Morphological closing
+            channel_mask = cv2.morphologyEx(
+                channel_mask.astype(np.uint8), cv2.MORPH_CLOSE, self.kernel
+            )
+            mask.append(channel_mask)
+            mask_size += np.sum(channel_mask)
         if not return_size:
             return np.array(mask)
         return np.array(mask), mask_size
