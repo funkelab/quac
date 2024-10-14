@@ -24,6 +24,7 @@ dependencies = [
   "torchvision",
   "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
   "opencv-python",
+  "pydantic",
   "scipy",
   "scikit-learn"
 ]
