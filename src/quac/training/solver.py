@@ -346,7 +346,7 @@ class Solver(nn.Module):
         self,
         val_loader,
         iteration=None,
-        num_outs_per_domain=4,
+        num_outs_per_domain=10,
         mode="latent",
         val_config=None,
     ):
@@ -372,6 +372,7 @@ class Solver(nn.Module):
             val_config.mean,
             val_config.std,
             assume_normalized=val_config.assume_normalized,
+            do_nothing=val_config.do_nothing,
         )
         classifier.to(device)
         assert mode in ["latent", "reference"]
@@ -453,14 +454,18 @@ class Solver(nn.Module):
                 translation_rate = np.mean(predictions == trg_idx)
 
                 # STORE
-                conversion_rate_values["conversion_rate/" + task] = conversion_rate
-                translation_rate_values["translation_rate/" + task] = translation_rate
+                conversion_rate_values[
+                    f"conversion_rate_{mode}/" + task
+                ] = conversion_rate
+                translation_rate_values[
+                    f"translation_rate_{mode}/" + task
+                ] = translation_rate
 
         # Add average conversion rate and translation rate
-        conversion_rate_values["conversion_rate/average"] = np.mean(
+        conversion_rate_values[f"conversion_rate_{mode}/average"] = np.mean(
             [conversion_rate_values[key] for key in conversion_rate_values.keys()]
         )
-        translation_rate_values["translation_rate/average"] = np.mean(
+        translation_rate_values[f"translation_rate_{mode}/average"] = np.mean(
             [translation_rate_values[key] for key in translation_rate_values.keys()]
         )
 
