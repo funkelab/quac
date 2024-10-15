@@ -238,11 +238,13 @@ def get_test_loader(
     root,
     img_size=256,
     batch_size=32,
-    shuffle=True,
+    shuffle=False,
+    drop_last=False,
     num_workers=4,
     grayscale=False,
     mean=0.5,
     std=0.5,
+    return_dataset=False,
 ):
     print("Preparing DataLoader for the generation phase...")
     transform_list = []
@@ -258,12 +260,15 @@ def get_test_loader(
     transform = transforms.Compose(transform_list)
 
     dataset = ImageFolder(root, transform)
+    if return_dataset:
+        return dataset
     return data.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=True,
+        drop_last=drop_last,
     )
 
 

@@ -84,3 +84,5 @@ class ExperimentConfig(BaseModel):
     model: ModelConfig = ModelConfig()
     run: RunConfig = RunConfig()
     loss: LossConfig = LossConfig()
+    # Optional
+    test_data: Optional[DataConfig] = None
