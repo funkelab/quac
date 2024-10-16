@@ -72,6 +72,13 @@ class BaseAttribution:
         **kwargs,
     ):
         self.classifier.zero_grad()
+        # Check if there is a batch dimension, if not, add it
+        batch_added = False
+        if len(real_img.shape) == 3:
+            real_img = real_img[None, ...]
+            counterfactual_img = counterfactual_img[None, ...]
+            batch_added = True
+
         attribution = self._attribute(
             real_img.to(device),
             counterfactual_img.to(device),
@@ -82,6 +89,8 @@ class BaseAttribution:
         attribution = attribution.detach().cpu().numpy()
         if self.normalize:
             attribution = self._normalize(attribution)
+        if batch_added:
+            attribution = attribution[0]
         return attribution
 
 
@@ -97,11 +106,11 @@ class DIntegratedGradients(BaseAttribution):
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         # FIXME in the original DAPI code, the real and counterfactual were switched.
         attribution = self.ig.attribute(
-            real_img[None, ...],  # .cuda(),
-            baselines=counterfactual_img[None, ...],  # .cuda(),
+            real_img,
+            baselines=counterfactual_img,
             target=real_class,
         )
-        return attribution[0]
+        return attribution
 
 
 class DDeepLift(BaseAttribution):
@@ -116,11 +125,11 @@ class DDeepLift(BaseAttribution):
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         # FIXME in the original DAPI code, the real and counterfactual were switched.
         attribution = self.dl.attribute(
-            real_img[None, ...],  # .cuda(),
-            baselines=counterfactual_img[None, ...],  # .cuda(),
+            real_img,
+            baselines=counterfactual_img,
             target=real_class,
         )
-        return attribution[0]
+        return attribution
 
 
 class DInGrad(BaseAttribution):
@@ -137,15 +146,9 @@ class DInGrad(BaseAttribution):
         # grads_fake = self.saliency.attribute(counterfactual_img,
         #                                 target=target_class)
         # ingrad_diff_0 = grads_fake * (real_img - counterfactual_img)
-        grads_real = (
-            self.saliency.attribute(real_img[None, ...], target=real_class)  # .cuda(),
-            .detach()
-            .cpu()
-        )
-        ingrad_diff_1 = grads_real * (
-            counterfactual_img[None, ...] - real_img[None, ...]
-        )
-        return ingrad_diff_1[0]
+        grads_real = self.saliency.attribute(real_img, target=real_class).detach().cpu()
+        ingrad_diff_1 = grads_real * (counterfactual_img - real_img)
+        return ingrad_diff_1
 
 
 class VanillaIntegratedGradients(BaseAttribution):
@@ -160,9 +163,9 @@ class VanillaIntegratedGradients(BaseAttribution):
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         batched_attribution = (
-            self.ig.attribute(real_img[None, ...], target=real_class).detach().cpu()
+            self.ig.attribute(real_img, target=real_class).detach().cpu()
         )
-        return batched_attribution[0]
+        return batched_attribution
 
 
 class VanillaDeepLift(BaseAttribution):
@@ -177,9 +180,9 @@ class VanillaDeepLift(BaseAttribution):
 
     def _attribute(self, real_img, counterfactual_img, real_class, target_class):
         batched_attribution = (
-            self.dl.attribute(real_img[None, ...], target=real_class).detach().cpu()
+            self.dl.attribute(real_img, target=real_class).detach().cpu()
         )
-        return batched_attribution[0]
+        return batched_attribution
 
 
 class AttributionIO:
