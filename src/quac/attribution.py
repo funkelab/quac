@@ -49,11 +49,11 @@ class BaseAttribution:
         because if "negative changes" need to be made, this should be inherent in
         the counterfactual image.
         """
-        attribution = np.abs(attribution)
-        # We scale the attribution to be between 0 and 1
-        return (attribution - np.min(attribution)) / (
-            np.max(attribution) - np.min(attribution)
-        )
+        attribution = torch.abs(attribution)
+        # We scale the attribution to be between 0 and 1, batch-wise
+        min_vals = attribution.flatten(1).min(1)[0][:, None, None, None]
+        max_vals = attribution.flatten(1).max(1)[0][:, None, None, None]
+        return (attribution - min_vals) / (max_vals - min_vals)
 
     def _attribute(
         self, real_img, counterfactual_img, real_class, target_class, **kwargs
@@ -86,12 +86,12 @@ class BaseAttribution:
             target_class,
             **kwargs,
         )
-        attribution = attribution.detach().cpu().numpy()
+        attribution = attribution.detach()
         if self.normalize:
             attribution = self._normalize(attribution)
         if batch_added:
             attribution = attribution[0]
-        return attribution
+        return attribution.cpu().numpy()
 
 
 class DIntegratedGradients(BaseAttribution):
