@@ -19,7 +19,7 @@ class Logger:
         if log_type == "wandb":
             if wandb is None:
                 raise ImportError("wandb is not installed.")
-            resume = "must" if resume_iter > 0 else False
+            resume = "allow" if resume_iter > 0 else False
             return WandBLogger(hparams=hparams, resume=resume, **kwargs)
         elif log_type == "tensorboard":
             if SummaryWriter is None:
