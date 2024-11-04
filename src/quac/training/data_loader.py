@@ -25,6 +25,16 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 
 
+class RGB:
+    def __call__(self, img):
+        if isinstance(img, Image.Image):
+            return img.convert("RGB")
+        else:  # Tensor
+            if img.size(0) == 1:
+                return torch.cat([img, img, img], dim=0)
+            return img
+
+
 def listdir(dname):
     fnames = list(
         chain(
@@ -155,6 +165,8 @@ def get_train_loader(
     transform_list = [rand_crop]
     if grayscale:
         transform_list.append(transforms.Grayscale())
+    else:
+        transform_list.append(RGB())
 
     transform_list += [
         transforms.Resize([img_size, img_size]),
@@ -213,6 +225,8 @@ def get_eval_loader(
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale())
+    else:
+        transform_list.append(RGB())
 
     transform = transforms.Compose(
         [
@@ -250,6 +264,8 @@ def get_test_loader(
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale())
+    else:
+        transform_list.append(RGB())
 
     transform_list += [
         transforms.Resize([img_size, img_size]),
