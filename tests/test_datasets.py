@@ -1,10 +1,10 @@
-from quac.data import PairedImageFolders
+from quac.data import PairedImageDataset
 from torchvision import transforms
 
 
 def test_paired_image_folders():
     transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
-    dataset = PairedImageFolders(
+    dataset = PairedImageDataset(
         "/nrs/funke/adjavond/data/synapses/test",
         "/nrs/funke/adjavond/data/synapses/counterfactuals/stargan_invariance_v0/test",
         transform=transform,

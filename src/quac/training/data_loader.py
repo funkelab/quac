@@ -25,6 +25,16 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 
 
+class RGB:
+    def __call__(self, img):
+        if isinstance(img, Image.Image):
+            return img.convert("RGB")
+        else:  # Tensor
+            if img.size(0) == 1:
+                return torch.cat([img, img, img], dim=0)
+            return img
+
+
 def listdir(dname):
     fnames = list(
         chain(
@@ -102,7 +112,7 @@ class ReferenceDataset(data.Dataset):
         self.transform = transform
 
     def _make_dataset(self, root):
-        domains = os.listdir(root)
+        domains = glob.glob(os.path.join(root, "*"))
         fnames, fnames2, labels = [], [], []
         for idx, domain in enumerate(sorted(domains)):
             class_dir = os.path.join(root, domain)
@@ -156,17 +166,18 @@ def get_train_loader(
     transform_list = [rand_crop]
     if grayscale:
         transform_list.append(transforms.Grayscale())
+    else:
+        transform_list.append(RGB())
 
-    transform = transforms.Compose(
-        [
-            *transform_list,
-            transforms.Resize([img_size, img_size]),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    )
+    transform_list += [
+        transforms.Resize([img_size, img_size]),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.ToTensor(),
+    ]
+    if mean is not None and std is not None:
+        transform_list.append(transforms.Normalize(mean=mean, std=std))
+    transform = transforms.Compose(transform_list)
 
     if which == "source":
         # dataset = ImageFolder(root, transform)
@@ -191,11 +202,13 @@ def get_eval_loader(
     root,
     img_size=256,
     batch_size=32,
-    imagenet_normalize=True,
+    imagenet_normalize=False,
     shuffle=True,
     num_workers=4,
     drop_last=False,
     grayscale=False,
+    mean=0.5,
+    std=0.5,
 ):
     print("Preparing DataLoader for the evaluation phase...")
     if imagenet_normalize:
@@ -204,19 +217,24 @@ def get_eval_loader(
         std = [0.229, 0.224, 0.225]
     else:
         height, width = img_size, img_size
-        mean = 0.5
-        std = 0.5
+
+    if mean is not None:
+        normalize = transforms.Normalize(mean=mean, std=std)
+    else:
+        normalize = transforms.Lambda(lambda x: x)
 
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale())
+    else:
+        transform_list.append(RGB())
 
     transform = transforms.Compose(
         [
             *transform_list,
             transforms.Resize([height, width]),
             transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
+            normalize,
         ]
     )
 
@@ -235,32 +253,39 @@ def get_test_loader(
     root,
     img_size=256,
     batch_size=32,
-    shuffle=True,
+    shuffle=False,
+    drop_last=False,
     num_workers=4,
     grayscale=False,
     mean=0.5,
     std=0.5,
+    return_dataset=False,
 ):
     print("Preparing DataLoader for the generation phase...")
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale())
-    transform = transforms.Compose(
-        [
-            *transform_list,
-            transforms.Resize([img_size, img_size]),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    )
+    else:
+        transform_list.append(RGB())
+
+    transform_list += [
+        transforms.Resize([img_size, img_size]),
+        transforms.ToTensor(),
+    ]
+    if mean is not None and std is not None:
+        transform_list.append(transforms.Normalize(mean=mean, std=std))
+    transform = transforms.Compose(transform_list)
 
     dataset = ImageFolder(root, transform)
+    if return_dataset:
+        return dataset
     return data.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=True,
+        drop_last=drop_last,
     )
 
 
@@ -304,7 +329,7 @@ class InputFetcher:
                 z_trg2=z_trg2,
             )
         elif self.mode == "val":
-            x_ref, y_ref = self._fetch_inputs()
+            x_ref, y_ref = self._fetch_refs()
             inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
         elif self.mode == "test":
             inputs = Munch(x=x, y=y)
@@ -343,7 +368,7 @@ class AugmentedInputFetcher(InputFetcher):
                 z_trg2=z_trg2,
             )
         elif self.mode == "val":
-            x_ref, _, y_ref = self._fetch_inputs()
+            x_ref, _, y_ref = self._fetch_refs()
             inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
         elif self.mode == "test":
             inputs = Munch(x=x, y=y)
@@ -351,3 +376,192 @@ class AugmentedInputFetcher(InputFetcher):
             raise NotImplementedError
 
         return Munch({k: v.to(self.device) for k, v in inputs.items()})
+
+
+class TrainingData:
+    def __init__(
+        self,
+        source,
+        reference,
+        img_size=128,
+        batch_size=8,
+        num_workers=4,
+        grayscale=False,
+        mean=None,
+        std=None,
+        rand_crop_prob=0,
+    ):
+        self.src = get_train_loader(
+            root=source,
+            which="source",
+            img_size=img_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            grayscale=grayscale,
+            mean=mean,
+            std=std,
+            prob=rand_crop_prob,
+        )
+        self.reference = get_train_loader(
+            root=reference,
+            which="reference",
+            img_size=img_size,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            grayscale=grayscale,
+            mean=mean,
+            std=std,
+            prob=rand_crop_prob,
+        )
+
+
+class ValidationData:
+    """
+    A data loader for validation.
+
+    """
+
+    def __init__(
+        self,
+        source,
+        reference=None,
+        mode="latent",
+        img_size=128,
+        batch_size=32,
+        num_workers=4,
+        grayscale=False,
+        mean=None,
+        std=None,
+        **kwargs,
+    ):
+        """
+        Parameters
+        ----------
+        source_directory : str
+            The directory containing the source images.
+        ref_directory : str
+            The directory containing the reference images, defaults to source_directory if None.
+        mode : str
+            The mode of the data loader, either "latent" or "reference".
+            If "latent", the data loader will only load the source images.
+            If "reference", the data loader will load both the source and reference images.
+        image_size : int
+            The size of the images; images of a different size will be resized.
+        batch_size : int
+            The batch size for source data.
+        num_workers : int
+            The number of workers for the data loader.
+        grayscale : bool
+            Whether the images are grayscale.
+        mean: float
+            The mean for normalization, for the classifier.
+        std: float
+            The standard deviation for normalization, for the classifier.
+        kwargs : dict
+            Unused keyword arguments, for compatibility with configuration.
+        """
+        assert mode in ["latent", "reference"]
+        # parameters
+        self.image_size = img_size
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.grayscale = grayscale
+        self.mean = mean
+        self.std = std
+        # The source and target classes
+        self.source = None
+        self.target = None
+        # The roots of the source and target directories
+        self.source_root = Path(source)
+        if reference is not None:
+            self.ref_root = Path(reference)
+        else:
+            self.ref_root = self.source_root
+
+        # Available classes
+        self.available_sources = [
+            subdir.name for subdir in self.source_root.iterdir() if subdir.is_dir()
+        ]
+        self._available_targets = None
+        self.set_mode(mode)
+
+    def set_mode(self, mode):
+        assert mode in ["latent", "reference"]
+        self.mode = mode
+
+    @property
+    def available_targets(self):
+        if self.mode == "latent":
+            return self.available_sources
+        elif self._available_targets is None:
+            self._available_targets = [
+                subdir.name
+                for subdir in Path(self.ref_root).iterdir()
+                if subdir.is_dir()
+            ]
+        return self._available_targets
+
+    def set_target(self, target):
+        assert (
+            target in self.available_targets
+        ), f"{target} not in {self.available_targets}"
+        self.target = target
+
+    def set_source(self, source):
+        assert (
+            source in self.available_sources
+        ), f"{source} not in {self.available_sources}"
+        self.source = source
+
+    @property
+    def reference_directory(self):
+        if self.mode == "latent":
+            return None
+        if self.target is None:
+            raise (ValueError("Target not set."))
+        return self.ref_root / self.target
+
+    @property
+    def source_directory(self):
+        if self.source is None:
+            raise (ValueError("Source not set."))
+        return self.source_root / self.source
+
+    def print_info(self):
+        print(f"Avaliable sources: {self.available_sources}")
+        print(f"Avaliable targets: {self.available_targets}")
+        print(f"Mode: {self.mode}")
+        try:
+            print(f"Current source directory: {self.source_directory}")
+        except ValueError:
+            print("Source not set.")
+        try:
+            print(f"Current target directory: {self.reference_directory}")
+        except ValueError:
+            print("Target not set.")
+
+    @property
+    def loader_src(self):
+        return get_eval_loader(
+            self.source_directory,
+            img_size=self.image_size,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            grayscale=self.grayscale,
+            mean=self.mean,
+            std=self.std,
+            drop_last=False,
+        )
+
+    @property
+    def loader_ref(self):
+        return get_eval_loader(
+            self.reference_directory,
+            img_size=self.image_size,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            grayscale=self.grayscale,
+            mean=self.mean,
+            std=self.std,
+            drop_last=True,
+        )
