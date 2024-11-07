@@ -1,0 +1,71 @@
+log:
+  project: "duplex-stargan"
+  name: "horses_zebras"
+  notes: "Stargan training on Horse-to-Zebras dataset"
+  tags:
+    - stargan
+    - training
+    - duplex
+
+data:
+  source: "/nrs/funke/adjavond/data/duplex/horses_zebras/train"
+  reference: "/nrs/funke/adjavond/data/duplex/horses_zebras/train"
+  img_size: 256
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5 # Default
+  std: 0.5  # Default
+  grayscale: false
+
+validation_data:
+  source: "/nrs/funke/adjavond/data/duplex/horses_zebras/val"
+  reference: "/nrs/funke/adjavond/data/duplex/horses_zebras/val"
+  img_size: 256
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5  # Default
+  std: 0.5  # Default
+  grayscale: false
+
+
+test_data:
+  source: "/nrs/funke/adjavond/data/duplex/horses_zebras/test"
+  reference: "/nrs/funke/adjavond/data/duplex/horses_zebras/test"
+  img_size: 256
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5  # Default
+  std: 0.5  # Default
+  grayscale: false
+
+model:
+  img_size: 256
+  style_dim: 64
+  latent_dim: 16
+  num_domains: 2
+  input_dim: 3
+  final_activation: "tanh"  # Note, this is default
+
+loss:
+  lambda_ds: 0.5
+  lambda_sty: 1.  # Default
+  lambda_cyc: 1.  # Default
+  lambda_id: 1.  # Default
+  ds_iter: 100000 # Default, does not reach 0 in this run, which only goes for 10000
+
+solver:
+  root_dir: "/nrs/funke/adjavond/projects/duplex/horses_zebras/stargan"
+
+validation_config:
+  classifier_checkpoint: "/nrs/funke/adjavond/projects/duplex/horses_zebras/vgg_checkpoint_jit.pt"
+  mean: null
+  std: null
+  assume_normalized: true
+  do_nothing: true # Pass the image directly to the classifier
+
+run:
+  log_every: 100
+  resume_iter: 0
+  total_iters: 100000
+  save_every: 5000
+  eval_every: 5000

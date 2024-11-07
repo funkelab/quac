@@ -1,0 +1,70 @@
+log:
+  project: "duplex-stargan"
+  name: "disc_b"
+  notes: "Stargan training on Disc B dataset"
+  tags:
+    - stargan
+    - training
+    - duplex
+
+data:
+  source: "/nrs/funke/adjavond/data/duplex/disc_b/train"
+  reference: "/nrs/funke/adjavond/data/duplex/disc_b/train"
+  img_size: 128
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5 # Default
+  std: 0.5  # Default
+  grayscale: true
+
+validation_data:
+  source: "/nrs/funke/adjavond/data/duplex/disc_b/val"
+  reference: "/nrs/funke/adjavond/data/duplex/disc_b/val"
+  img_size: 128
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5  # Default
+  std: 0.5  # Default
+  grayscale: true
+
+test_data:
+  source: "/nrs/funke/adjavond/data/duplex/disc_b/test"
+  reference: "/nrs/funke/adjavond/data/duplex/disc_b/test"
+  img_size: 128
+  batch_size: 16
+  num_workers: 12
+  mean: 0.5  # Default
+  std: 0.5  # Default
+  grayscale: true
+
+model:
+  img_size: 128
+  style_dim: 64
+  latent_dim: 16
+  num_domains: 3
+  input_dim: 1
+  final_activation: "tanh"  # Note, this is default
+
+loss:
+  lambda_ds: 0.5
+  lambda_sty: 1.  # Default
+  lambda_cyc: 1.  # Default
+  lambda_id: 1.  # Default
+  ds_iter: 100000 # Default, does not reach 0 in this run, which only goes for 10000
+
+solver:
+  root_dir: "/nrs/funke/adjavond/projects/duplex/disc_b/stargan"
+
+validation_config:
+  classifier_checkpoint: "/nrs/funke/adjavond/projects/duplex/disc_b/vgg_checkpoint_jit.pt"
+  mean: null
+  std: null
+  assume_normalized: true
+  do_nothing: true # Pass the image directly to the classifier
+
+run:
+  log_every: 100
+  resume_iter: 0
+  total_iters: 100000
+  save_every: 5000
+  eval_every: 5000
