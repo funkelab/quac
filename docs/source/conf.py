@@ -53,7 +53,7 @@ html_show_sourcelink = False
 togglebutton_hint = ""
 togglebutton_hint_hide = ""
 
-pygments_style = "lovelace"
+pygments_style = "arduino"
 
 # Napoleon settings
 napoleon_google_docstring = True
