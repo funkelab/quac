@@ -18,12 +18,15 @@ authors = [
 dynamic = ["version"]
 dependencies = [
   "captum",
-  "numpy", 
-  "torch", 
+  "numpy",
+  "munch",
+  "torch",
   "torchvision",
   "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
   "opencv-python",
-  "scipy"
+  "pydantic",
+  "scipy",
+  "scikit-learn"
 ]
 
 [project.optional-dependencies]
