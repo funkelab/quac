@@ -1,8 +1,9 @@
-# Quantitative Attributions with Counterfactuals <img src="docs/assets/quac.png" alt="Logo" width="50" height="auto" />
+# Quantitative Attributions with Counterfactuals <img src="docs/source/assets/quac.png" alt="Logo" width="50" height="auto" />
 
 [![tests](https://github.com/funkelab/quac/actions/workflows/tests.yaml/badge.svg)](https://github.com/funkelab/quac/actions/workflows/tests.yaml)
+[![documentation](https://github.com/funkelab/quac/actions/workflows/deploy-docs.yaml/badge.svg)](https://github.com/funkelab/quac/actions/workflows/deploy-docs.yaml)
 
-
+Documentation can be found [here](https://funkelab.github.io/quac/).
 
 Logo made with the help of DALL-E 2.
 
