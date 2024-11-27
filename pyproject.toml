@@ -7,14 +7,10 @@ name = "quac"
 description = "Quantitative Attribution with Counterfactuals"
 readme = "README.md"
 requires-python = ">=3.7"
-classifiers = [
-  "Programming Language :: Python :: 3",
-]
+classifiers = ["Programming Language :: Python :: 3"]
 keywords = []
 license = { text = "BSD 3-Clause License" }
-authors = [
-    { email = "funkej@hhmi.org", name = "Funke Lab" },
-]
+authors = [{ email = "funkej@hhmi.org", name = "Funke Lab" }]
 dynamic = ["version"]
 dependencies = [
   "captum",
@@ -26,16 +22,20 @@ dependencies = [
   "opencv-python",
   "pydantic",
   "scipy",
-  "scikit-learn"
+  "scikit-learn",
 ]
 
 [project.optional-dependencies]
-dev = [
-  'pytest',
-  'black',
-  'mypy',
-  'pdoc',
-  'pre-commit',
+dev = ['pytest', 'black', 'mypy', 'pdoc', 'pre-commit']
+docs = [
+  "ipykernel",
+  "jupyter_sphinx",
+  "sphinx_autodoc_typehints",
+  "sphinx_rtd_theme>1.0",
+  "sphinx_togglebutton",
+  "sphinxcontrib_jquery",
+  "sphinx>6",
+  "tomli",
 ]
 
 [project.urls]
