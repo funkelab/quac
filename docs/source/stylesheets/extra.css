@@ -13,7 +13,7 @@
     --md-default-fg-color--light:    black;
     --md-default-fg-color--lighter:  #22b361;
     --md-default-fg-color--lightest: #b4f7ae;
-    --md-typeset-color:              black; 
+    --md-typeset-color:              black;
     --md-typeset-a-color:            var(--md-primary-fg-color);
     --md-accent-fg-color:            #037535;
 }

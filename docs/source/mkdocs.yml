@@ -51,7 +51,7 @@ extra_css:
 
 nav:
   - Home: index.md
-  - API: 
+  - API:
     - Generate: api/generate.md
     - Attributions: api/attributions.md
     - Evaluation: api/evaluation.md
