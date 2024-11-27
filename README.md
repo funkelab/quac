@@ -5,7 +5,7 @@
 
 Documentation can be found [here](https://funkelab.github.io/quac/).
 
-Logo made with the help of DALL-E 2.
+<img src="docs/source/assets/overview.png" />
 
 Installing:
 1. Clone this repository
@@ -17,3 +17,6 @@ Installing:
 Installing as developper:
 1. - 4. Same as above.
 5. `pip install -e .\[dev\]`
+
+
+Logo made with the help of DALL-E 2.
