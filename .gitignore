@@ -2,3 +2,5 @@
 **/*.egg-info
 **/.vscode
 **/wandb
+docs/build
+docs/_build

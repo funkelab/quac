@@ -1,0 +1,76 @@
+:root {
+    --color-a: #2c6e2a;
+    --color-b: #40a372;
+    --color-c: #7f681e;
+    --color-a-light: #86ed8996;
+    --color-b-light: #3fadbe5b;
+    --color-c-light: #b1963350;
+}
+
+.wy-nav-top {
+    background: var(--color-a);
+}
+
+.wy-side-nav-search {
+    background: var(--color-a);
+}
+
+a {
+    color: var(--color-a);
+}
+
+a:hover {
+    color: var(--color-c);
+}
+
+a:visited {
+    color: var(--color-b-light);
+}
+
+.wy-menu-vertical a {
+    filter: brightness(1.8);
+}
+
+.wy-menu-vertical a:active {
+    background-color: var(--color-b);
+}
+
+.wy-menu-vertical a:visited {
+    filter: brightness(1.8);
+}
+
+.rst-content .admonition-title {
+    background: var(--color-a);
+}
+
+.rst-content .hint .admonition-title {
+    background: var(--color-a-light);
+}
+
+button.toggle-button {
+    color: var(--color-a-light);
+}
+
+.rst-content .admonition {
+    background: var(--color-a-light);
+}
+
+.rst-content .admonition-title::before {
+    content: "";
+}
+
+.rst-content code.literal {
+    color: var(--color-a);
+}
+
+html.writer-html4 .rst-content dl:not(.docutils)>dt {
+    color: var(--color-a);
+    border-top-color: var(--color-a);
+    background: var(--color-a-light);
+}
+
+html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.glossary):not(.simple)>dt {
+    color: var(--color-a);
+    border-top-color: var(--color-a);
+    background: var(--color-a-light);
+}
