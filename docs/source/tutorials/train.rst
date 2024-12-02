@@ -1,6 +1,11 @@
+.. _sec_train:
+
 =====================
 Training the StarGAN
 =====================
+
+.. attention::
+    This tutorial is still under construction. Come back soon for updates!
 
 In this tutorial, we go over the basics of how to train a (slightly modified) StarGAN for use in QuAC.
 
