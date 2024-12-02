@@ -69,12 +69,12 @@ def calculate_metrics(
                 std=std,
                 grayscale=(input_dim == 1),
             )
-            conversion_rate_values[
-                "conversion_rate_%s/%s" % (mode, task)
-            ] = conversion_rate
-            translation_rate_values[
-                "translation_rate_%s/%s" % (mode, task)
-            ] = translation_rate
+            conversion_rate_values["conversion_rate_%s/%s" % (mode, task)] = (
+                conversion_rate
+            )
+            translation_rate_values["translation_rate_%s/%s" % (mode, task)] = (
+                translation_rate
+            )
 
     # calculate the average conversion rate for all tasks
     conversion_rate_mean = 0

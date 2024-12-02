@@ -9,9 +9,10 @@ def result():
         "thresholds": [0.1, 0.2, 0.3],
         "mask_sizes": [10, 20, 30],
         "score_change": [0.1, 0.2, 0.3],
-        "hybrids": [1, 2, 3]
+        "hybrids": [1, 2, 3],
     }
     return result
+
 
 @pytest.fixture
 def inputs():
@@ -25,12 +26,10 @@ def inputs():
     }
     return inputs
 
+
 @pytest.fixture
 def predictions():
-    predictions = {
-        "original": [10, 11, 12],
-        "counterfactual": [13, 14, 15]
-    }
+    predictions = {"original": [10, 11, 12], "counterfactual": [13, 14, 15]}
     return predictions
 
 
@@ -43,8 +42,15 @@ def test_report(inputs, predictions, attribution, result):
     """Make sure that the report class accumulates correctly."""
     report = Report("report_test_dir_delete_me")
     for _ in range(10):
-        report.accumulate(inputs, predictions, attribution, result, save_attribution=False, save_intermediates=False)
-    
+        report.accumulate(
+            inputs,
+            predictions,
+            attribution,
+            result,
+            save_attribution=False,
+            save_intermediates=False,
+        )
+
     assert len(report.thresholds) == 10
     assert len(report.normalized_mask_sizes) == 10
     assert len(report.score_changes) == 10
@@ -52,7 +58,7 @@ def test_report(inputs, predictions, attribution, result):
     # This should test the rest
     fig, ax = plt.subplots()
     report.plot_curve(ax)
-    
+
     report.store()
     assert (report.save_dir / "attribution.json").exists()
     # TODO Move this to a teardown?

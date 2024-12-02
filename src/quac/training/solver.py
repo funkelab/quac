@@ -454,12 +454,12 @@ class Solver(nn.Module):
                 translation_rate = np.mean(predictions == trg_idx)
 
                 # STORE
-                conversion_rate_values[
-                    f"conversion_rate_{mode}/" + task
-                ] = conversion_rate
-                translation_rate_values[
-                    f"translation_rate_{mode}/" + task
-                ] = translation_rate
+                conversion_rate_values[f"conversion_rate_{mode}/" + task] = (
+                    conversion_rate
+                )
+                translation_rate_values[f"translation_rate_{mode}/" + task] = (
+                    translation_rate
+                )
 
         # Add average conversion rate and translation rate
         conversion_rate_values[f"conversion_rate_{mode}/average"] = np.mean(
