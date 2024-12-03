@@ -43,7 +43,7 @@ Later in the :doc:`evaluation <evaluate>` tutorial, we will process these attrib
 
     attributor = AttributionIO(
         attributions = {
-            "ig" : DIntegratedGradients(classifier),
+            "discriminative_ig" : DIntegratedGradients(classifier),
             "vanilla_ig" : VanillaIntegratedGradients(classifier)
         },
         output_directory = atttribution_directory
