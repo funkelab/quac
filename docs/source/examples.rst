@@ -9,8 +9,8 @@ If you have tried QuAC on your own dataset (even unsuccessfully!) please :email:
 *Fictus Aggregatum* synthetic cells
 ====================================
 
-The *Fictus aggregatum* dataset is a synthetic dataset that was created in the `Funke Lab <>` specifically to understand how QuAC works on biological data.
-The code to generate this dataset is available `here <>`.
+The *Fictus aggregatum* dataset is a synthetic dataset that was created in the `Funke Lab <https://www.janelia.org/lab/funke-lab>`_ specifically to understand how QuAC works on biological data.
+The code to generate this dataset is available `here <https://github.com/funkelab/fictus.aggregatum>`_.
 
 .. figure:: assets/fictus.png
     :figwidth: 100%
