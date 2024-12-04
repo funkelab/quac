@@ -30,6 +30,7 @@ Later in the :doc:`evaluation <evaluate>` tutorial, we will process these attrib
 
 .. code-block:: python
     :linenos:
+
     # Parameters
     attribution_directory = "path/to/store/attributions"
 
@@ -70,6 +71,7 @@ Finally, let's run the attributions.
 
 .. code-block:: python
     :linenos:
+
     data_directory = "path/to/data/directory"
     counterfactual_directory = "path/to/counterfactual/directory"
 
@@ -85,6 +87,7 @@ If you look into the `attribution_directory`, you should see a set of attributio
 They will be organized in the following way:
 
 .. code-block:: bash
+
     attribution_directory/
         attribution_method_name/
             source_class/

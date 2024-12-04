@@ -2,9 +2,6 @@
 Evaluation
 ==========
 
-.. attention::
-    This tutorial is still under construction. Come back soon for updates!
-
 Finally, we have the **generated** images and the **attributions**, let's run the QuAC evaluation to get and score our final **counterfactuals**.
 
 Once again, we will need the classifier!
