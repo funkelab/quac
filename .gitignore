@@ -4,3 +4,7 @@
 **/wandb
 docs/build
 docs/_build
+
+# pixi environments
+.pixi
+*.egg-info
