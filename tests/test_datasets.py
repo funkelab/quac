@@ -1,7 +1,9 @@
 from quac.data import PairedImageDataset
 from torchvision import transforms
+import pytest
 
 
+@pytest.mark.skip("Skip test until we have usable data in CI/CD")
 def test_paired_image_folders():
     transform = transforms.Compose([transforms.Grayscale(), transforms.ToTensor()])
     dataset = PairedImageDataset(
