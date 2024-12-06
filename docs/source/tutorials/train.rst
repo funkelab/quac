@@ -5,7 +5,8 @@ Training the StarGAN
 =====================
 
 .. attention::
-    This tutorial is still under construction. Come back soon for updates!
+    It is recommended to use the YAML configuration method to train the conversion model.
+    The instructions for that can be found :doc:`here <tutorials/train_yaml.>`
 
 In this tutorial, we go over the basics of how to train a (slightly modified) StarGAN for use in QuAC.
 
@@ -36,9 +37,12 @@ For example:
 
     from quac.training.data import TrainingDataset
 
+    training_directory = "path/to/training/data"
+    validation_directory = "path/to/validation/data"
+
     dataset = TrainingDataset(
-        source="path/to/training/data",
-        reference="path/to/training/data",
+        source=training_directory,
+        reference=training_directory,
         img_size=128,
         batch_size=4,
         num_workers=4
@@ -46,8 +50,8 @@ For example:
 
     # Setup data for validation
     val_dataset = ValidationData(
-        source="path/to/training/data",
-        reference="path/to/training/data",
+        source=validation_directory,
+        reference=validation_directory,
         img_size=128,
         batch_size=16,
         num_workers=16
@@ -119,40 +123,21 @@ It is now time to initiate the `Solver` object, which will do the bulk of the wo
         weight_decay=0.1,
     )
 
-    # TODO
     solver = Solver(nets, nets_ema, **experiment.solver.model_dump(), run=logger)
+
+
 
 Training
 ========
-We use the solver to train on the data as follows:
+Once we've created the solver, we also need to define how we're going to train and validate.
+This is done through three different configuations.
+
+The `ValConfig` determines how validation will be done.
+It especially tells us
 
 .. code-block:: python
     :linenos:
 
-    from quac.training.options import ValConfig
-    val_config=ValConfig(
-        classifier_checkpoint="/path/to/classifier/", mean=0.5, std=0.5
-    )
-
-    solver.train(dataset, val_config)
-
-All results will be stored in the `checkpoint_directory` defined above.
-Validation will be done during training at regular intervals (by default, every 10000 iterations).
-
-BONUS: Training with a Config file
-==================================
-
-.. code-block:: python
-    :linenos:
-
-    run_config=RunConfig(
-        # All of these are default
-        resume_iter=0,
-        total_iter=100000,
-        log_every=1000,
-        save_every=10000,
-        eval_every=10000,
-    )
     val_config=ValConfig(
         classifier_checkpoint="/path/to/classifier/",
         # The below is default
@@ -162,12 +147,35 @@ BONUS: Training with a Config file
         std=0.5,
         grayscale=True,
     )
+
+.. code-block:: python
+    :linenos:
+
     loss_config=LossConfig(
-        # The following should probably not be changed
-        # unless you really know what you're doing :)
-        # All of these are default
-        lambda_ds=1.,
+        lambda_ds=0.,
         lambda_reg=1.,
         lambda_sty=1.,
         lambda_cyc=1.,
     )
+
+    run_config=RunConfig(
+        # All of these are default
+        resume_iter=0,
+        total_iter=100000,
+        log_every=1000,
+        save_every=10000,
+        eval_every=10000,
+    )
+
+Finally, we can train the model!
+
+.. code-block:: python
+    :linenos:
+
+    from quac.training.options import ValConfig
+
+    solver.train(dataset, val_config)
+
+All results will be stored in the `checkpoint_directory` defined above.
+
+Once your model is trained, you can move on to generating images with it.
