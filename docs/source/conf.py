@@ -35,6 +35,7 @@ extensions = [
     "sphinx_togglebutton",
     "sphinxcontrib.jquery",
     "sphinx.ext.intersphinx",
+    "sphinxcontrib.email",
 ]
 
 templates_path = ["_templates"]
@@ -63,3 +64,6 @@ intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
 }
+
+# Email
+email_automode = True

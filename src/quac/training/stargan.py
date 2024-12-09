@@ -281,7 +281,7 @@ class StyleEncoder(nn.Module):
         return s
 
 
-class SingleOutputStyleEncoder(nn.Module):
+class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
     def __init__(
         self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
     ):

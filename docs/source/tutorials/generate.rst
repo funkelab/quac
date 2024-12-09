@@ -1,6 +1,11 @@
+.. _sec_generate:
+
 =================================================
 How to generate images from a pre-trained network
 =================================================
+
+.. attention::
+    This tutorial is still under construction. Come back soon for updates!
 
 
 Defining the dataset

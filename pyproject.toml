@@ -35,6 +35,7 @@ docs = [
   "furo",
   "sphinx_togglebutton",
   "sphinxcontrib_jquery",
+  "sphinxcontrib-email",
   "sphinx>6",
   "tomli",
 ]
@@ -42,3 +43,24 @@ docs = [
 [project.urls]
 homepage = "https://github.com/funkelab/quac"
 repository = "https://github.com/funkelab/quac"
+
+[tool.pixi.project]
+channels = ["nvidia/label/cuda-11.8.0", "nvidia", "conda-forge", "pytorch"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+cuda = { version = "*", channel = "nvidia/label/cuda-11.8.0" }
+mkl = { version = "<2024.0.0" }
+pytorch = { version = "2.0.1.*", channel = "pytorch" }
+torchvision = { version = "0.15.2.*", channel = "pytorch" }
+pytorch-cuda = { version = "11.8.*", channel = "pytorch" }
+
+[tool.pixi.pypi-dependencies]
+quac = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[tool.pixi.tasks]
