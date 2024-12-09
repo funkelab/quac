@@ -1,13 +1,13 @@
 """Utilities for generating counterfactual images."""
 
-from .model import LatentInferenceModel, ReferenceInferenceModel
+from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
 from .data import LabelFreePngFolder
 
 import logging
 from quac.training.classification import ClassifierWrapper
 import torch
 from torchvision import transforms
-from typing import Union
+from typing import Union, Optional
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def load_stargan(
     kind="latent",
     single_output_encoder: bool = False,
     final_activation: Union[str, None] = None,
-) -> torch.nn.Module:
+) -> InferenceModel:
     """
     Load an inference version of the StarGANv2 model from a checkpoint.
 
@@ -104,7 +104,7 @@ def load_stargan(
         the loaded inference model
     """
     if kind == "reference":
-        latent_inference_model = ReferenceInferenceModel(
+        latent_inference_model: InferenceModel = ReferenceInferenceModel(
             checkpoint_dir=latent_model_checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
@@ -115,7 +115,7 @@ def load_stargan(
             final_activation=final_activation,
         )
     else:
-        latent_inference_model = LatentInferenceModel(
+        latent_inference_model: InferenceModel = LatentInferenceModel(  # type: ignore[no-redef]
             checkpoint_dir=latent_model_checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
@@ -124,13 +124,13 @@ def load_stargan(
             num_domains=num_domains,
             final_activation=final_activation,
         )
-    latent_inference_model.load_checkpoint(checkpoint_iter)
+    latent_inference_model.load_checkpoint(checkpoint_iter)  # type: ignore
     latent_inference_model.eval()
     return latent_inference_model
 
 
 @torch.no_grad()
-def get_counterfactual(
+def get_counterfactual(  # type: ignore
     classifier,
     latent_inference_model,
     x,
@@ -140,13 +140,13 @@ def get_counterfactual(
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far=None,
-    best_cf_so_far=None,
-    best_cf_path_so_far=None,
+    best_pred_so_far=Optional[torch.Tensor],
+    best_cf_so_far=Optional[torch.Tensor],
+    best_cf_path_so_far=Optional[str],
     error_if_not_found=False,
     return_path=False,
     return_pred=False,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, Optional[Union[str, torch.Tensor]], Optional[torch.Tensor]]:
     """
     Tries to find a counterfactual for the given sample, given the target.
     It creates a batch, and returns one of the samples if it is classified correctly.
@@ -185,13 +185,13 @@ def get_counterfactual(
                 f"Not enough reference images, reducing max_tries to {max_tries}."
             )
         # Get a batch of reference images, starting from batch_size * max_tries, of size batch_size
-        ref_batch, ref_paths = zip(
+        ref_batch_tuples, ref_paths = zip(
             *[
                 dataset_ref[i]
                 for i in range(batch_size * (max_tries - 1), batch_size * max_tries)
             ]
         )
-        ref_batch = torch.stack(ref_batch)
+        ref_batch = torch.stack(ref_batch_tuples)
         # Generate batch_size counterfactuals
         xcf = latent_inference_model(
             x_multiple.to(device),
@@ -254,7 +254,7 @@ def get_counterfactual(
     if return_path and kind == "reference":
         if return_pred:
             return best_cf_so_far, best_cf_path_so_far, best_pred_so_far
-        return best_cf_so_far, best_cf_path_so_far
+        return best_cf_so_far, best_cf_path_so_far  # type: ignore
     if return_pred:
-        return best_cf_so_far, best_pred_so_far
+        return best_cf_so_far, best_pred_so_far  # type: ignore
     return best_cf_so_far

@@ -71,7 +71,7 @@ class Solver(nn.Module):
             self.optims[net] = torch.optim.Adam(
                 params=self.nets[net].parameters(),
                 lr=f_lr if net == "mapping_network" else lr,
-                betas=[beta1, beta2],
+                betas=(beta1, beta2),
                 weight_decay=weight_decay,
             )
 
@@ -125,7 +125,7 @@ class Solver(nn.Module):
             latent_dim = self.nets.mapping_network.module.latent_dim
         return latent_dim
 
-    def train(
+    def train(  # type: ignore
         self,
         loader,
         resume_iter: int = 0,

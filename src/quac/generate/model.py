@@ -9,9 +9,22 @@ from quac.training.stargan import (
 )
 from quac.training.checkpoint import CheckpointIO
 import torch
+from typing import Optional
 
 
-class LatentInferenceModel(torch.nn.Module):
+class InferenceModel(torch.nn.Module):
+    """A superclass for inference models.
+
+    Useful for type-checking.
+    """
+
+    # TODO add checkpoint loading to this class
+    def __init__(self) -> None:
+        super().__init__()
+        pass
+
+
+class LatentInferenceModel(InferenceModel):
     def __init__(
         self,
         checkpoint_dir,
@@ -56,7 +69,7 @@ class LatentInferenceModel(torch.nn.Module):
         return x_fake
 
 
-class ReferenceInferenceModel(torch.nn.Module):
+class ReferenceInferenceModel(InferenceModel):
     def __init__(
         self,
         checkpoint_dir,
@@ -73,7 +86,7 @@ class ReferenceInferenceModel(torch.nn.Module):
             img_size, style_dim, input_dim=input_dim, final_activation=final_activation
         )
         if single_output_encoder:
-            style_encoder = SingleOutputStyleEncoder(
+            style_encoder: StyleEncoder = SingleOutputStyleEncoder(
                 img_size, style_dim, num_domains, input_dim=input_dim
             )
         else:

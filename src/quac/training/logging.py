@@ -8,24 +8,28 @@ import torchvision
 
 try:
     import wandb
+
+    wandb_available = True
 except ImportError:
-    wandb = None
+    wandb_available = False
 
 try:
     from torch.utils.tensorboard import SummaryWriter
+
+    tensorboard_available = True
 except ImportError:
-    SummaryWriter = None
+    tensorboard_available = False
 
 
 class Logger:
     def create(log_type, resume_iter=0, hparams={}, **kwargs):
         if log_type == "wandb":
-            if wandb is None:
+            if not wandb_available:
                 raise ImportError("wandb is not installed.")
             resume = "allow" if resume_iter > 0 else False
             return WandBLogger(hparams=hparams, resume=resume, **kwargs)
         elif log_type == "tensorboard":
-            if SummaryWriter is None:
+            if not tensorboard_available:
                 raise ImportError("Tensorboard is not available.")
             purge_step = resume_iter if resume_iter > 0 else None
             return TensorboardLogger(hparams=hparams, purge_step=purge_step, **kwargs)

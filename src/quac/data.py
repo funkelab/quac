@@ -32,7 +32,7 @@ def check_requirements(
     class_to_idx: Optional[Dict[str, int]] = None,
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
     is_valid_file: Optional[Callable[[str], bool]] = None,
-):
+) -> Callable:
     if class_to_idx is None:
         _, class_to_idx = find_classes(directory)
     elif not class_to_idx:
@@ -66,8 +66,8 @@ def make_counterfactual_dataset(
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
     is_valid_file: Optional[Callable[[str], bool]] = None,
     allow_empty: bool = False,
-) -> List[Tuple[str, int]]:
-    """Generates a list of samples of a form (path_to_sample, class)
+) -> List[Tuple[str, int, int]]:
+    """Generates a list of samples of a form (path_to_sample, source_class, target_class)
     for data organized in a counterfactual style directory.
 
     The dataset is organized in the following way:
@@ -147,7 +147,7 @@ def make_paired_dataset(
     is_valid_file: Optional[Callable[[str], bool]] = None,
     allow_empty: bool = False,
 ) -> List[Tuple[str, str, int, int]]:
-    """Generates a list of samples of a form (path_to_sample, class).
+    """Generates a list of samples of a form (path_to_sample, target_path, class_index, target_class_index).
 
     See :class:`DatasetFolder` for details.
 
@@ -217,8 +217,8 @@ def make_paired_attribution_dataset(
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
     is_valid_file: Optional[Callable[[str], bool]] = None,
     allow_empty: bool = False,
-) -> List[Tuple[str, str, int, int]]:
-    """Generates a list of samples of a form (path_to_sample, class).
+) -> List[Tuple[str, str, str, int, int]]:
+    """Generates a list of samples of a form (path_to_sample, path_to_cf, path_to_attr, source_class, target_class).
 
     See :class:`DatasetFolder` for details.
 
@@ -302,8 +302,8 @@ def make_paired_attribution_dataset(
 class Sample:
     image: torch.Tensor
     source_class_index: int
-    path: Path = None
-    source_class: str = None
+    path: Optional[Path] = None
+    source_class: Optional[str] = None
 
 
 # TODO remove?
@@ -312,10 +312,10 @@ class CounterfactualSample:
     counterfactual: torch.Tensor
     target_class_index: int
     source_class_index: int
-    path: Path = None
-    counterfactual_path: Path = None
-    source_class: str = None
-    target_class: str = None
+    path: Optional[Path] = None
+    counterfactual_path: Optional[Path] = None
+    source_class: Optional[str] = None
+    target_class: Optional[str] = None
 
 
 @dataclass
@@ -324,10 +324,10 @@ class PairedSample:
     counterfactual: torch.Tensor
     source_class_index: int
     target_class_index: int
-    path: Path = None
-    counterfactual_path: Path = None
-    source_class: str = None
-    target_class: str = None
+    path: Optional[Path] = None
+    counterfactual_path: Optional[Path] = None
+    source_class: Optional[str] = None
+    target_class: Optional[str] = None
 
 
 @dataclass
@@ -337,11 +337,11 @@ class SampleWithAttribution:
     counterfactual: torch.Tensor
     source_class_index: int
     target_class_index: int
-    path: Path = None
-    counterfactual_path: Path = None
-    source_class: str = None
-    target_class: str = None
-    attribution_path: Path = None
+    path: Optional[Path] = None
+    counterfactual_path: Optional[Path] = None
+    source_class: Optional[str] = None
+    target_class: Optional[str] = None
+    attribution_path: Optional[Path] = None
 
 
 class PairedImageDataset(Dataset):
