@@ -4,9 +4,6 @@
 Training from a YAML file
 =========================
 
-.. attention::
-    This tutorial is still under construction. Come back soon for updates!
-
 Example dataset
 ===============
 

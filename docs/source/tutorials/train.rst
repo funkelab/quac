@@ -6,7 +6,6 @@ Training the StarGAN
 
 .. attention::
     It is recommended to use the YAML configuration method to train the conversion model.
-    The instructions for that can be found :doc:`here <tutorials/train_yaml.>`
 
 In this tutorial, we go over the basics of how to train a (slightly modified) StarGAN for use in QuAC.
 
