@@ -11,11 +11,10 @@ Let's start by loading the reports obtained in the previous step.
 
 .. code-block:: python
     :linenos:
-    report_directory = "/path/to/report/directory/"
-
 
     from quac.report import Report
 
+    report_directory = "/path/to/report/directory/"
     reports = {
         method: Report(name=method)
         for method in [
@@ -48,8 +47,10 @@ Choosing the best attribution method for each sample
 
 While one attribution method may be better than another on average, it is possible that the best method for a given example is different.
 Therefore, we will make a list of the best method for each example by comparing the quac scores.
+
 .. code-block:: python
     :linenos:
+
     quac_scores = pd.DataFrame(
         {method: report.quac_scores for method, report in reports.items()}
     )
@@ -60,6 +61,7 @@ We'll also want to load the classifier at this point, so we can look at the clas
 
 .. code-block:: python
     :linenos:
+
     import torch
 
     classifier = torch.jit.load("/path/to/classifier/model.pt")
@@ -72,6 +74,7 @@ This is done by ordering the examples by the QuAC score, and then choosing the o
 
 .. code-block:: python
     :linenos:
+
     order = best_quac_scores[::-1].argsort()
 
     # For example, choose the 10th best example
@@ -84,6 +87,7 @@ We also want to see the classification of both the original and the counterfactu
 
 .. code-block:: python
     :linenos:
+
     # Transform to apply to the images so they match each other
     # loading
     from PIL import Image
@@ -117,6 +121,7 @@ To do this, we will need to get the optimal threshold, and get the processor use
 
 .. code-block:: python
     :linenos:
+
     from quac.evaluation import Processor
 
     gaussian_kernel_size = 11
