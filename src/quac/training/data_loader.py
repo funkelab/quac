@@ -40,7 +40,14 @@ def listdir(dname):
         chain(
             *[
                 list(Path(dname).rglob("*." + ext))
-                for ext in ["png", "jpg", "jpeg", "JPG"]
+                for ext in [
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "JPG",
+                    "tiff",
+                    "tif",
+                ]  # TODO use Bioformats for this
             ]
         )
     )
@@ -65,6 +72,7 @@ class DefaultDataset(data.Dataset):
         return len(self.samples)
 
 
+# TODO should the Augmented + Reference Datasets be combined into a single class
 class AugmentedDataset(data.Dataset):
     """Adds an augmented version of the input to the sample."""
 
@@ -82,10 +90,12 @@ class AugmentedDataset(data.Dataset):
         self.augment = augment
 
     def _make_dataset(self, root):
-        domains = glob.glob(os.path.join(root, "*"))
+        # Get all subitems, sorted, ignore hidden
+        domains = sorted(Path(root).glob("[!.]*"))
+        # only directories, absolute paths
+        domains = [d.absolute() for d in domains if d.is_dir()]
         fnames, labels = [], []
-        for idx, domain in enumerate(sorted(domains)):
-            class_dir = os.path.join(root, domain)
+        for idx, class_dir in enumerate(domains):
             cls_fnames = listdir(class_dir)
             fnames += cls_fnames
             labels += [idx] * len(cls_fnames)
@@ -111,10 +121,12 @@ class ReferenceDataset(data.Dataset):
         self.transform = transform
 
     def _make_dataset(self, root):
-        domains = glob.glob(os.path.join(root, "*"))
-        fnames, fnames2, labels = [], [], []
-        for idx, domain in enumerate(sorted(domains)):
-            class_dir = os.path.join(root, domain)
+        # Get all subitems, sorted, ignore hidden
+        domains = sorted(Path(root).glob("[!.]*"))
+        # only directories, absolute paths
+        domains = [d.absolute() for d in domains if d.is_dir()]
+        fnames, labels = [], []
+        for idx, class_dir in enumerate(domains):
             cls_fnames = listdir(class_dir)
             fnames += cls_fnames
             fnames2 += random.sample(cls_fnames, len(cls_fnames))
