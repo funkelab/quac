@@ -14,6 +14,7 @@ import glob
 import os
 import random
 
+import imageio
 from munch import Munch
 from PIL import Image
 import numpy as np
@@ -47,7 +48,7 @@ def listdir(dname):
                     "JPG",
                     "tiff",
                     "tif",
-                ]  # TODO use Bioformats for this
+                ]
             ]
         )
     )
@@ -72,24 +73,23 @@ class DefaultDataset(data.Dataset):
         return len(self.samples)
 
 
-# TODO should the Augmented + Reference Datasets be combined into a single class
-class AugmentedDataset(data.Dataset):
-    """Adds an augmented version of the input to the sample."""
+class LabelledDataset(data.Dataset):
+    """A base dataset for QuAC."""
 
     def __init__(self, root, transform=None, augment=None):
         self.samples, self.targets = self._make_dataset(root)
         # Check if empty
         assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
-        if augment is None:
-            # Default augmentation: random horizontal flip, random vertical flip
-            augment = transforms.Compose(
-                [
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomVerticalFlip(),
-                ]
-            )
-        self.augment = augment
+
+    def _open_image(self, fname):
+        array = imageio.imread(fname)
+        # if no channel dimension, add it
+        if len(array.shape) == 2:
+            array = array[:, :, None]
+        # data will be h,w,c, switch to c,h,w
+        array = array.transpose(2, 0, 1)
+        return torch.from_numpy(array)
 
     def _make_dataset(self, root):
         # Get all subitems, sorted, ignore hidden
@@ -106,7 +106,32 @@ class AugmentedDataset(data.Dataset):
     def __getitem__(self, index):
         fname = self.samples[index]
         label = self.targets[index]
-        img = Image.open(fname)
+        img = self._open_image(fname)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, label
+
+
+class AugmentedDataset(LabelledDataset):
+    """Adds an augmented version of the input to the sample."""
+
+    def __init__(self, root, transform=None, augment=None):
+        super().__init__(root, transform, augment)  # Creates self.samples, self.targets
+        if self.augment is None:
+            # Default augmentation: random horizontal flip, random vertical flip
+            augment = transforms.Compose(
+                [
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomVerticalFlip(),
+                ]
+            )
+        self.augment = augment
+
+    def __getitem__(self, index):
+        fname = self.samples[index]
+        label = self.targets[index]
+        img = self._open_image(fname)
+        # Augment the image to create a second image
         img2 = self.augment(img)
         if self.transform is not None:
             img = self.transform(img)
@@ -117,31 +142,27 @@ class AugmentedDataset(data.Dataset):
         return len(self.targets)
 
 
-class ReferenceDataset(data.Dataset):
-    def __init__(self, root, transform=None):
-        self.samples, self.targets = self._make_dataset(root)
-        # Check if empty
-        assert len(self.samples) > 0, "Dataset is empty, no files found."
-        self.transform = transform
+class ReferenceDataset(LabelledDataset):
+    """A dataset that returns a reference image and a target image."""
 
-    def _make_dataset(self, root):
-        # Get all subitems, sorted, ignore hidden
-        domains = sorted(Path(root).glob("[!.]*"))
-        # only directories, absolute paths
-        domains = [d.absolute() for d in domains if d.is_dir()]
-        fnames, labels = [], []
-        for idx, class_dir in enumerate(domains):
+    def __init__(self, root, transform=None):
+        super().__init__(root, transform)  # Creates self.samples, self.targets
+        # Create a second set of samples
+        fnames2 = []
+        for fname in self.samples:
+            # Get the class of the current image
+            class_dir = Path(fname).parent
+            # Get a random image from the same class
             cls_fnames = listdir(class_dir)
-            fnames += cls_fnames
-            fnames2 += random.sample(cls_fnames, len(cls_fnames))
-            labels += [idx] * len(cls_fnames)
-        return list(zip(fnames, fnames2)), labels
+            fname2 = random.choice(cls_fnames)
+            fnames2.append(fname2)
+        self.samples = list(zip(self.samples, fnames2))
 
     def __getitem__(self, index):
         fname, fname2 = self.samples[index]
         label = self.targets[index]
-        img = Image.open(fname)
-        img2 = Image.open(fname2)
+        img = self._open_image(fname)
+        img2 = self._open_image(fname2)
         if self.transform is not None:
             img = self.transform(img)
             img2 = self.transform(img2)
