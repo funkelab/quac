@@ -78,6 +78,8 @@ class AugmentedDataset(data.Dataset):
 
     def __init__(self, root, transform=None, augment=None):
         self.samples, self.targets = self._make_dataset(root)
+        # Check if empty
+        assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
         if augment is None:
             # Default augmentation: random horizontal flip, random vertical flip
@@ -118,6 +120,8 @@ class AugmentedDataset(data.Dataset):
 class ReferenceDataset(data.Dataset):
     def __init__(self, root, transform=None):
         self.samples, self.targets = self._make_dataset(root)
+        # Check if empty
+        assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
 
     def _make_dataset(self, root):
