@@ -1,5 +1,4 @@
 import cv2
-from dataclasses import dataclass
 import numpy as np
 from pathlib import Path
 from quac.data import PairedImageDataset, CounterfactualDataset, PairedWithAttribution
