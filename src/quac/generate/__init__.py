@@ -176,9 +176,9 @@ def get_counterfactual(  # type: ignore
     # Copy x batch_size times
     x_multiple = torch.stack([x] * batch_size)
     if kind == "reference":
-        assert (
-            dataset_ref is not None
-        ), "Reference dataset required for reference style."
+        assert dataset_ref is not None, (
+            "Reference dataset required for reference style."
+        )
         if len(dataset_ref) // batch_size < max_tries:
             max_tries = len(dataset_ref) // batch_size
             logger.warning(

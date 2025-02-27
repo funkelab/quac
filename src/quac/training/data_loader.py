@@ -535,15 +535,15 @@ class ValidationData:
         return self._available_targets
 
     def set_target(self, target):
-        assert (
-            target in self.available_targets
-        ), f"{target} not in {self.available_targets}"
+        assert target in self.available_targets, (
+            f"{target} not in {self.available_targets}"
+        )
         self.target = target
 
     def set_source(self, source):
-        assert (
-            source in self.available_sources
-        ), f"{source} not in {self.available_sources}"
+        assert source in self.available_sources, (
+            f"{source} not in {self.available_sources}"
+        )
         self.source = source
 
     @property
