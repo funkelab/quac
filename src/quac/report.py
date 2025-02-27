@@ -225,9 +225,9 @@ class Report:
             max_value = np.max(mask_scores, axis=1)
             threshold = min_value + min_percentage * (max_value - min_value)
             below_threshold = mask_scores < threshold[:, None]
-            tradeoff_scores[
-                below_threshold
-            ] = np.inf  # Ignores the points with not enough score change
+            tradeoff_scores[below_threshold] = (
+                np.inf
+            )  # Ignores the points with not enough score change
         thr_idx = np.argmin(tradeoff_scores, axis=1)
 
         optimal_thresholds = np.take_along_axis(

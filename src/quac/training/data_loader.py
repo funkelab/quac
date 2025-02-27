@@ -10,8 +10,6 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 from pathlib import Path
 from itertools import chain
-import glob
-import os
 import random
 
 import imageio
@@ -192,8 +190,7 @@ def get_train_loader(
     std=0.5,
 ):
     print(
-        "Preparing DataLoader to fetch %s images "
-        "during the training phase..." % which
+        "Preparing DataLoader to fetch %s images during the training phase..." % which
     )
 
     crop = transforms.RandomResizedCrop(img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
