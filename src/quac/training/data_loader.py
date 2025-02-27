@@ -10,10 +10,9 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 from pathlib import Path
 from itertools import chain
-import glob
-import os
 import random
 
+import imageio
 from munch import Munch
 from PIL import Image
 import numpy as np
@@ -40,7 +39,14 @@ def listdir(dname):
         chain(
             *[
                 list(Path(dname).rglob("*." + ext))
-                for ext in ["png", "jpg", "jpeg", "JPG"]
+                for ext in [
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "JPG",
+                    "tiff",
+                    "tif",
+                ]
             ]
         )
     )
@@ -65,13 +71,51 @@ class DefaultDataset(data.Dataset):
         return len(self.samples)
 
 
-class AugmentedDataset(data.Dataset):
-    """Adds an augmented version of the input to the sample."""
+class LabelledDataset(data.Dataset):
+    """A base dataset for QuAC."""
 
     def __init__(self, root, transform=None, augment=None):
         self.samples, self.targets = self._make_dataset(root)
+        # Check if empty
+        assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
-        if augment is None:
+
+    def _open_image(self, fname):
+        array = imageio.imread(fname)
+        # if no channel dimension, add it
+        if len(array.shape) == 2:
+            array = array[:, :, None]
+        # data will be h,w,c, switch to c,h,w
+        array = array.transpose(2, 0, 1)
+        return torch.from_numpy(array)
+
+    def _make_dataset(self, root):
+        # Get all subitems, sorted, ignore hidden
+        domains = sorted(Path(root).glob("[!.]*"))
+        # only directories, absolute paths
+        domains = [d.absolute() for d in domains if d.is_dir()]
+        fnames, labels = [], []
+        for idx, class_dir in enumerate(domains):
+            cls_fnames = listdir(class_dir)
+            fnames += cls_fnames
+            labels += [idx] * len(cls_fnames)
+        return fnames, labels
+
+    def __getitem__(self, index):
+        fname = self.samples[index]
+        label = self.targets[index]
+        img = self._open_image(fname)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, label
+
+
+class AugmentedDataset(LabelledDataset):
+    """Adds an augmented version of the input to the sample."""
+
+    def __init__(self, root, transform=None, augment=None):
+        super().__init__(root, transform, augment)  # Creates self.samples, self.targets
+        if self.augment is None:
             # Default augmentation: random horizontal flip, random vertical flip
             augment = transforms.Compose(
                 [
@@ -81,20 +125,11 @@ class AugmentedDataset(data.Dataset):
             )
         self.augment = augment
 
-    def _make_dataset(self, root):
-        domains = glob.glob(os.path.join(root, "*"))
-        fnames, labels = [], []
-        for idx, domain in enumerate(sorted(domains)):
-            class_dir = os.path.join(root, domain)
-            cls_fnames = listdir(class_dir)
-            fnames += cls_fnames
-            labels += [idx] * len(cls_fnames)
-        return fnames, labels
-
     def __getitem__(self, index):
         fname = self.samples[index]
         label = self.targets[index]
-        img = Image.open(fname)
+        img = self._open_image(fname)
+        # Augment the image to create a second image
         img2 = self.augment(img)
         if self.transform is not None:
             img = self.transform(img)
@@ -105,27 +140,27 @@ class AugmentedDataset(data.Dataset):
         return len(self.targets)
 
 
-class ReferenceDataset(data.Dataset):
-    def __init__(self, root, transform=None):
-        self.samples, self.targets = self._make_dataset(root)
-        self.transform = transform
+class ReferenceDataset(LabelledDataset):
+    """A dataset that returns a reference image and a target image."""
 
-    def _make_dataset(self, root):
-        domains = glob.glob(os.path.join(root, "*"))
-        fnames, fnames2, labels = [], [], []
-        for idx, domain in enumerate(sorted(domains)):
-            class_dir = os.path.join(root, domain)
+    def __init__(self, root, transform=None):
+        super().__init__(root, transform)  # Creates self.samples, self.targets
+        # Create a second set of samples
+        fnames2 = []
+        for fname in self.samples:
+            # Get the class of the current image
+            class_dir = Path(fname).parent
+            # Get a random image from the same class
             cls_fnames = listdir(class_dir)
-            fnames += cls_fnames
-            fnames2 += random.sample(cls_fnames, len(cls_fnames))
-            labels += [idx] * len(cls_fnames)
-        return list(zip(fnames, fnames2)), labels
+            fname2 = random.choice(cls_fnames)
+            fnames2.append(fname2)
+        self.samples = list(zip(self.samples, fnames2))
 
     def __getitem__(self, index):
         fname, fname2 = self.samples[index]
         label = self.targets[index]
-        img = Image.open(fname)
-        img2 = Image.open(fname2)
+        img = self._open_image(fname)
+        img2 = self._open_image(fname2)
         if self.transform is not None:
             img = self.transform(img)
             img2 = self.transform(img2)
@@ -155,8 +190,7 @@ def get_train_loader(
     std=0.5,
 ):
     print(
-        "Preparing DataLoader to fetch %s images "
-        "during the training phase..." % which
+        "Preparing DataLoader to fetch %s images during the training phase..." % which
     )
 
     crop = transforms.RandomResizedCrop(img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
@@ -501,15 +535,15 @@ class ValidationData:
         return self._available_targets
 
     def set_target(self, target):
-        assert (
-            target in self.available_targets
-        ), f"{target} not in {self.available_targets}"
+        assert target in self.available_targets, (
+            f"{target} not in {self.available_targets}"
+        )
         self.target = target
 
     def set_source(self, source):
-        assert (
-            source in self.available_sources
-        ), f"{source} not in {self.available_sources}"
+        assert source in self.available_sources, (
+            f"{source} not in {self.available_sources}"
+        )
         self.source = source
 
     @property

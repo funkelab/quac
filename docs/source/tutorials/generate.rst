@@ -4,10 +4,6 @@
 How to generate images from a pre-trained network
 =================================================
 
-.. attention::
-    This tutorial is still under construction. Come back soon for updates!
-
-
 Defining the dataset
 ====================
 
@@ -22,7 +18,7 @@ For example, below, we are going to be using the validation data, and our source
     from quac.generate import load_data
 
     img_size = 224
-    data_directory = Path("root_directory/val/0_No_DR")
+    data_directory = Path("/path/to/directory/holding/the/data/source_class")
     dataset = load_data(data_directory, img_size, grayscale=False)
 
 
@@ -86,7 +82,7 @@ Finally, we can run the image generation.
     from quac.generate import get_counterfactual
     from torchvision.utils import save_image
 
-    output_directory = Path("/path/to/output/latent/0_No_DR/1_Mild/")
+    output_directory = Path("/path/to/output/latent/source_class/target_class/")
 
     for x, name in tqdm(dataset):
         xcf = get_counterfactual(
@@ -117,7 +113,7 @@ The first thing we need to do is to get the reference images.
 .. code-block:: python
     :linenos:
 
-    reference_data_directory = Path(f"{root_directory}/val/1_Mild")
+    reference_data_directory = Path("/path/to/directory/holding/the/data/target_class")
     reference_dataset = load_data(reference_data_directory, img_size, grayscale=False)
 
 Loading the StarGAN
@@ -148,7 +144,7 @@ Finally, we combine the two by changing the `kind` in our counterfactual generat
 
     from torchvision.utils import save_image
 
-    output_directory = Path("/path/to/output/reference/0_No_DR/1_Mild/")
+    output_directory = Path("/path/to/output/reference/source_class/target_class/")
 
     for x, name in tqdm(dataset):
         xcf = get_counterfactual(

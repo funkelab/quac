@@ -1,4 +1,3 @@
-import pytest
 from quac.training.stargan import build_model
 from quac.training.config import ModelConfig
 import torch

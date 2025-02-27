@@ -24,7 +24,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from tqdm import tqdm
-import wandb
 
 
 transform = transforms.Compose(
@@ -345,7 +344,7 @@ class Solver(nn.Module):
     def evaluate(
         self,
         val_loader,
-        iteration=None,
+        iteration,
         num_outs_per_domain=10,
         mode="latent",
         val_config=None,
@@ -357,9 +356,6 @@ class Solver(nn.Module):
         ----------
         val_loader
         """
-        if iteration is None:  # Choose the iteration to evaluate
-            resume_iter = resume_iter
-            self._load_checkpoint(resume_iter)
 
         # Generate images for evaluation
         eval_dir = self.root_dir / "eval"
@@ -378,6 +374,7 @@ class Solver(nn.Module):
         assert mode in ["latent", "reference"]
 
         val_loader.set_mode(mode)
+        iter_ref = None
 
         domains = val_loader.available_targets
         print("Number of domains: %d" % len(domains))
@@ -414,12 +411,11 @@ class Solver(nn.Module):
                             z_trg = torch.randn(N, self.latent_dim).to(device)
                             s_trg = self.nets_ema.mapping_network(z_trg, y_trg)
                         else:
-                            # x_ref = x_trg.clone()
                             try:
                                 # TODO don't need to re-do this every time, just use
                                 # the same set of reference images for the whole dataset!
                                 x_ref = next(iter_ref).to(device)
-                            except:
+                            except TypeError:  # iter_ref is None
                                 iter_ref = iter(loader_ref)
                                 x_ref = next(iter_ref).to(device)
 
@@ -454,12 +450,12 @@ class Solver(nn.Module):
                 translation_rate = np.mean(predictions == trg_idx)
 
                 # STORE
-                conversion_rate_values[
-                    f"conversion_rate_{mode}/" + task
-                ] = conversion_rate
-                translation_rate_values[
-                    f"translation_rate_{mode}/" + task
-                ] = translation_rate
+                conversion_rate_values[f"conversion_rate_{mode}/" + task] = (
+                    conversion_rate
+                )
+                translation_rate_values[f"translation_rate_{mode}/" + task] = (
+                    translation_rate
+                )
 
         # Add average conversion rate and translation rate
         conversion_rate_values[f"conversion_rate_{mode}/average"] = np.mean(

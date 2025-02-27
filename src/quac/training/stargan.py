@@ -317,7 +317,6 @@ class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
             x = F.interpolate(x, size=2**self.nearest_power, mode="bilinear")
         h = self.shared(x)
         h = h.view(h.size(0), -1)
-        out = []
         s = self.output(h)
         return s
 

@@ -11,7 +11,6 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 import json
 import matplotlib.pyplot as plt
 import numpy as np
-from os.path import join as ospj
 from pathlib import Path
 import pandas as pd
 import re
@@ -101,48 +100,17 @@ class Logger:
         wb = torch.ones(1, C, H, W).to(x_src.device)
         x_src_with_wb = torch.cat([wb, x_src], dim=0)
 
-        masks = nets.fan.get_heatmap(x_src) if args.w_hpf > 0 else None
-        s_ref = nets.style_encoder(x_ref, y_ref)
+        s_ref = self.nets.style_encoder(x_ref, y_ref)
         s_ref_list = s_ref.unsqueeze(1).repeat(1, N, 1)
         x_concat = [x_src_with_wb]
         for i, s_ref in enumerate(s_ref_list):
-            x_fake = nets.generator(x_src, s_ref, masks=masks)
+            x_fake = self.nets.generator(x_src, s_ref)
             x_fake_with_ref = torch.cat([x_ref[i : i + 1], x_fake], dim=0)
             x_concat += [x_fake_with_ref]
 
         x_concat = torch.cat(x_concat, dim=0)
         save_image(x_concat, N + 1, filename)
         del x_concat
-
-    @torch.no_grad()
-    def debug_image(self, inputs, step):
-        x_src, y_src = inputs.x_src, inputs.y_src
-        x_ref, y_ref = inputs.x_ref, inputs.y_ref
-
-        device = inputs.x_src.device
-        N = inputs.x_src.size(0)
-
-        # translate and reconstruct (reference-guided)
-        filename = ospj(self.sample_dir, "%06d_cycle_consistency.jpg" % (step))
-        self.translate_and_reconstruct(x_src, y_src, x_ref, y_ref, filename)
-
-        # latent-guided image synthesis
-        y_trg_list = [
-            torch.tensor(y).repeat(N).to(device)
-            for y in range(min(args.num_domains, 5))
-        ]
-        z_trg_list = (
-            torch.randn(self.num_outs_per_domain, 1, args.latent_dim)
-            .repeat(1, N, 1)
-            .to(device)
-        )
-        for psi in [0.5, 0.7, 1.0]:
-            filename = ospj(self.sample_dir, "%06d_latent_psi_%.1f.jpg" % (step, psi))
-            self.translate_using_latent(x_src, y_trg_list, z_trg_list, psi, filename)
-
-        # reference-guided image synthesis
-        filename = ospj(self.sample_dir, "%06d_reference.jpg" % (step))
-        self.translate_using_reference(x_src, x_ref, y_ref, filename)
 
 
 ###########################
