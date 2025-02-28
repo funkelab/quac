@@ -64,6 +64,7 @@ Here's a list of all available tutorials, in case you want to navigate directly 
     :maxdepth: 1
 
     Data <tutorials/data>
+    Classifier <tutorials/classifier>
     Training the generator <tutorials/train_yaml>
     Generating images <tutorials/generate>
     Attribution <tutorials/attribute>
