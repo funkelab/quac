@@ -1,7 +1,7 @@
 # Example gallery
 
 Here are some examples of datasets that have been investigated with QuAC, as well as what was found.
-If you have tried QuAC on your own dataset (even unsuccessfully!) please :email:`let us know <adjavond@hhmi.org>` so we can add it to the gallery.
+If you have tried QuAC on your own dataset (even unsuccessfully!) please [contact us](mailto:adjavond%40hhmi.org?subject=QuAC%20Example) so we can add it to the gallery.
 
 
 ## *Fictus Aggregatum* synthetic cells
