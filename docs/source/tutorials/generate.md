@@ -1,17 +1,12 @@
-.. _sec_generate:
+# How to generate images from a pre-trained network
 
-=================================================
-How to generate images from a pre-trained network
-=================================================
-
-Defining the dataset
-====================
+## Defining the dataset
 
 We will be generating images one source-target pair at a time.
 As such, we need to point to the subdirectory that holds the source class that we are interested in.
 For example, below, we are going to be using the validation data, and our source class will be class `0` which has no Diabetic Retinopathy.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from pathlib import Path
@@ -20,10 +15,10 @@ For example, below, we are going to be using the validation data, and our source
     img_size = 224
     data_directory = Path("/path/to/directory/holding/the/data/source_class")
     dataset = load_data(data_directory, img_size, grayscale=False)
+```
 
 
-Loading the classifier
-======================
+## Loading the classifier
 
 Next we need to load the pre-trained classifier, and wrap it in the correct pre-processing step.
 The classifier is expected to be saved as a `torchscript` checkpoint. This allows us to use it without having to redefine the python class from which it was generated.
@@ -33,7 +28,7 @@ Here, our pre-trained classifier expects images with the ImageNet normalization,
 
 Finally, we need to define the device, and whether to put the classifier in `eval` mode.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from quac.generate import load_classifier
@@ -43,17 +38,16 @@ Finally, we need to define the device, and whether to put the classifier in `eva
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     classifier = load_classifier(classifier_checkpoint, mean=mean, std=std, eval=True, device=device)
+```
 
-Inference from random latents
-================================
+## Inference from random latents
 
 The StarGAN model used to generate images can have two sources for the style.
 The first and simplest one is to use a random latent vector to create style.
 
-Loading the StarGAN
--------------------
+### Loading the StarGAN
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from quac.generate import load_stargan
@@ -70,13 +64,13 @@ Loading the StarGAN
         checkpoint_iter=100000,
         kind = "latent"
     )
+```
 
-Running the image generation
-----------------------------
+### Running the image generation
 
 Finally, we can run the image generation.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from quac.generate import get_counterfactual
@@ -97,30 +91,29 @@ Finally, we can run the image generation.
         )
         # For example, you can save the images here
         save_image(xcf, output_directory / name)
+```
 
-Inference using a reference dataset
-===================================
+## Inference using a reference dataset
 
 The alternative image generation method of a StarGAN is to use an image of the target class to generate the style using the `StyleEncoder`.
 Although the structure is similar as above, there are a few key differences.
 
 
-Generating the reference dataset
---------------------------------
+### Generating the reference dataset
 
 The first thing we need to do is to get the reference images.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     reference_data_directory = Path("/path/to/directory/holding/the/data/target_class")
     reference_dataset = load_data(reference_data_directory, img_size, grayscale=False)
+```
 
-Loading the StarGAN
--------------------
+### Loading the StarGAN
 This time, we will be creating a `ReferenceInferenceModel`.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     inference_model = load_stargan(
@@ -133,13 +126,13 @@ This time, we will be creating a `ReferenceInferenceModel`.
         checkpoint_iter=100000,
         kind = "reference"
     )
+```
 
-Running the image generation
-----------------------------
+### Running the image generation
 
 Finally, we combine the two by changing the `kind` in our counterfactual generation, and giving it the reference dataset to use.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from torchvision.utils import save_image
@@ -160,3 +153,4 @@ Finally, we combine the two by changing the `kind` in our counterfactual generat
         )
         # For example, you can save the images here
         save_image(xcf, output_directory / name)
+```

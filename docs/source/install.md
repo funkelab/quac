@@ -1,8 +1,4 @@
-.. _install:
-
-============
-Installation
-============
+## Installation
 
 Installing:
 

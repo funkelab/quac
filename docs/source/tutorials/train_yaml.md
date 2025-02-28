@@ -1,11 +1,6 @@
-.. _sec_train_yaml:
+# Training from a YAML file
 
-=========================
-Training from a YAML file
-=========================
-
-Example dataset
-===============
+## Example dataset
 
 In this tutorial, we will be applying QuAC to a simple but non-trivial dataset.
 
@@ -20,11 +15,11 @@ The `source` and `reference` values point to the data. The data in `source` is u
 
 The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. Note that we expect the data to be normalized in the same way for your StarGAN and your classifier.
 
-.. code-block:: yaml
+```{code-block} yaml
 
     data:
-        source: "/nrs/funke/adjavond/data/duplex/disc_b/train"
-        reference: "/nrs/funke/adjavond/data/duplex/disc_b/train"
+        source: "<path/to/your/source/data/train>"
+        reference: "<path/to/your/source/data/train>" 
         img_size: 128
         batch_size: 16
         num_workers: 12
@@ -33,8 +28,8 @@ The `mean` and `std` values will be used to normalize your data before passing i
         grayscale: true
 
     validation_data:
-        source: "/nrs/funke/adjavond/data/duplex/disc_b/val"
-        reference: "/nrs/funke/adjavond/data/duplex/disc_b/val"
+        source: "<path/to/your/source/data/val>"
+        reference: "<path/to/your/source/data/val>" 
         img_size: 128
         batch_size: 16
         num_workers: 12
@@ -43,20 +38,20 @@ The `mean` and `std` values will be used to normalize your data before passing i
         grayscale: true
 
     test_data:
-        source: "/nrs/funke/adjavond/data/duplex/disc_b/test"
-        reference: "/nrs/funke/adjavond/data/duplex/disc_b/test"
+        source: "<path/to/your/source/data/test>"
+        reference: "<path/to/your/source/data/test>" 
         img_size: 128
         batch_size: 16
         num_workers: 12
         mean: 0.5
         std: 0.5
         grayscale: true
+```
 
 Behind the scenes, all of these will be absorned into a `quac.training.config.DataConfig` object.
 You can have a look at that object to see the default values, and types of the parameters.
 
-The model
-=========
+## The model
 
 Next we will want to define the model that we will be training.
 
@@ -65,7 +60,7 @@ The `num_domains` parameter refers to the number of classes in your dataset. For
 If `grayscale` is `true`, we need to confirm that `input_dim`, which corresponds to the number of channels in the input images, is `1`.
 Finally, since we want our output to be images with the same range as our inputs, we want to use `tanh` as an activation here (our input images will be in `[-1, 1]`).
 
-.. code-block:: yaml
+```{code-block} yaml
 
     model:
         img_size: 128
@@ -74,11 +69,11 @@ Finally, since we want our output to be images with the same range as our inputs
         num_domains: 3
         input_dim: 1
         final_activation: "tanh"
+```
 
 This will be ingested into a `quac.training.config.ModelConfig` object. Have a look to see what the parameter defaults are!
 
-The Solver
-==========
+## The Solver
 
 Let's next set up the required information for the `Solver`.
 For this, we need to determine where the model checkpoints and any intermediate evaluation outputs will be saved.
@@ -96,10 +91,10 @@ The *translation rate* shows how many of the StarGAN's output are classified by 
 The *conversion rate* is similarly, except it gives the model several tries to correctly convert an image. This is possible because the StarGAN includes some randomness.
 In our case, it gets `num_outs_per_domain` tries, so 10.
 
-.. code-block:: yaml
+```{code-block} yaml
 
     solver:
-        root_dir: "/nrs/funke/adjavond/projects/quac/disc_b_example/stargan"
+        root_dir: "/directory/to/save/your/results"
 
     loss:
         lambda_ds: 0.0
@@ -108,14 +103,13 @@ In our case, it gets `num_outs_per_domain` tries, so 10.
         lambda_id: 1.  # Default
 
     validation_config:
-        classifier_checkpoint: "/nrs/funke/adjavond/projects/duplex/disc_b/vgg_checkpoint_jit.pt"
+        classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
         val_batch_size: 16
         num_outs_per_domain: 10 # Default
         do_nothing: true # Pass the image directly to the classifier
+```
 
-
-The run
-=======
+## The run
 
 Finally, we need to decide on some details of our run, and how we're going to log run details.
 We will save our logs locally, but there is also the option to use Tensorboard or WandB.
@@ -123,7 +117,7 @@ We will save our logs locally, but there is also the option to use Tensorboard o
 Then we decide how long to train, how often to save checkpoints, how often to run evaluation, and how often to log results.
 All of these values are in number of batches.
 
-.. code-block:: yaml
+```{code-block} yaml
 
     log_type: local
 
@@ -131,7 +125,7 @@ All of these values are in number of batches.
         log_dir: "tutorial_logs"
         project: "quac_example_project"
         name: "disc_b"
-        notes: "Stargan training on Disc B dataset"
+        notes: "Stargan training on my dataset"
         tags:
             - stargan
             - training
@@ -141,14 +135,14 @@ All of these values are in number of batches.
         total_iters: 5000
         save_every: 1000
         eval_every: 1000
+```
 
-Putting it all together
-=======================
+# Putting it all together
 
 We can save all of the configuration details in a YAML file `config.yaml`.
 We will load all of this together, and then start training! To avoid training from within a Jupyter notebook, you can also put the following cell into a script and run that.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     # Training the StarGAN
@@ -195,3 +189,4 @@ We will load all of this together, and then start training! To avoid training fr
         val_loader=val_dataset,
         val_config=experiment.validation_config,
     )
+```

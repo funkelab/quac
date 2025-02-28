@@ -35,6 +35,7 @@ extensions = [
     "sphinxcontrib.jquery",
     "sphinx.ext.intersphinx",
     "sphinxcontrib.email",
+    "myst_parser",
 ]
 
 templates_path = ["_templates"]

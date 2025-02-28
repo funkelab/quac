@@ -1,15 +1,12 @@
-=======================
-Visualizing the results
-=======================
+# Visualizing the results
 
 In this tutorial, we will show you how to visualize the results of the attribution and evaluation steps.
 Make sure to modify the paths to the reports and the classifier to match your setup!
 
-Obtaining the QuAC curves
-=========================
+## Obtaining the QuAC curves
 Let's start by loading the reports obtained in the previous step.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from quac.report import Report
@@ -25,11 +22,12 @@ Let's start by loading the reports obtained in the previous step.
 
     for method, report in reports.items():
         report.load(report_directory + method + "/default.json")
+```
 
 Next, we can plot the QuAC curves for each method.
 This allows us to get an idea of how well each method is performing, overall.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     import matplotlib.pyplot as plt
@@ -40,15 +38,14 @@ This allows us to get an idea of how well each method is performing, overall.
     # Add the legend
     plt.legend()
     plt.show()
+```
 
-
-Choosing the best attribution method for each sample
-====================================================
+## Choosing the best attribution method for each sample
 
 While one attribution method may be better than another on average, it is possible that the best method for a given example is different.
 Therefore, we will make a list of the best method for each example by comparing the quac scores.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     quac_scores = pd.DataFrame(
@@ -56,36 +53,37 @@ Therefore, we will make a list of the best method for each example by comparing 
     )
     best_methods = quac_scores.idxmax(axis=1)
     best_quac_scores = quac_scores.max(axis=1)
+```
 
 We'll also want to load the classifier at this point, so we can look at the classifications of the counterfactual images.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     import torch
 
     classifier = torch.jit.load("/path/to/classifier/model.pt")
+```
 
-
-Choosing the best examples
-==========================
+## Choosing the best examples
 Next we want to choose the best example, given the best method.
 This is done by ordering the examples by the QuAC score, and then choosing the one with the highest score.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
-    order = best_quac_scores[::-1].argsort()
+    order = best_quac_scores.argsort()[::-1]
 
     # For example, choose the 10th best example
     idx = 10
     # Get the corresponding report
     report = reports[best_methods[order[idx]]]
+```
 
 We will then load that example and its counterfactual from its path, and visualize it.
 We also want to see the classification of both the original and the counterfactual.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     # Transform to apply to the images so they match each other
@@ -103,23 +101,23 @@ We also want to see the classification of both the original and the counterfactu
 
     prediction = report.predictions[order[idx]]
     target_prediction = report.target_predictions[order[idx]]
+```
 
-Loading the attribution
-=======================
+##  Loading the attribution
 We next want to load the attribution for the example, and visualize it.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     attribution_path = report.attribution_paths[order[idx]]
     attribution = np.load(attribution_path)
+```
 
-Getting the processor
-=====================
+## Getting the processor
 We want to see the specific mask that was optimal in this case.
 To do this, we will need to get the optimal threshold, and get the processor used for masking.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     from quac.evaluation import Processor
@@ -136,22 +134,23 @@ To do this, we will need to get the optimal threshold, and get the processor use
     rgb_mask[:, :, 1] = 0
     rgb_mask[:, :, 2] = 0
     counterfactual = np.array(generated_image) / 255 * rgb_mask + np.array(image) / 255 * (1.0 - rgb_mask)
+```
 
 Let's also get the classifier output for the counterfactual image.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     classifier_output = classifier(
         torch.tensor(counterfactual).permute(2, 0, 1).float().unsqueeze(0).to(device)
     )
     counterfactual_prediction = softmax(classifier_output[0].detach().cpu().numpy())
+```
 
-Visualizing the results
-=======================
+## Visualizing the results
 Finally, we can visualize the results.
 
-.. code-block:: python
+```{code-block} python
     :linenos:
 
     fig, axes = plt.subplots(2, 4)
@@ -165,6 +164,7 @@ Finally, we can visualize the results.
     axes[0, 3].axis("off")
     fig.suptitle(f"QuAC Score: {report.quac_scores[order[idx]]}")
     plt.show()
+```
 
 You can now see the original image, the generated image, the counterfactual image, and the mask.
 From here, you can choose to visualize other examples, of save the images for later use.
