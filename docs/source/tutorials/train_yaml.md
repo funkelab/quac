@@ -137,7 +137,7 @@ All of these values are in number of batches.
         eval_every: 1000
 ```
 
-# Putting it all together
+## Putting it all together
 
 We can save all of the configuration details in a YAML file `config.yaml`.
 We will load all of this together, and then start training! To avoid training from within a Jupyter notebook, you can also put the following cell into a script and run that.

@@ -33,3 +33,11 @@ The counterfactuals in QuAC have localized changes, and are quantitatively score
   :width: 800
   :align: center
 ```
+
+```{toctree}
+:hidden:
+:includehidden:
+
+tutorials
+examples
+```
