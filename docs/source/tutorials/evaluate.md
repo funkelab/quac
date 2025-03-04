@@ -73,3 +73,7 @@ Finally, we'll need a place to store the results.
 ```
 
 Done! Now all that is left is to go through the report and visualize your final results.
+
+
+```{include} visualize.md
+```

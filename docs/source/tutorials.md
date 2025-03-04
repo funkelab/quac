@@ -7,15 +7,29 @@ We built QuAC with biological images in mind, so those will be our analogies her
 If you're interested in using it with non-image data, please [contact us](mailto:adjavond%40hhmi.org?subject=QuAC%20Help).
 
 
+## Setup
+
 ```{toctree}
-:hidden:
+:maxdepth: 1
 
 install
 tutorials/data
 tutorials/classifier
+``` 
+
+## Train the Conversion Network
+```{toctree}
+:maxdepth: 1
+
 Train <tutorials/train_yaml>
 Generate <tutorials/generate>
-Attribute <tutorials/attribute>
-Evaluate <tutorials/evaluate>
-Visualize <tutorials/visualize>
+``` 
+
+## Generate Attribution Maps
+```{toctree}
+:maxdepth: 1
+
+Apply discriminative attribution <tutorials/attribute>
+Compute QuAC scores <tutorials/evaluate>
+Select best examples <tutorials/visualize>
 ```

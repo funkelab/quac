@@ -7,37 +7,37 @@ Make sure to modify the paths to the reports and the classifier to match your se
 Let's start by loading the reports obtained in the previous step.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    from quac.report import Report
+from quac.report import Report
 
-    report_directory = "/path/to/report/directory/"
-    reports = {
-        method: Report(name=method)
-        for method in [
-            "DDeepLift",
-            "DIntegratedGradients",
-        ]
-    }
+report_directory = "/path/to/report/directory/"
+reports = {
+    method: Report(name=method)
+    for method in [
+        "DDeepLift",
+        "DIntegratedGradients",
+    ]
+}
 
-    for method, report in reports.items():
-        report.load(report_directory + method + "/default.json")
+for method, report in reports.items():
+    report.load(report_directory + method + "/default.json")
 ```
 
 Next, we can plot the QuAC curves for each method.
 This allows us to get an idea of how well each method is performing, overall.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots()
-    for method, report in reports.items():
-        report.plot_curve(ax=ax)
-    # Add the legend
-    plt.legend()
-    plt.show()
+fig, ax = plt.subplots()
+for method, report in reports.items():
+    report.plot_curve(ax=ax)
+# Add the legend
+plt.legend()
+plt.show()
 ```
 
 ## Choosing the best attribution method for each sample
@@ -46,23 +46,23 @@ While one attribution method may be better than another on average, it is possib
 Therefore, we will make a list of the best method for each example by comparing the quac scores.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    quac_scores = pd.DataFrame(
-        {method: report.quac_scores for method, report in reports.items()}
-    )
-    best_methods = quac_scores.idxmax(axis=1)
-    best_quac_scores = quac_scores.max(axis=1)
+quac_scores = pd.DataFrame(
+    {method: report.quac_scores for method, report in reports.items()}
+)
+best_methods = quac_scores.idxmax(axis=1)
+best_quac_scores = quac_scores.max(axis=1)
 ```
 
 We'll also want to load the classifier at this point, so we can look at the classifications of the counterfactual images.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    import torch
+import torch
 
-    classifier = torch.jit.load("/path/to/classifier/model.pt")
+classifier = torch.jit.load("/path/to/classifier/model.pt")
 ```
 
 ## Choosing the best examples
@@ -70,47 +70,47 @@ Next we want to choose the best example, given the best method.
 This is done by ordering the examples by the QuAC score, and then choosing the one with the highest score.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    order = best_quac_scores.argsort()[::-1]
+order = best_quac_scores.argsort()[::-1]
 
-    # For example, choose the 10th best example
-    idx = 10
-    # Get the corresponding report
-    report = reports[best_methods[order[idx]]]
+# For example, choose the 10th best example
+idx = 10
+# Get the corresponding report
+report = reports[best_methods[order[idx]]]
 ```
 
 We will then load that example and its counterfactual from its path, and visualize it.
 We also want to see the classification of both the original and the counterfactual.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    # Transform to apply to the images so they match each other
-    # loading
-    from PIL import Image
+# Transform to apply to the images so they match each other
+# loading
+from PIL import Image
 
-    image_path, generated_path = report.paths[order[idx]], report.target_paths[order[idx]]
-    image, generated_image = Image.open(image_path), Image.open(generated_path)
+image_path, generated_path = report.paths[order[idx]], report.target_paths[order[idx]]
+image, generated_image = Image.open(image_path), Image.open(generated_path)
 
-    prediction = report.predictions[order[idx]]
-    target_prediction = report.target_predictions[order[idx]]
+prediction = report.predictions[order[idx]]
+target_prediction = report.target_predictions[order[idx]]
 
-    image_path, generated_path = report.paths[order[idx]], report.target_paths[order[idx]]
-    image, generated_image = Image.open(image_path), Image.open(generated_path)
+image_path, generated_path = report.paths[order[idx]], report.target_paths[order[idx]]
+image, generated_image = Image.open(image_path), Image.open(generated_path)
 
-    prediction = report.predictions[order[idx]]
-    target_prediction = report.target_predictions[order[idx]]
+prediction = report.predictions[order[idx]]
+target_prediction = report.target_predictions[order[idx]]
 ```
 
 ##  Loading the attribution
 We next want to load the attribution for the example, and visualize it.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    attribution_path = report.attribution_paths[order[idx]]
-    attribution = np.load(attribution_path)
+attribution_path = report.attribution_paths[order[idx]]
+attribution = np.load(attribution_path)
 ```
 
 ## Getting the processor
@@ -139,31 +139,31 @@ To do this, we will need to get the optimal threshold, and get the processor use
 Let's also get the classifier output for the counterfactual image.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    classifier_output = classifier(
-        torch.tensor(counterfactual).permute(2, 0, 1).float().unsqueeze(0).to(device)
-    )
-    counterfactual_prediction = softmax(classifier_output[0].detach().cpu().numpy())
+classifier_output = classifier(
+    torch.tensor(counterfactual).permute(2, 0, 1).float().unsqueeze(0).to(device)
+)
+counterfactual_prediction = softmax(classifier_output[0].detach().cpu().numpy())
 ```
 
 ## Visualizing the results
 Finally, we can visualize the results.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    fig, axes = plt.subplots(2, 4)
-    axes[1, 0].imshow(image)
-    axes[0, 0].bar(np.arange(len(prediction)), prediction)
-    axes[1, 1].imshow(generated_image)
-    axes[0, 1].bar(np.arange(len(target_prediction)), target_prediction)
-    axes[0, 2].bar(np.arange(len(counterfactual_prediction)), counterfactual_prediction)
-    axes[1, 2].imshow(counterfactual)
-    axes[1, 3].imshow(rgb_mask)
-    axes[0, 3].axis("off")
-    fig.suptitle(f"QuAC Score: {report.quac_scores[order[idx]]}")
-    plt.show()
+fig, axes = plt.subplots(2, 4)
+axes[1, 0].imshow(image)
+axes[0, 0].bar(np.arange(len(prediction)), prediction)
+axes[1, 1].imshow(generated_image)
+axes[0, 1].bar(np.arange(len(target_prediction)), target_prediction)
+axes[0, 2].bar(np.arange(len(counterfactual_prediction)), counterfactual_prediction)
+axes[1, 2].imshow(counterfactual)
+axes[1, 3].imshow(rgb_mask)
+axes[0, 3].axis("off")
+fig.suptitle(f"QuAC Score: {report.quac_scores[order[idx]]}")
+plt.show()
 ```
 
 You can now see the original image, the generated image, the counterfactual image, and the mask.
