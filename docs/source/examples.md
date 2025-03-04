@@ -14,7 +14,7 @@ The code to generate this dataset is available [here](https://github.com/funkela
     :alt: Fictus aggregatum
     :align: center
 
-    An example of the query (top) and counterfactual (bottom) images, highlighting the differences.
+An example of the query (top) and counterfactual (bottom) images, highlighting the differences.
 ```
 
 We evaluated, using this *fictus* dataset, whether QuAC was able to retrieve all of the differences between classes when these are known.
@@ -31,7 +31,7 @@ When [it was found that a deep learning model could do so](https://www.cell.com/
     :alt: Synapses in EM
     :align: center
 
-    A few examples of synapses in the *Drosophila* brain, as seen in electron microscopy, translated from one class to another.
+A few examples of synapses in the *Drosophila* brain, as seen in electron microscopy, translated from one class to another.
 ```
 
 QuAC explanations suggested quite a few new features that could be used to distinguish between these synapse types, the prevalence of which is currently being investigated.

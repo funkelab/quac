@@ -1,19 +1,20 @@
-# Training from a YAML file
-
-## Example dataset
-
-In this tutorial, we will be applying QuAC to a simple but non-trivial dataset.
+# Training the conversion model
 
 The majority of the work will be defining a YAML file that holds all of the details for your experiment.
-We will begin with the data.
 
+## Data configuration
+
+We will begin with the data.
 The data is expected to be split into at least two sets: train and validation.
 If you have it, you can also add a test dataset.
 For each, the details need to be defined anew.
 
-The `source` and `reference` values point to the data. The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. They do not need to be different!
+The `source` and `reference` values point to the data. 
+The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. 
+They do not need to be different.
 
-The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. Note that we expect the data to be normalized in the same way for your StarGAN and your classifier.
+The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. 
+We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
 
 ```{code-block} yaml
 

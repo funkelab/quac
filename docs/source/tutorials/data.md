@@ -14,12 +14,12 @@ Make sure that there is no overlap between the images in these three datasets, o
 We recommend you to have one root directory for all of your data, and sub-directories for `train`,`validation` and `test`. 
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    root/
-        train/
-        validation/
-        test/
+root/
+    train/
+    validation/
+    test/
 ```
 
 Read the section below to learn how to organize your images within these directories.
@@ -32,15 +32,15 @@ Only the first level of the directory structure is considered as the class.
 
 Here is an example of a valid organization of the `train` directory in a case with two classes `class_A` and `class_B`.
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    train/class_A/xxx.png
-    train/class_A/xxy.png
-    train/class_A/[...]/xxz.png
+train/class_A/xxx.png
+train/class_A/xxy.png
+train/class_A/[...]/xxz.png
 
-    train/class_B/123.png
-    train/class_B/nsdf3.png
-    train/class_B/[...]/asd932_.png
+train/class_B/123.png
+train/class_B/nsdf3.png
+train/class_B/[...]/asd932_.png
 ```
 
 Every image of the correct format in the `class_A` directory will get the label for `class_A`, including if they are in sub-directories. 
