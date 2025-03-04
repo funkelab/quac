@@ -38,6 +38,9 @@ docs = [
   "sphinxcontrib-email",
   "sphinx>6",
   "tomli",
+  "myst-parser",
+  "sphinx-copybutton",
+  "sphix-design",
 ]
 
 [project.urls]

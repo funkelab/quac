@@ -37,6 +37,7 @@ extensions = [
     "sphinxcontrib.email",
     "myst_parser",
     "sphinx_design",
+    "sphinx_copybutton",
 ]
 
 
