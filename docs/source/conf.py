@@ -5,6 +5,7 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+from datetime import datetime
 
 
 import quac
@@ -19,6 +20,7 @@ project = "quac"
 author = author_list
 version = quac.__version__
 release = quac.__version__
+copyright = f"{datetime.now().year}, {author_list}"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
