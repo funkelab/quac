@@ -1,80 +1,89 @@
-# Training the conversion model
+# The conversion network
 
-The majority of the work will be defining a YAML file that holds all of the details for your experiment.
+The central model in QuAC is a generator that converts data from one class to another.
+
+To train the model, you need a YAML file that holds all of the details for your experiment.
 
 ## Data configuration
 
-We will begin with the data.
-The data is expected to be split into at least two sets: train and validation.
-If you have it, you can also add a test dataset.
-For each, the details need to be defined anew.
+We will begin with the data configuration: this needs to be set for both the `train` and `validation` data sets.
 
-The `source` and `reference` values point to the data. 
-The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. 
-They do not need to be different.
-
-The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. 
-We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
-
+Here is an example data loading configuration in YAML format.
 ```{code-block} yaml
+data:
+    source: "</path/to/your/source/data/train>"
+    reference: "</path/to/your/source/data/train>" 
+    img_size: 128
+    batch_size: 16
+    num_workers: 12
+    mean: 0.5 
+    std: 0.5
+    grayscale: true
 
-    data:
-        source: "<path/to/your/source/data/train>"
-        reference: "<path/to/your/source/data/train>" 
-        img_size: 128
-        batch_size: 16
-        num_workers: 12
-        mean: 0.5
-        std: 0.5
-        grayscale: true
-
-    validation_data:
-        source: "<path/to/your/source/data/val>"
-        reference: "<path/to/your/source/data/val>" 
-        img_size: 128
-        batch_size: 16
-        num_workers: 12
-        mean: 0.5
-        std: 0.5
-        grayscale: true
-
-    test_data:
-        source: "<path/to/your/source/data/test>"
-        reference: "<path/to/your/source/data/test>" 
-        img_size: 128
-        batch_size: 16
-        num_workers: 12
-        mean: 0.5
-        std: 0.5
-        grayscale: true
+validation_data:
+    source: "</path/to/your/source/data/val>"
+    reference: "</path/to/your/source/data/val>" 
+    img_size: 128
+    batch_size: 16
+    num_workers: 12
+    mean: 0.5
+    std: 0.5
+    grayscale: true
 ```
 
-Behind the scenes, all of these will be absorned into a `quac.training.config.DataConfig` object.
-You can have a look at that object to see the default values, and types of the parameters.
+- The `source` and `reference` values hold the (absolute) path your data. The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. 
+- The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. These are passed to a [`torchvision.transforms.Normalize`](https://pytorch.org/vision/main/generated/torchvision.transforms.Normalize.html?highlight=normalize#torchvision.transforms.Normalize).We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
+- If you have RGB data, set `grayscale` to `false`. Else, set it to `true`. 
+- Set `img_size` to the input size expected by your classifier. Your images will be resized accordingly by bi-cubic interpolation.
+- `batch_size` and `num_workers` are passed to a [`torch.utils.data.Dataloader`](https://pytorch.org/tutorials/beginner/basics/data_tutorial.html).
+
+If you have a `test` data set, add it to the configuration under `test_data`.
+In most cases, `train`, `validation` and `test` will have the same configuration. 
+However, you may want to increase `batch_size` for `validation` and `test` for more efficient inference.
 
 ## The model
 
-Next we will want to define the model that we will be training.
+Next we will want to define parameters for the model that we will be training.
 
-Make sure that you match your model to the data that you are putting in! For example, the `img_size` should be the same.
-The `num_domains` parameter refers to the number of classes in your dataset. For this dataset there are three classes.
-If `grayscale` is `true`, we need to confirm that `input_dim`, which corresponds to the number of channels in the input images, is `1`.
-Finally, since we want our output to be images with the same range as our inputs, we want to use `tanh` as an activation here (our input images will be in `[-1, 1]`).
+Here is an example YAML file, which you can modify to your purposes.
+```{code-block} yaml
+
+model:
+    img_size: 128
+    style_dim: 64
+    latent_dim: 16
+    num_domains: 3
+    input_dim: 1
+    final_activation: "tanh"
+```
+
+- Set `img_size` to the same value as above, in the data loading configuration. 
+- `style_dim` defines the size of the learned style space. This is the latent representation of class features present in an image, and is used to condition the conversion of images from one class to another. Small, simple datasets can have a smaller style style. 
+- `latent_dim` defines the size of the randomly sampled value from which `style` is made. It can be smaller than `style_dim`.
+- `num_domains` defines the number of classes. This must match what is in your data.
+- `input_dim` defines the number of channels in the input, and should be `1` if you data is grayscale, or `3` if you have RGB data. 
+- `final_activation` defines the final layer of the model. You should use an activation that will put your output images within the same range as our inputs. Here, we use `tanh` because we assume that the input range is `[-1, 1]`.
+
+
+## The Solver
 
 ```{code-block} yaml
 
-    model:
-        img_size: 128
-        style_dim: 64
-        latent_dim: 16
-        num_domains: 3
-        input_dim: 1
-        final_activation: "tanh"
+solver:
+    root_dir: "/directory/to/save/your/results"
+
+loss:
+    lambda_ds: 0.0
+    lambda_sty: 1.  # Default
+    lambda_cyc: 1.  # Default
+    lambda_id: 1.  # Default
+
+validation_config:
+    classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
+    val_batch_size: 16
+    num_outs_per_domain: 10 # Default
+    do_nothing: true # Pass the image directly to the classifier
 ```
-
-This will be ingested into a `quac.training.config.ModelConfig` object. Have a look to see what the parameter defaults are!
-
-## The Solver
 
 Let's next set up the required information for the `Solver`.
 For this, we need to determine where the model checkpoints and any intermediate evaluation outputs will be saved.
@@ -92,23 +101,6 @@ The *translation rate* shows how many of the StarGAN's output are classified by 
 The *conversion rate* is similarly, except it gives the model several tries to correctly convert an image. This is possible because the StarGAN includes some randomness.
 In our case, it gets `num_outs_per_domain` tries, so 10.
 
-```{code-block} yaml
-
-    solver:
-        root_dir: "/directory/to/save/your/results"
-
-    loss:
-        lambda_ds: 0.0
-        lambda_sty: 1.  # Default
-        lambda_cyc: 1.  # Default
-        lambda_id: 1.  # Default
-
-    validation_config:
-        classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
-        val_batch_size: 16
-        num_outs_per_domain: 10 # Default
-        do_nothing: true # Pass the image directly to the classifier
-```
 
 ## The run
 
