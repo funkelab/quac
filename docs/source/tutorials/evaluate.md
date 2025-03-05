@@ -8,24 +8,24 @@ We also want to use the correct classifier transform, so we will define it here.
 
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    from quac.generate import load_classifier
+from quac.generate import load_classifier
 
-    classifier_checkpoint = "path/to/classifier/checkpoint"
-    classifier = load_classifier(
-        checkpoint_path=classifier_checkpoint
-    )
+classifier_checkpoint = "path/to/classifier/checkpoint"
+classifier = load_classifier(
+    checkpoint_path=classifier_checkpoint
+)
 
-    # Defining the transform
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Grayscale(),
-            transforms.Resize(128),
-            transforms.Normalize(0.5, 0.5),
-        ]
-    )
+# Defining the transform
+transform = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Grayscale(),
+        transforms.Resize(128),
+        transforms.Normalize(0.5, 0.5),
+    ]
+)
 ```
 
 
@@ -35,24 +35,24 @@ Just swap the attribution directory in the below to run the vanilla version inst
 
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    # Defining processors and evaluators
-    from quac.evaluation import Processor, Evaluator
+# Defining processors and evaluators
+from quac.evaluation import Processor, Evaluator
 
-    attribution_method_name = "discriminative_ig"
-    data_directory = "path/to/data/directory"
-    counterfactual_directory = "path/to/counterfactual/directory"
-    attribution_directory = "path/to/attributions/directory/" + attribution_method_name
+attribution_method_name = "discriminative_ig"
+data_directory = "path/to/data/directory"
+counterfactual_directory = "path/to/counterfactual/directory"
+attribution_directory = "path/to/attributions/directory/" + attribution_method_name
 
 
-    evaluator = Evaluator(
-        classifier,
-        source_directory=data_directory,
-        counterfactual_directory=counterfactual_directory,
-        attribution_directory=attribution_directory,
-        transform=transform
-    )
+evaluator = Evaluator(
+    classifier,
+    source_directory=data_directory,
+    counterfactual_directory=counterfactual_directory,
+    attribution_directory=attribution_directory,
+    transform=transform
+)
 ```
 
 
@@ -62,14 +62,14 @@ QuAC provides a default processor that will work for most cases.
 Finally, we'll need a place to store the results.
 
 ```{code-block} python
-    :linenos:
+:linenos:
 
-    report_directory = "path/to/store/reports/" + attribution_method_name
+report_directory = "path/to/store/reports/" + attribution_method_name
 
-    # Run QuAC evaluation on your attribution and store a report
-    report = evaluator.quantify(processor=Processor())
-    # The report will be stored based on the processor's name, which is "default" by default
-    report.store(report_directory)
+# Run QuAC evaluation on your attribution and store a report
+report = evaluator.quantify(processor=Processor())
+# The report will be stored based on the processor's name, which is "default" by default
+report.store(report_directory)
 ```
 
 Done! Now all that is left is to go through the report and visualize your final results.
