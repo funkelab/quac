@@ -129,8 +129,3 @@ This script will read the arguments from the configuration file you have just wr
 
 The training script will  also begin a run on [Weights and Biases](https://wandb.ai).
 Connect to your account there to follow the run.
-
-## Interpreting the logs
-This setup ensures that during training we can check the StarGAN's *translation rate* and *conversion rate*.
-The *translation rate* shows how many of the StarGAN's output are classified by the pre-trained classifier as the `target` class.
-The *conversion rate* is similarly, except it gives the model several tries to correctly convert an image. This is possible because the StarGAN includes some randomness.
