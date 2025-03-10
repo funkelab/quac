@@ -5,93 +5,37 @@ Remember that although the conversion network is trained to keep as much of the 
 This means that there may still be regions of the **generated** image that differ from the **query** image *even if they don't need to*.
 Luckily, we have a classifier that can help us identify and keep only the necessary regions of change.
 
-The first thing that we want to do is load the classifier.
+We will get candidate regions of change by running several discriminative attribution methods using the `run_attribution.py` script. 
+It takes the following arguments, all of which are optional: 
+- `dataset`: Which of the datasets to run the translation on. By default this will be the "test" dataset, if that does not exist it will revert to the "validation" dataset.
+- `output`: Where to store the generated attributions. They will be further organized as sub-directories named after the different methods that we will try. By default, the attributions will go in the experiment root directory under `attributions`.
+- `input_fake`: Where the generated images are. You should only set these if you used a custom `output` argument in the previous step. By default, this is in the experiment root directory under `generated_images`
 
-```{code-block} python
-    :linenos:
+The metadata regarding the real input images will be read from the configuration file, as before.
 
-    classifier_checkpoint = "path/to/classifier/checkpoint"
-
-    from quac.generate import load_classifier
-    classifier = load_classifier(
-        checkpoint_path=classifier_checkpoint
-    )
-```
-
-Next, we will define the attribution that we want to use.
-In this tutorial, we will use Discriminative Integrated Gradients, using the classifier as a baseline.
-As a comparison, we will also use Vanilla Integrated Gradients, which uses a black image as a baseline.
-This will allow us to identify the regions of the image that are most important for the classifier to make its decision.
-Later in the [evaluation](evaluate) tutorial, we will process these attributions into masks, and finally get our counterfactuals.
-
-
-
-```{code-block} python
-    :linenos:
-
-    # Parameters
-    attribution_directory = "path/to/store/attributions"
-
-    # Defining attributions
-    from quac.attribution import (
-        DIntegratedGradients,
-        VanillaIntegratedGradients,
-        AttributionIO
-    )
-    from torchvision import transforms
-
-    attributor = AttributionIO(
-        attributions = {
-            "discriminative_ig" : DIntegratedGradients(classifier),
-            "vanilla_ig" : VanillaIntegratedGradients(classifier)
-        },
-        output_directory = atttribution_directory
-    )
-```
-
-Finally, we want to make sure that the images are processed as we would like for the classifier.
-Here, we will simply define a set of `torchvision` transforms to do this, we will pass them to the `attributor` object.
-Keep in mind that if you processed your data in a certain way when training your classfier, you will need to use the same processing here.
-
-```{code-block} python
-    :linenos:
-
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Grayscale(),
-            transforms.Resize(128),
-            transforms.Normalize(0.5, 0.5),
-        ]
-    )
-```
-
-Finally, let's run the attributions.
-
-```{code-block} python
-    :linenos:
-
-    data_directory = "path/to/data/directory"
-    counterfactual_directory = "path/to/counterfactual/directory"
-
-    # This will run attributions and store all of the results in the output_directory
-    # Shows a progress bar
-    attributor.run(
-        source_directory=data_directory,
-        counterfactual_directory=counterfactual_directory,
-        transform=transform
-    )
-```
-
-If you look into the `attribution_directory`, you should see a set of attributions.
-They will be organized in the following way:
-
+To usefrom the `config.yaml` defaults:
 ```{code-block} bash
-
-    attribution_directory/
-        attribution_method_name/
-            source_class/
-                target_class/
-                    image_name.npy
+python run_attribution.py
 ```
-In the next tutorial, we will use these attributions to generate masks and finally get our counterfactuals.
+
+You can use the following command to get help with formatting your arguments.
+```{code-block} bash
+python run_attribution.py -h
+```
+
+The script will create candidates using Discriminative [Integrated Gradients](https://arxiv.org/abs/1703.01365) and Discriminative [DeepLift](https://arxiv.org/abs/1704.02685) as attribution methods. 
+If you look into the `attribution_directory`, you should see the results stored as `numpy` arrays.
+They will be organized in the following way:
+```{code-block} bash
+attribution_directory/
+    discriminative_ig/
+        source_class/
+            target_class/
+                image_name.npy 
+                [...]
+    discriminative_deeplift/
+        source_class/
+            target_class/
+                image_name.npy
+                [...]
+```
