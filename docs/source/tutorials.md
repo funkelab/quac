@@ -29,3 +29,11 @@ Generate <tutorials/generate>
 Apply discriminative attribution <tutorials/attribute>
 Compute QuAC scores <tutorials/evaluate>
 ```
+
+## Results 
+```{toctree}
+:maxdepth: 1
+
+Look at the best explanations <tutorials/visualize>
+```
+
