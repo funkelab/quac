@@ -1,18 +1,14 @@
 from argparse import ArgumentParser
 from quac.training.config import ExperimentConfig
 from quac.generate import load_classifier
-from quac.attribution import (
-    DIntegratedGradients,
-    DDeepLift,
-    AttributionIO
-)
+from quac.attribution import DIntegratedGradients, DDeepLift, AttributionIO
 from torchvision import transforms
 import warnings
 import yaml
 
 
 def get_data_config(experiment, dataset="test"):
-    # TODO this is duplicated with generate_images.py 
+    # TODO this is duplicated with generate_images.py
     # and should be moved to a common place
     dataset = dataset or "test"
     if dataset == "train":
@@ -27,17 +23,20 @@ def get_data_config(experiment, dataset="test"):
 def create_transform(img_size, mean, std, grayscale):
     # TODO, this copies code from quac.generate (__init__.py)
     # and should be moved to a common utilities file
-    transform=transforms.Compose(
-        [
-            transforms.Resize([img_size, img_size]),
-            transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    ),
-    return transform 
+    transform = (
+        transforms.Compose(
+            [
+                transforms.Resize([img_size, img_size]),
+                transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ]
+        ),
+    )
+    return transform
 
-def parse_args(): 
+
+def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
         "--dataset",
@@ -50,11 +49,11 @@ def parse_args():
         "-o",
         "--output",
         type=str,
-        default=None, 
+        default=None,
         help="""
         Output directory for the generated attributions. 
         Defaults to an `attributions` folder in the experiment root directory, 
-        based on the config file."""
+        based on the config file.""",
     )
     parser.add_argument(
         "-i",
@@ -65,7 +64,7 @@ def parse_args():
         Directory holding the generated images (converted).
         Defaults to the `generated_images` directory in the experiment root directory,
         as defined in the config file.
-        """
+        """,
     )
     return parser.parse_args()
 
@@ -82,7 +81,9 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.output or f"{experiment.solver.root_dir}/attributions"
-    counterfactual_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    counterfactual_directory = (
+        args.input or f"{experiment.solver.root_dir}/generated_images"
+    )
 
     # Load the classifer
     classifier = load_classifier(
@@ -92,18 +93,18 @@ if __name__ == "__main__":
     # Defining attributions
     # TODO Offer a way to select which attributions to run
     attributor = AttributionIO(
-        attributions = {
-            "discriminative_ig" : DIntegratedGradients(classifier),
-            "discriminative_deeplift": DDeepLift(classifier), 
+        attributions={
+            "discriminative_ig": DIntegratedGradients(classifier),
+            "discriminative_deeplift": DDeepLift(classifier),
         },
-        output_directory = attribution_directory
+        output_directory=attribution_directory,
     )
 
     transform = create_transform(
         img_size=data_config.img_size,
         mean=classifier_config.mean,
         std=classifier_config.std,
-        grayscale=data_config.grayscale
+        grayscale=data_config.grayscale,
     )
 
     # This will run attributions and store all of the results in the output_directory
@@ -111,5 +112,5 @@ if __name__ == "__main__":
     attributor.run(
         source_directory=data_directory,
         counterfactual_directory=counterfactual_directory,
-        transform=transform
+        transform=transform,
     )

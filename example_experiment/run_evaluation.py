@@ -9,7 +9,7 @@ import yaml
 
 
 def get_data_config(experiment, dataset="test"):
-    # TODO this is duplicated with generate_images.py 
+    # TODO this is duplicated with generate_images.py
     # and should be moved to a common place
     dataset = dataset or "test"
     if dataset == "train":
@@ -25,15 +25,17 @@ def create_transform(img_size, mean, std, grayscale):
     # TODO, this copies code from quac.generate (__init__.py)
     # and should be moved to a common utilities file
     # TODO it is also duplicated with run_attribution.py
-    transform=transforms.Compose(
-        [
-            transforms.Resize([img_size, img_size]),
-            transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ]
-    ),
-    return transform 
+    transform = (
+        transforms.Compose(
+            [
+                transforms.Resize([img_size, img_size]),
+                transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ]
+        ),
+    )
+    return transform
 
 
 def parse_args():
@@ -49,11 +51,11 @@ def parse_args():
         "-o",
         "--output",
         type=str,
-        default=None, 
+        default=None,
         help="""
         Output directory for the generated reports.
         Defaults to an `reports` folder in the experiment root directory, 
-        based on the config file."""
+        based on the config file.""",
     )
     parser.add_argument(
         "-i",
@@ -63,7 +65,7 @@ def parse_args():
         help="""
         Input directory for the generated images (conversions).
         Defaults to a `generated_images` folder in the experiment root directory, 
-        based on the config file."""
+        based on the config file.""",
     )
     parser.add_argument(
         "-a",
@@ -73,20 +75,19 @@ def parse_args():
         help="""
         Input directory for the attributions.
         Defaults to an `attributions` folder in the experiment root directory, 
-        based on the config file."""
+        based on the config file.""",
     )
     parser.add_argument(
         "-n",
         "--names",
         type=str,
-        nargs='+',
+        nargs="+",
         default=None,
         help="""
         Names of the attributions to evaluate.
-        Defaults to all directories in the attribution directory."""
+        Defaults to all directories in the attribution directory.""",
     )
     return parser.parse_args()
-
 
 
 if __name__ == "__main__":
@@ -101,9 +102,10 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.attrs or f"{experiment.solver.root_dir}/attributions"
-    counterfactual_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    counterfactual_directory = (
+        args.input or f"{experiment.solver.root_dir}/generated_images"
+    )
     report_directory = args.output or f"{experiment.solver.root_dir}/reports"
-
 
     # Load the classifier
     classifier = load_classifier(
@@ -115,11 +117,13 @@ if __name__ == "__main__":
         img_size=data_config.img_size,
         mean=classifier_config.mean,
         std=classifier_config.std,
-        grayscale=data_config.grayscale
+        grayscale=data_config.grayscale,
     )
 
     attribution_directory = Path(attribution_directory)
-    attribution_names = args.names or [d for d in attribution_directory.iterdir() if d.is_dir()]
+    attribution_names = args.names or [
+        d for d in attribution_directory.iterdir() if d.is_dir()
+    ]
 
     for name in attribution_names:
         print(f"Evaluating attributions from {name}")
@@ -129,7 +133,7 @@ if __name__ == "__main__":
             source_directory=data_directory,
             counterfactual_directory=counterfactual_directory,
             attribution_directory=attribution_directory / name,
-            transform=transform
+            transform=transform,
         )
 
         # Run QuAC evaluation on your attribution and store a report
