@@ -88,8 +88,8 @@ validation_config:
 If you set `do_nothing` to `false`, you will have to set the `mean` and `std` arguments in the `validation_config`. The output of the conversion model will the be first shifted to `[0, 1]` and then we will apply `torchvision`-style normalization: `x = (x - mean) / std`.
 
 For example: if your data is in `[-1, 1]`, the following configurations are equivalent: 
-    1. `do_nothing: true`
-    2. `do_nothing: false, mean: 0.5, std: 0.5`
+1. `do_nothing: true`
+2. `do_nothing: false, mean: 0.5, std: 0.5`
 ```
 
 ## The run
