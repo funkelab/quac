@@ -81,7 +81,7 @@ validation_config:
 
 - `solver.root_dir`: this is an (absolute) path to the directory where you want to store the results. The checkpoints, logs, and other training artifacts will be stored there. 
 - `validation_config` defines how we will use the classifier to validate the quality of our conversion network. 
-    - `classifier_checkpoint` points to the path where your torchscript classifier is. This should be the path you decided on [when you prepared your classifier](classifer.md)
+    - `classifier_checkpoint` points to the path where your torchscript classifier is. This should be the path you decided on [when you prepared your classifier](classifier.md)
     - `do_nothing` is a boolean value (`true` or `false`) that defines whether to modify the output of the conversion network before you pass it to the classifier for validation. If you have correctly configured the conversion model to output the range of data that your classifier expects, then you should set this to `true`. If, however, your classifier requires a different normalization, then you should set it to `false`
 
 ```{note}

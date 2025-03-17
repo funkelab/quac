@@ -561,8 +561,8 @@ class ValidationData:
         return self.source_root / self.source
 
     def print_info(self):
-        print(f"Avaliable sources: {self.available_sources}")
-        print(f"Avaliable targets: {self.available_targets}")
+        print(f"Available sources: {self.available_sources}")
+        print(f"Available targets: {self.available_targets}")
         print(f"Mode: {self.mode}")
         try:
             print(f"Current source directory: {self.source_directory}")

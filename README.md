@@ -16,7 +16,7 @@ Installing:
 4. Change into the directory holding this repository.
 5. `pip install .`
 
-Installing as developper:
+Installing as developer:
 1. - 4. Same as above.
 5. `pip install -e .\[dev\]`
 
