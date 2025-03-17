@@ -124,7 +124,7 @@ log:
 
 ## Training
 Once you have fully edited the `config.yaml` file, you are ready to start a training run. 
-In your experiment directory, simply run `python train.py`. 
+In your experiment directory, simply run `python train_stargan.py`. 
 This script will read the arguments from the configuration file you have just written, and begin training a StarGAN network to convert your images from one class to another.
 
 The training script will  also begin a run on [Weights and Biases](https://wandb.ai).
