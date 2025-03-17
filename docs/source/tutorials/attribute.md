@@ -13,7 +13,7 @@ It takes the following arguments, all of which are optional:
 
 The metadata regarding the real input images will be read from the configuration file, as before.
 
-To usefrom the `config.yaml` defaults:
+To use the `config.yaml` defaults:
 ```{code-block} bash
 python run_attribution.py
 ```
