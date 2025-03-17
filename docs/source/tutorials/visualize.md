@@ -86,7 +86,7 @@ report = reports[best_methods[order[idx]]]
 ## Looking at the corresponding images
 
 The `Report` holds the path to that example, and its pair in the `generated_images`. 
-It alos holds the path to the `attribution` for that pair, which is stored as a `npy` file. 
+It also holds the path to the `attribution` for that pair, which is stored as a `npy` file. 
 Finally, it holds the classification of both the original image and the generated image.
 
 ```{code-block} python
