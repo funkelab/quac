@@ -186,7 +186,7 @@ class Report:
     def plot_curve(self, ax=None):
         """Plot the QuAC curve
 
-        We plot the median and IQR of the QuAC curve across all accumulated results.
+        We plot the median and IQR of the QuAC curve acrosss all accumulated results.
 
         Parameters
         ----------
@@ -228,10 +228,10 @@ class Report:
             tradeoff_scores[below_threshold] = (
                 np.inf
             )  # Ignores the points with not enough score change
-        the_idx = np.argmin(tradeoff_scores, axis=1)
+        thr_idx = np.argmin(tradeoff_scores, axis=1)
 
         optimal_thresholds = np.take_along_axis(
-            thresholds, the_idx[:, None], axis=1
+            thresholds, thr_idx[:, None], axis=1
         ).squeeze()
         return optimal_thresholds
 
@@ -245,7 +245,7 @@ class Report:
         mask_sizes = np.array(self.normalized_mask_sizes[index])
 
         pareto_scores = mask_sizes**2 + (1 - mask_scores) ** 2
-        the_idx = np.argmin(pareto_scores)
+        thr_idx = np.argmin(pareto_scores)
         if return_index:
-            return self.thresholds[index][the_idx], the_idx
-        return self.thresholds[index][the_idx]
+            return self.thresholds[index][thr_idx], thr_idx
+        return self.thresholds[index][thr_idx]

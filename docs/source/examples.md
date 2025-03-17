@@ -24,7 +24,7 @@ We found that, although this was sometimes done in surprising ways, the changes 
 ## *Drosophila melanogaster* synapses
 
 The differences between synapses emitting different neurotransmitters in the fruit fly *Drosophila melanogaster* are so subtle that it was not though possible to tell them apart.
-When [it was found that a deep learning model could do so](https://www.cell.com/cell/fulltext/S0092-8674(24)00307-6), however, this opened up possibilities for gaining insight into the relation between structure and function in these synapses.
+When [it was found that a deep learning model could do so](https://www.cell.com/cell/fulltext/S0092-8674(24)00307-6), however, this opened up possibilities for gaining insight into the relation between strcuture and function in these synapses.
 
 ```{figure} assets/synapses.png
     :figwidth: 100%

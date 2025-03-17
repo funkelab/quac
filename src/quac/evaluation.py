@@ -29,10 +29,10 @@ class Processor:
     """Class that turns attributions into masks."""
 
     def __init__(
-        self, gaussian_kernel_size=11, struct=10, channel_wise=True, name="default"
+        self, gaussian_kernel_size=11, struc=10, channel_wise=True, name="default"
     ):
         self.gaussian_kernel_size = gaussian_kernel_size
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struct, struct))
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struc, struc))
         self.channel_wise = channel_wise
         self.name = name
 
@@ -75,8 +75,8 @@ class UnblurredProcessor(Processor):
     Processor without any blurring
     """
 
-    def __init__(self, struct=10, channel_wise=True, name="no_blur"):
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struct, struct))
+    def __init__(self, struc=10, channel_wise=True, name="no_blur"):
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struc, struc))
         self.channel_wise = channel_wise
         self.name = name
 

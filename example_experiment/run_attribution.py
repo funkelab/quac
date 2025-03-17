@@ -85,7 +85,7 @@ if __name__ == "__main__":
         args.input or f"{experiment.solver.root_dir}/generated_images"
     )
 
-    # Load the classifier
+    # Load the classifer
     classifier = load_classifier(
         checkpoint_path=classifier_config.classifier_checkpoint
     )

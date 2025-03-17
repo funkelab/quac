@@ -97,7 +97,7 @@ class Solver(nn.Module):
             ]
 
         self.to(self.device)
-        # TODO The EMA doesn't need to be in named_children()
+        # TODO The EMA doesn't need to be in named_childeren()
         for name, network in self.named_children():
             if "ema" not in name:
                 print("Initializing %s..." % name)
@@ -588,14 +588,14 @@ def adv_loss(logits, target):
 def r1_reg(d_out, x_in):
     # zero-centered gradient penalty for real images
     batch_size = x_in.size(0)
-    grad_doubt = torch.autograd.grad(
+    grad_dout = torch.autograd.grad(
         outputs=d_out.sum(),
         inputs=x_in,
         create_graph=True,
         retain_graph=True,
         only_inputs=True,
     )[0]
-    grad_doubt2 = grad_doubt.pow(2)
-    assert grad_doubt2.size() == x_in.size()
-    reg = 0.5 * grad_doubt2.view(batch_size, -1).sum(1).mean(0)
+    grad_dout2 = grad_dout.pow(2)
+    assert grad_dout2.size() == x_in.size()
+    reg = 0.5 * grad_dout2.view(batch_size, -1).sum(1).mean(0)
     return reg

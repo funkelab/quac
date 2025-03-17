@@ -86,7 +86,7 @@ report = reports[best_methods[order[idx]]]
 ## Looking at the corresponding images
 
 The `Report` holds the path to that example, and its pair in the `generated_images`. 
-It also holds the path to the `attribution` for that pair, which is stored as a `npy` file. 
+It alos holds the path to the `attribution` for that pair, which is stored as a `npy` file. 
 Finally, it holds the classification of both the original image and the generated image.
 
 ```{code-block} python
@@ -164,11 +164,11 @@ Finally, let's plot the three images, their classifications, and the correspondi
 fig, axes = plt.subplots(2, 4)
 axes[1, 0].imshow(image)
 axes[1, 0].set_xlabel("Original")
-axes[0, 0].bar(np.arrange(len(prediction)), prediction)
+axes[0, 0].bar(np.arange(len(prediction)), prediction)
 axes[1, 1].imshow(generated_image)
 axes[1, 1].set_xlabel("Generated")
-axes[0, 1].bar(np.arrange(len(target_prediction)), target_prediction)
-axes[0, 2].bar(np.arrange(len(counterfactual_prediction)), counterfactual_prediction)
+axes[0, 1].bar(np.arange(len(target_prediction)), target_prediction)
+axes[0, 2].bar(np.arange(len(counterfactual_prediction)), counterfactual_prediction)
 axes[1, 2].imshow(counterfactual)
 axes[1, 2].set_xlabel("Counterfactual)
 axes[1, 3].imshow(channel_last_mask)
