@@ -25,7 +25,7 @@
 
 ## Overview
 QuAC is a tool for understanding the sometimes subtle differences between classes of images, by questioning a classifier's decisions.
-The method generates counterfactual images: making slight changes in an image to change its clasification.
+The method generates counterfactual images: making slight changes in an image to change its classification.
 The counterfactuals in QuAC have localized changes, and are quantitatively scored to determine how well they describe the classifier's decision.
 
 
