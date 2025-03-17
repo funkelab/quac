@@ -16,11 +16,13 @@ Make sure that there is no overlap between the images in these three datasets, o
 We recommend you to have one root directory for all of your data, and sub-directories for `train`,`validation` and `test`. 
 
 ```{code-block} bash
-
-root/
-    train/
-    validation/
-    test/
+data/
+├── train/
+│   └── ...
+├── validation/
+│   └── ...
+└── test/
+    └── ...
 ```
 
 ## File organization
@@ -28,16 +30,25 @@ Within the `train`, `validation` and `test` directories, the sub-directories def
 The images must be organized in directories named after the class they belong to. 
 Only the first level of the directory structure is considered as the class. 
 
-Here is an example of a valid organization of the `train` directory in a case with two classes `class_A` and `class_B`.
+Here is an example of a valid organization of the `train` directory in a case with three classes `class_A`, `class_B` and `class_C`.
 ```{code-block} bash
-
-train/class_A/xxx.png
-train/class_A/xxy.png
-train/class_A/[...]/xxz.png
-
-train/class_B/123.png
-train/class_B/nsdf3.png
-train/class_B/[...]/asd932_.png
+train/
+├── class_A/
+│   ├── xxx.png
+│   ├── xxy.png
+│   ├── abc.png
+│   ├── arbitrary_subdirectory/
+│   │   ├── aaa.png
+│   │   └── bcd.png
+│   └── ...
+├── class_B/
+│   ├── 123.png
+│   ├── nsdf3.png
+│   └── ...
+└── class_C/
+    ├── asd.png
+    ├── fgh.png
+    └── hjk.png
 ```
 
 Every image in the `class_A` directory will get the label for `class_A`, including if they are in sub-directories. 
