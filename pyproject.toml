@@ -43,7 +43,7 @@ docs = [
   "tomli",
   "myst-parser",
   "sphinx-copybutton",
-  "sphix-design",
+  "sphinx-design",
 ]
 
 [project.urls]
