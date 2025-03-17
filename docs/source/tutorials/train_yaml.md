@@ -2,7 +2,7 @@
 
 The central model in QuAC is a generator that converts data from one class to another.
 
-To get started, copy the `example_experiment` directory, giving it a descriptive name for your experiment (*e.g.* `date_experiment-name_dataset`).
+To get started, make sure you've copied the `example_experiment` directory, giving it a descriptive name for your experiment (*e.g.* `date_experiment-name_dataset`).
 Then, modify the enclosed `config.yaml` file as you follow along this how-to.  
 
 ## Data loading configuration

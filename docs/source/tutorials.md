@@ -1,8 +1,10 @@
 # Get started
 
 So you've decided to use QuAC...
-
 Great! In this how-to we'll describe the full QuAC pipeline, from installation to visualizing results.
+
+There is a directory called `example_experiment` in the QuAC repository, which you can copy and rename to your purposes. 
+It will hold the configuration file and scripts which we will use later on.
 
 ## Setup
 
