@@ -1,6 +1,9 @@
 # The conversion network
 
-The central model in QuAC is a generator that converts data from one class to another.
+The {term}`conversion model` is the central model in QuAC.
+It is a generator that converts data from one class to another.
+Specifically, it turns a {term}`query image` into a {term}`generated image` by applying a {term}`style` to it.
+Here, we will train a StarGAN model to do the job.
 
 To get started, make sure you've copied the `example_experiment` directory, giving it a descriptive name for your experiment (*e.g.* `date_experiment-name_dataset`).
 Then, modify the enclosed `config.yaml` file as you follow along this how-to.  

@@ -1,8 +1,8 @@
 # Discriminative attribution from Counterfactuals
 
-Now that we have generated counterfactuals, we will refine our **generated** images into **counterfactuals** using discriminative attribution.
+Now that we have generated images, we will refine each {term}`generated image` into a {term}`counterfactual image` using discriminative attribution.
 Remember that although the conversion network is trained to keep as much of the image fixed as possible, it is not perfect.
-This means that there may still be regions of the **generated** image that differ from the **query** image *even if they don't need to*.
+This means that there may still be regions of the {term}`generated image` that differ from the {term}`query image` *even if they don't need to*.
 Luckily, we have a classifier that can help us identify and keep only the necessary regions of change.
 
 We will get candidate regions of change by running several discriminative attribution methods using the `run_attribution.py` script. 
