@@ -3,7 +3,7 @@
 The {term}`conversion network` is the central model in QuAC.
 It is a generator that converts data from one class to another.
 Specifically, it turns a {term}`query image` into a {term}`generated image` by applying a {term}`style` to it.
-Here, we will train a StarGAN model to do the job.
+Here, we will train a [StarGAN](http://arxiv.org/abs/1912.01865) model to do the job.
 
 To get started, make sure you've copied the `example_experiment` directory, giving it a descriptive name for your experiment (*e.g.* `date_experiment-name_dataset`).
 Then, modify the enclosed `config.yaml` file as you follow along this how-to.  
@@ -36,7 +36,7 @@ validation_data:
 ```
 
 - The `source` and `reference` values hold the (absolute) path your data. The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. 
-- The `mean` and `std` values will be used to normalize your data before passing it into the StarGAN. These are passed to a [`torchvision.transforms.Normalize`](https://pytorch.org/vision/main/generated/torchvision.transforms.Normalize.html?highlight=normalize#torchvision.transforms.Normalize).We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
+- The `mean` and `std` values will be used to normalize your data before passing it into the {term}`conversion model`. These are passed to a [`torchvision.transforms.Normalize`](https://pytorch.org/vision/main/generated/torchvision.transforms.Normalize.html?highlight=normalize#torchvision.transforms.Normalize).We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
 - If you have RGB data, set `grayscale` to `false`. Else, set it to `true`. 
 - Set `img_size` to the input size expected by your classifier. Your images will be resized accordingly by bi-cubic interpolation.
 - `batch_size` and `num_workers` are passed to a [`torch.utils.data.Dataloader`](https://pytorch.org/tutorials/beginner/basics/data_tutorial.html).
@@ -128,7 +128,7 @@ log:
 ## Training
 Once you have fully edited the `config.yaml` file, you are ready to start a training run. 
 In your experiment directory, simply run `python train_stargan.py`. 
-This script will read the arguments from the configuration file you have just written, and begin training a StarGAN network to convert your images from one class to another.
+This script will read the arguments from the configuration file you have just written, and begin training a {term}`conversion network` to convert your images from one class to another.
 
 The training script will also begin a run on [Weights and Biases](https://wandb.ai).
 Connect to your account there to follow the run.

@@ -6,8 +6,8 @@ The validation step that occurs regularly during training generates a set of exa
 We can use these to choose the best model checkpoint.
 
 You can choose your checkpoint based on the following metrics, which you will find in the `wandb` logs: 
-- The *translation rate* shows how many of the StarGAN's output are classified by the pre-trained classifier as the `target` class.
-- The *conversion rate* is similar, except it gives the model several tries to correctly convert an image. This is possible because the StarGAN includes some randomness.
+- The *translation rate* shows how many of the {term}`conversion network`'s output are classified by the pre-trained classifier as the `target` class.
+- The *conversion rate* is similar, except it gives the model several tries to correctly convert an image. This is possible because the {term}`conversion network` includes some randomness.
 
 ```{note}
 Generally, we choose the checkpoint with the highest average conversion rate.

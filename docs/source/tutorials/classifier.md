@@ -16,8 +16,8 @@ We will be chaining networks in QuAC, and incorrect data ranges at the input of 
 
 We *strongly* recommend making sure that your classifier expects input data that lies in `[-1, 1]`.
 
-While you can set the StarGAN to return data in different ranges the hyper-parameters in QuAC have been optimized for `[-1, 1]`. 
-GANs are very finnicky creatures, so you will likely have to do extensive tuning outside of the defaults.
+While you can set the {term}`conversion network` to return data in different ranges the hyper-parameters in QuAC have been optimized for `[-1, 1]`. 
+Generative adversarial networks are very finnicky creatures, so you will likely have to do extensive tuning outside of the defaults.
 ```
 
 ## Compiling to torchscript
