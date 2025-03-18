@@ -22,3 +22,4 @@ Installing as developer:
 
 
 Logo made with the help of DALL-E 2.
+The code for training the StarGAN is adapted from the [Official Pytorch Implementation of StarGANv2](https://github.com/clovaai/stargan-v2).
