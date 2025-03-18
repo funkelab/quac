@@ -5,6 +5,12 @@
 The purpose of QuAC is to explain the decisions of a pre-trained classifier. 
 As such, you need a classifier before you can use QuAC. 
 
+```{note}
+QuAC explanations will be at most as good as the classifier that they explain.
+We recommend a classifier that has is at least (almost) as good as a human, though QuAC is ideal for situations where the classifier is better than humans!
+Have a look at the appendix in [the pre-print](https://doi.org/10.1101/2024.11.26.625505) for an example of how a bad classifier might lead to bad explanations.
+```
+
 We will need the classifier to be a `pytorch` model.
 If you don't already have a classifier, here are some tutorials describing how to train one: 
 1. [From Pytorch](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
