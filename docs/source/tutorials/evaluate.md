@@ -19,3 +19,20 @@ You can use the following command to get help with formatting your arguments.
 ```{code-block} bash
 python run_evaluation.py -h
 ```
+
+
+## Output
+
+Here is the output organization that you should expect at this point.
+```{code-block} bash
+<solver.root_dir>/
+├── checkpoints/
+├── generated_images/
+├── attributions/
+└── reports/
+    └── latent/
+        ├── discriminative_deeplift/
+        │   └── default.json
+        └── discriminative_ig/
+            └── default.json
+```

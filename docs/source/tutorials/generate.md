@@ -34,3 +34,31 @@ If you want to have a look at the other modifiable options, run the following:
 ```{code-block} bash
 python generate_images.py --help
 ```
+
+## Output
+Once you're done with this step, your experiment directory (`solver.root_directory`, in your YAML file) should look something like this: 
+```{code-block} bash
+<solver.root_directory>/
+├── checkpoints/
+└── generated_images/
+    └── latent/
+        ├── class_A/
+        │   └── class_B/
+        │       ├── xxx.png
+        │       ├── xxy.png
+        │       ├── abc.png
+        │       └── ...
+        ├── class_A/
+        │   └── class_C/
+        │       ├── xxx.png
+        │       ├── xxy.png
+        │       ├── abc.png
+        │       └── ...
+        ├── ...
+        └── class_C/
+            └── class_B/
+                ├── asd.png
+                ├── fgh.png
+                ├── hjk.png
+                └── ...
+```

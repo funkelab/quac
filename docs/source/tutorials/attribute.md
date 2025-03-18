@@ -25,17 +25,40 @@ python run_attribution.py -h
 
 The script will create candidates using Discriminative [Integrated Gradients](https://arxiv.org/abs/1703.01365) and Discriminative [DeepLift](https://arxiv.org/abs/1704.02685) as attribution methods. 
 If you look into the `attribution_directory`, you should see the results stored as `numpy` arrays.
-They will be organized in the following way:
+
+Here is an example of how your data will be organized in the `solver.root_dir` directory:
 ```{code-block} bash
-attribution_directory/
-    discriminative_ig/
-        source_class/
-            target_class/
-                image_name.npy 
-                [...]
-    discriminative_deeplift/
-        source_class/
-            target_class/
-                image_name.npy
-                [...]
+<solver.root_dir>/
+├── checkpoints/
+├── generated_images/
+└── attributions/
+    └── latent/
+        ├── discriminative_deeplift/
+        │   ├── class_A/
+        │   │   └── class_B/
+        │   │       ├── xxx.npy
+        │   │       ├── xxy.npy
+        │   │       ├── abc.npy
+        │   │       └── ...
+        │   ├── ...
+        │   └── class_C/
+        │       └── class_B/
+        │           ├── asd.npy
+        │           ├── fgh.npy
+        │           ├── hjk.npy
+        │           └── ...
+        └── discriminative_ig/
+            ├── class_A/
+            │   └── class_B/
+            │       ├── xxx.npy
+            │       ├── xxy.npy
+            │       ├── abc.npy
+            │       └── ...
+            ├── ...
+            └── class_C/
+                └── class_B/
+                    ├── asd.npy
+                    ├── fgh.npy
+                    ├── hjk.npy
+                    └── ...
 ```

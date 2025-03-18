@@ -1,6 +1,6 @@
 # The conversion network
 
-The {term}`conversion model` is the central model in QuAC.
+The {term}`conversion network` is the central model in QuAC.
 It is a generator that converts data from one class to another.
 Specifically, it turns a {term}`query image` into a {term}`generated image` by applying a {term}`style` to it.
 Here, we will train a StarGAN model to do the job.
@@ -130,5 +130,17 @@ Once you have fully edited the `config.yaml` file, you are ready to start a trai
 In your experiment directory, simply run `python train_stargan.py`. 
 This script will read the arguments from the configuration file you have just written, and begin training a StarGAN network to convert your images from one class to another.
 
-The training script will  also begin a run on [Weights and Biases](https://wandb.ai).
+The training script will also begin a run on [Weights and Biases](https://wandb.ai).
 Connect to your account there to follow the run.
+
+## Output
+The QuAC outputs will be organized in the `solver.root_dir` that you defined in your configuration. 
+After training, that directory should look something like this: 
+```{code-block} bash
+<solver.root_directory>/
+└── checkpoints/
+    ├── 005000_nets_ema.ckpt
+    ├── 010000_nets_ema.ckpt
+    ├── ...
+    └── 050000_nets_ema.ckpt
+```
