@@ -144,9 +144,7 @@ def get_counterfactual(  # type: ignore
     best_cf_so_far: Optional[torch.Tensor] = None,
     best_cf_path_so_far: Optional[str] = None,
     error_if_not_found=False,
-    return_path=False,
-    return_pred=False,
-) -> tuple[torch.Tensor, Optional[Union[str, torch.Tensor]], Optional[torch.Tensor]]:
+) -> tuple[Optional[torch.Tensor], Optional[str], Optional[torch.Tensor]]:
     """
     Tries to find a counterfactual for the given sample, given the target.
     It creates a batch, and returns one of the samples if it is classified correctly.
@@ -240,8 +238,6 @@ def get_counterfactual(  # type: ignore
                 best_pred_so_far=best_pred_so_far,
                 best_cf_so_far=best_cf_so_far,
                 best_cf_path_so_far=best_cf_path_so_far,
-                return_path=return_path,
-                return_pred=return_pred,
             )
         else:
             if error_if_not_found:
@@ -252,10 +248,4 @@ def get_counterfactual(  # type: ignore
                 f"Counterfactual not found after {max_tries} tries, using best so far."
             )
     # Return the best counterfactual so far
-    if return_path and kind == "reference":
-        if return_pred:
-            return best_cf_so_far, best_cf_path_so_far, best_pred_so_far
-        return best_cf_so_far, best_cf_path_so_far  # type: ignore
-    if return_pred:
-        return best_cf_so_far, best_pred_so_far  # type: ignore
-    return best_cf_so_far
+    return best_cf_so_far, best_cf_path_so_far, best_pred_so_far

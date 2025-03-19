@@ -148,7 +148,7 @@ if __name__ == "__main__":
     )
 
     for x, name in tqdm(dataset):
-        xcf = get_counterfactual(
+        xcf, _, _ = get_counterfactual(
             classifier,
             inference_model,
             x,
