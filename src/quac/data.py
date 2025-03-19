@@ -13,7 +13,7 @@ from torchvision.datasets.folder import (
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
 
 
-def read_image(path: str) -> torch.tensor:
+def read_image(path: str) -> torch.Tensor:
     """Reads an image from a file path and returns it as a numpy array.
 
     Parameters
@@ -23,7 +23,7 @@ def read_image(path: str) -> torch.tensor:
 
     Returns
     -------
-    image: torch.tensor
+    image: torch.Tensor
         The image read from the path.
         The image is always min-max normalized.
         Its values are between 0 and 1.
@@ -48,14 +48,14 @@ def read_image(path: str) -> torch.tensor:
     return image
 
 
-def write_image(image: torch.tensor, path: str) -> None:
+def write_image(image: torch.Tensor, path: str) -> None:
     """Writes an image to a file path.
 
     Parameters
     ----------
     path: str
         Path to save the image to.
-    image: torch.tensor
+    image: torch.Tensor
         The image to save. It is assumed to be of data type float32
 
     The image will be "normalized" to range `[0, 1]` before saving.
