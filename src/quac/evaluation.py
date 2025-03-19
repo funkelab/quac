@@ -390,7 +390,7 @@ class FinalReport:
     Collates and stores the (best) results from multiple reports.
     """
 
-    def __init__(self, reports, classifier=None, output_dir=None):
+    def __init__(self, reports, transform=None, classifier=None, output_dir=None):
         """
         Initialize the final report with a dictionary of reports.
         To read reports from a directory, use `Final_report.from_directory` instead.
@@ -399,13 +399,21 @@ class FinalReport:
         ----------
         reports: dict
             A dictionary mapping method names to their respective reports.
-
+        transform: callable, optional
+            A transform to be applied to the images when loading them.
+            This can be used, for example, to crop the images to a specific size.
+        classifier: nn.Module, optional
+            A classifier to be used for the evaluation.
+        output_dir: str, optional
+            A directory where the masks and counterfactuals will be saved on-the-fly.
+            If None, they will not be saved.
         """
         self._reports = reports
         self._final_report = None
         self._processor = Processor()
         self._classifier = classifier
         self._output_dir = output_dir
+        self.transform = transform
 
     @property
     def final_report(self):
@@ -414,8 +422,17 @@ class FinalReport:
             self._final_report = self._merge()
         return self._final_report
 
+    def read_image(self, path):
+        """
+        Read an image from disk and apply the transform if provided.
+        """
+        image = read_image(path)
+        if self.transform is not None:
+            image = self.transform(image)
+        return image
+
     @classmethod
-    def from_directory(cls, eval_directory):
+    def from_directory(cls, eval_directory, **kwargs):
         """
         Find and load all reports in a given directory.
 
@@ -433,6 +450,8 @@ class FinalReport:
                     report.json
             ```
 
+        kwargs: additional arguments to be passed to the FinalReport constructor.
+
         Returns
         -------
         reports: dict
@@ -448,7 +467,7 @@ class FinalReport:
                 reports[report.name] = report
             except KeyError:
                 logging.warning(f"Could not load {json_file}, not a valid report.")
-        return FinalReport(reports)
+        return FinalReport(reports, **kwargs)
 
     def _merge(self):
         """
@@ -464,16 +483,16 @@ class FinalReport:
         best_methods = quac_scores.idxmax(axis=1)  # This is a pandas Series
         # Add the QuAC score, turning it into a pandas DataFrame
         best_methods = pd.DataFrame(best_methods, columns=["method"])
-        best_methods["quac_score"] = quac_scores.lookup(
-            quac_scores.index, best_methods["method"]
-        )
+        best_methods["quac_score"] = quac_scores.max(axis=1)
+
         # Sort the samples by QuAC score
         best_methods = best_methods.sort_values("quac_score", ascending=False)
 
         # Merge all reports into a single one
         final_report = Report(name="final")
+        final_report.quac_scores = best_methods["quac_score"].tolist()
         # Store the best results for each sample
-        for idx, row in enumerate(best_methods):
+        for idx, row in best_methods.iterrows():
             report = self._reports[row["method"]]
             final_report.paths.append(report.paths[idx])
             final_report.target_paths.append(report.target_paths[idx])
@@ -485,7 +504,6 @@ class FinalReport:
             final_report.thresholds.append(report.thresholds[idx])
             final_report.normalized_mask_sizes.append(report.normalized_mask_sizes[idx])
             final_report.score_changes.append(report.score_changes[idx])
-            final_report.quac_scores.append(report.quac_scores[idx])
 
         # Add an empty column for the computed values
         final_report.counterfactual_predictions = [None] * len(final_report.paths)
@@ -501,13 +519,12 @@ class FinalReport:
         Get the query image for a given explanation.
         """
         query_path = self.final_report.paths[item]
-        return read_image(query_path)
+        return self.read_image(query_path)
 
     def get_query_prediction(self, item: int) -> np.array:
         """
         Get the classifier output for the query image.
         """
-        # TODO: Check if softmax is needed
         return self.final_report.predictions[item]
 
     @lru_cache(maxsize=10)
@@ -516,7 +533,7 @@ class FinalReport:
         Get the generated image for a given explanation.
         """
         generated_path = self.final_report.target_paths[item]
-        return read_image(generated_path)
+        return self.read_image(generated_path)
 
     @lru_cache(maxsize=10)
     def get_mask(self, item: int) -> np.array:
@@ -526,14 +543,14 @@ class FinalReport:
         try:
             mask_path = self.final_report.mask_paths[item]
             mask = np.load(mask_path)
-        except (KeyError, ValueError):  # path is "None", or not defined
+        except (KeyError, ValueError, TypeError):  # path is "None", or not defined
             # Get the attribution
             attribution_path = self.final_report.attribution_paths[item]
             attribution = np.load(attribution_path)
             # Get the threshold
             threshold = self.final_report.get_optimal_threshold(item)
             # process the attribution to get the mask
-            mask = self._processor.create_mask(attribution, threshold)
+            mask, _ = self._processor.create_mask(attribution, threshold)
             self.save_mask(mask, item)
         return mask
 
@@ -565,8 +582,8 @@ class FinalReport:
         """
         try:
             counterfactual_path = self.final_report.counterfactual_paths[item]
-            counterfactual = read_image(counterfactual_path)
-        except (KeyError, ValueError):  # path is "None", or not defined
+            counterfactual = self.read_image(counterfactual_path)
+        except (KeyError, ValueError, OSError):  # path is "None", or not defined
             query = self.get_query(item)
             generated = self.get_generated(item)
             mask = self.get_mask(item)
@@ -610,8 +627,13 @@ class FinalReport:
         """
         counterfactual_prediction = self.final_report.counterfactual_predictions[item]
         if counterfactual_prediction is None and self._classifier is not None:
+            device = next(self._classifier.parameters()).device
             counterfactual = self.get_counterfactual(item)
-            counterfactual_prediction = self._classifier(counterfactual)
+            with torch.no_grad():
+                counterfactual_prediction = (
+                    self._classifier(counterfactual[None, :].to(device)).cpu().detach()
+                )
+            counterfactual_prediction = F.softmax(counterfactual_prediction, dim=1)[0]
             self.final_report.counterfactual_predictions[item] = (
                 counterfactual_prediction
             )
