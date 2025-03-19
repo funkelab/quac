@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import imageio
 import numpy as np
 import os
 from pathlib import Path
@@ -10,6 +11,71 @@ from torchvision.datasets.folder import (
     has_file_allowed_extension,
 )
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
+
+
+def read_image(path: str) -> np.ndarray:
+    """Reads an image from a file path and returns it as a numpy array.
+
+    Parameters
+    ----------
+    path: str
+        Path to the image to read.
+
+    Returns
+    -------
+    image: np.array
+        The image read from the path.
+        The image is always min-max normalized.
+        Its values are between 0 and 1.
+        Its dtype is np.float32.
+    """
+    image = imageio.imread(path)
+    # Check data type
+    if image.dtype == np.uint8:
+        image = image.astype(np.float32) / 255.0
+    else:
+        image = image.astype(np.float32)
+        # min-max normalization, per-channel
+        min_vals = image.min(axis=(0, 1), keepdims=True)
+        max_vals = image.max(axis=(0, 1), keepdims=True)
+        image = (image - min_vals) / (max_vals - min_vals)
+    return image
+
+
+def write_image(image: np.ndarray, path: str) -> None:
+    """Writes an image to a file path.
+
+    Parameters
+    ----------
+    path: str
+        Path to save the image to.
+    image: np.array
+        The image to save. It is assumed to be of data type np.float32.
+
+    The image will be "normalized" to range `[0, 1]` before saving.
+    If it is in the range [-1, 1], it will be shifted to [0, 1] using: $ x = (x + 1) / 2 $.
+    If it is in any other range, it will be min-max normalized per channel.
+
+    If the file is a JPEG or a PNG, the image will scaled to `[0, 255]` and converted to `np.uint8`.
+    Else, the image will be saved as a float32.
+    """
+    assert image.dtype == np.float32
+    # Checks whether the data is in `[0, 1]`
+    if image.min() < 0 or image.max() > 1:
+        # Check if the data is in `[-1, 1]`
+        if image.min() >= -1 and image.max() <= 1:
+            # Shift the data to `[0, 1]`
+            image = (image + 1) / 2
+        else:
+            # min-max normalization, per-channel
+            min_vals = image.min(axis=(0, 1), keepdims=True)
+            max_vals = image.max(axis=(0, 1), keepdims=True)
+            image = (image - min_vals) / (max_vals - min_vals)
+    # Now, data is in `[0, 1]`
+    # Check output data type, based on the file format
+    if path.split(".")[-1] in ["jpg", "jpeg", "png", "PNG", "JPG", "JPEG"]:
+        image = (image * 255).astype(np.uint8)
+    imageio.imwrite(path, image)
 
 
 def find_classes(directory):
