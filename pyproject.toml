@@ -25,7 +25,10 @@ dependencies = [
   "opencv-python",
   "pydantic",
   "scipy",
-  "scikit-learn", "imageio>=2.37.0,<3", "scikit-image>=0.24.0,<0.25",
+  "scikit-learn", 
+  "imageio>=2.37.0,<3", 
+  "scikit-image>=0.24.0,<0.25", 
+  "pandas>=2.2.3,<3",
 ]
 
 [project.optional-dependencies]
