@@ -1,5 +1,6 @@
 import pytest
 from quac.data import PairedImageDataset, read_image, write_image
+import torch
 from torchvision import transforms
 from skimage.data import astronaut
 
@@ -40,7 +41,7 @@ def test_read_write(format, image_file_path):
     image = astronaut().astype("float32")
     # Make it a float, values in 0-1
     image = image / 255.0
-    image = image.astype("float32")
+    image = torch.from_numpy(image).float().permute(2, 0, 1)  # Change to CxHxW
     path = str(image_file_path / f"test.{format}")
     write_image(image, path)
 

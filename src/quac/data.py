@@ -13,7 +13,7 @@ from torchvision.datasets.folder import (
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
 
 
-def read_image(path: str) -> np.ndarray:
+def read_image(path: str) -> torch.tensor:
     """Reads an image from a file path and returns it as a numpy array.
 
     Parameters
@@ -23,11 +23,12 @@ def read_image(path: str) -> np.ndarray:
 
     Returns
     -------
-    image: np.array
+    image: torch.tensor
         The image read from the path.
         The image is always min-max normalized.
         Its values are between 0 and 1.
         Its dtype is np.float32.
+        It is in CHW format (channels, height, width).
     """
     image = imageio.imread(path)
     # Check data type
@@ -39,18 +40,23 @@ def read_image(path: str) -> np.ndarray:
         min_vals = image.min(axis=(0, 1), keepdims=True)
         max_vals = image.max(axis=(0, 1), keepdims=True)
         image = (image - min_vals) / (max_vals - min_vals)
+    # Add a channel dimension if it is not there
+    if len(image.shape) == 2:
+        image = np.expand_dims(image, axis=2)
+    # Permute to CHW format
+    image = torch.from_numpy(image).permute(2, 0, 1)  # HWC to CHW
     return image
 
 
-def write_image(image: np.ndarray, path: str) -> None:
+def write_image(image: torch.tensor, path: str) -> None:
     """Writes an image to a file path.
 
     Parameters
     ----------
     path: str
         Path to save the image to.
-    image: np.array
-        The image to save. It is assumed to be of data type np.float32.
+    image: torch.tensor
+        The image to save. It is assumed to be of data type float32
 
     The image will be "normalized" to range `[0, 1]` before saving.
     If it is in the range [-1, 1], it will be shifted to [0, 1] using: $ x = (x + 1) / 2 $.
@@ -59,7 +65,9 @@ def write_image(image: np.ndarray, path: str) -> None:
     If the file is a JPEG or a PNG, the image will scaled to `[0, 255]` and converted to `np.uint8`.
     Else, the image will be saved as a float32.
     """
-    assert image.dtype == np.float32
+    assert image.dtype == torch.float32, "Image must be of type float32"
+    # convert to numpy
+    image = image.permute(1, 2, 0).numpy()  # CHW to HWC
     # Checks whether the data is in `[0, 1]`
     if image.min() < 0 or image.max() > 1:
         # Check if the data is in `[-1, 1]`
