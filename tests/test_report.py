@@ -1,3 +1,4 @@
+import json
 from quac.report import Report
 from quac.data import SampleWithAttribution
 import torch
@@ -65,3 +66,19 @@ def test_report(inputs, predictions, result, tmpdir):
     (tmpdir / f"{report.name}.json").unlink()
     # Remove the directory
     tmpdir.rmdir()
+
+
+def test_bad_report_io(tmp_path):
+    bad_json = {
+        # Missing "thresholds" key
+        "mask_sizes": [10, 20, 30],
+        "score_change": [0.1, 0.2],  # Mismatched length
+        "hybrids": [1, 2, 3],
+        "extra_field": "unexpected",
+        "unexpected_list": [1, 2, 3],
+    }
+    with open(tmp_path / "bad_report.json", "w") as f:
+        json.dump(bad_json, f)
+    with pytest.raises(KeyError):
+        report = Report()
+        report.load(tmp_path / "bad_report.json")

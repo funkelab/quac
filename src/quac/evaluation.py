@@ -1,13 +1,23 @@
 import cv2
+from functools import lru_cache
+import logging
 import numpy as np
+import pandas as pd
 from pathlib import Path
-from quac.data import PairedImageDataset, CounterfactualDataset, PairedWithAttribution
+from quac.data import (
+    PairedImageDataset,
+    CounterfactualDataset,
+    PairedWithAttribution,
+    read_image,
+    write_image,
+)
 from quac.report import Report
 from sklearn.metrics import classification_report, confusion_matrix
 from torchvision.datasets import ImageFolder
 from torch.nn import functional as F
 import torch
 from tqdm import tqdm
+from typing import Union
 
 
 def image_to_tensor(image, device=None):
@@ -373,3 +383,277 @@ class Evaluator(BaseEvaluator):
             transform=self.transform,
         )
         return dataset
+
+
+class FinalReport:
+    """
+    Collates and stores the (best) results from multiple reports.
+    """
+
+    def __init__(self, reports, classifier=None, output_dir=None):
+        """
+        Initialize the final report with a dictionary of reports.
+        To read reports from a directory, use `Final_report.from_directory` instead.
+
+        Parameters
+        ----------
+        reports: dict
+            A dictionary mapping method names to their respective reports.
+
+        """
+        self._reports = reports
+        self._final_report = None
+        self._processor = Processor()
+        self._classifier = classifier
+        self._output_dir = output_dir
+
+    @property
+    def final_report(self):
+        if self._final_report is None:
+            logging.warning("Merging reports to create final report.")
+            self._final_report = self._merge()
+        return self._final_report
+
+    @classmethod
+    def from_directory(cls, eval_directory):
+        """
+        Find and load all reports in a given directory.
+
+        Parameters
+        ----------
+        eval_directory: str
+            Path to the directory used for QuAC evaluation.
+            We expect it to be organized as follows:
+
+            ```
+            eval_directory/
+                method/
+                    report.json
+                method2/
+                    report.json
+            ```
+
+        Returns
+        -------
+        reports: dict
+            A dictionary mapping method names to their respective reports.
+        """
+        reports = {}
+        # Search for all json files in the directory or any subdirectory
+        for json_file in Path(eval_directory).rglob("*.json"):
+            name = str(json_file.parent)
+            report = Report(name=name)
+            try:
+                report.load(json_file)
+                reports[report.name] = report
+            except KeyError:
+                logging.warning(f"Could not load {json_file}, not a valid report.")
+        return FinalReport(reports)
+
+    def _merge(self):
+        """
+        Merge all available reports into a single, final report.
+        This chooses the best attribution method for each sample, based on the QuAC score.
+        It also sorts the samples by QuAC score.
+        """
+        # Create a dataframe with all of the QuAC scores
+        quac_scores = pd.DataFrame(
+            {method: report.quac_scores for method, report in self._reports.items()}
+        )
+        # Get the report "name" with the highest QuAC score for each sample
+        best_methods = quac_scores.idxmax(axis=1)  # This is a pandas Series
+        # Add the QuAC score, turning it into a pandas DataFrame
+        best_methods = pd.DataFrame(best_methods, columns=["method"])
+        best_methods["quac_score"] = quac_scores.lookup(
+            quac_scores.index, best_methods["method"]
+        )
+        # Sort the samples by QuAC score
+        best_methods = best_methods.sort_values("quac_score", ascending=False)
+
+        # Merge all reports into a single one
+        final_report = Report(name="final")
+        # Store the best results for each sample
+        for idx, row in enumerate(best_methods):
+            report = self._reports[row["method"]]
+            final_report.paths.append(report.paths[idx])
+            final_report.target_paths.append(report.target_paths[idx])
+            final_report.labels.append(report.labels[idx])
+            final_report.target_labels.append(report.target_labels[idx])
+            final_report.predictions.append(report.predictions[idx])
+            final_report.target_predictions.append(report.target_predictions[idx])
+            final_report.attribution_paths.append(report.attribution_paths[idx])
+            final_report.thresholds.append(report.thresholds[idx])
+            final_report.normalized_mask_sizes.append(report.normalized_mask_sizes[idx])
+            final_report.score_changes.append(report.score_changes[idx])
+            final_report.quac_scores.append(report.quac_scores[idx])
+
+        # Add an empty column for the computed values
+        final_report.counterfactual_predictions = [None] * len(final_report.paths)
+        final_report.counterfactual_paths = [None] * len(final_report.paths)
+        final_report.mask_paths = [None] * len(final_report.paths)
+
+        # The data in the final report is now sorted by QuAC score
+        return final_report
+
+    @lru_cache(maxsize=10)
+    def get_query(self, item: int) -> np.array:
+        """
+        Get the query image for a given explanation.
+        """
+        query_path = self.final_report.paths[item]
+        return read_image(query_path)
+
+    def get_query_prediction(self, item: int) -> np.array:
+        """
+        Get the classifier output for the query image.
+        """
+        # TODO: Check if softmax is needed
+        return self.final_report.predictions[item]
+
+    @lru_cache(maxsize=10)
+    def get_generated(self, item: int) -> np.array:
+        """
+        Get the generated image for a given explanation.
+        """
+        generated_path = self.final_report.target_paths[item]
+        return read_image(generated_path)
+
+    @lru_cache(maxsize=10)
+    def get_mask(self, item: int) -> np.array:
+        """
+        Get the mask for a given explanation, using the attribution and the threshold.
+        """
+        try:
+            mask_path = self.final_report.mask_paths[item]
+            mask = np.load(mask_path)
+        except (KeyError, ValueError):  # path is "None", or not defined
+            # Get the attribution
+            attribution_path = self.final_report.attribution_paths[item]
+            attribution = np.load(attribution_path)
+            # Get the threshold
+            threshold = self.final_report.get_optimal_threshold(item)
+            # process the attribution to get the mask
+            mask = self._processor.create_mask(attribution, threshold)
+            self.save_mask(mask, item)
+        return mask
+
+    def save_mask(self, mask, item):
+        """
+        Save the mask to disk, if an output directory is provided.
+        Else, do nothing.
+        """
+        if self._output_dir is not None:
+            source_label = self.final_report.labels[item]
+            target_label = self.final_report.target_labels[item]
+            name = self.final_report.attribution_paths[item].name
+            output_dir = Path(self._output_dir) / f"masks/{source_label}/{target_label}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / name
+            np.save(output_path, mask)
+            if "mask_paths" not in self.final_report.__dict__:
+                self.final_report.mask_paths = [None] * len(
+                    self.final_report.attribution_paths
+                )
+            self.final_report.mask_paths[item] = output_path
+        else:
+            logging.info("No output directory provided, not saving mask to disk.")
+
+    @lru_cache(maxsize=10)
+    def get_counterfactual(self, item: int) -> np.array:
+        """
+        Get the counterfactual image for a given explanation.
+        """
+        try:
+            counterfactual_path = self.final_report.counterfactual_paths[item]
+            counterfactual = read_image(counterfactual_path)
+        except (KeyError, ValueError):  # path is "None", or not defined
+            query = self.get_query(item)
+            generated = self.get_generated(item)
+            mask = self.get_mask(item)
+            counterfactual = query * (1 - mask) + generated * mask
+            self.save_counterfactual(counterfactual, item)
+        return counterfactual
+
+    def save_counterfactual(self, counterfactual, item):
+        """
+        Save the counterfactual image to disk, if an output directory is provided.
+        Else, do nothing.
+        """
+        if self._output_dir is not None:
+            source_label = self.final_report.labels[item]
+            target_label = self.final_report.target_labels[item]
+            name = self.final_report.paths[item].name
+            output_dir = (
+                Path(self._output_dir)
+                / f"counterfactuals/{source_label}/{target_label}"
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / name
+            write_image(counterfactual, output_path)
+            # Add path to final report
+            if "counterfactual_paths" not in self.final_report.__dict__:
+                self.final_report.counterfactual_paths = [None] * len(
+                    self.final_report.paths
+                )
+            self.final_report.counterfactual_paths[item] = output_path
+        else:
+            logging.info(
+                "No output directory provided, not saving counterfactual to disk."
+            )
+
+    def get_counterfactual_prediction(self, item: int) -> Union[np.array, None]:
+        """
+        Get the classifier output for the counterfactual image.
+        We first check if this has already been computed and stored in the final report.
+        If not, we check if the classifier is provided and compute the output.
+        Else, we return None.
+        """
+        counterfactual_prediction = self.final_report.counterfactual_predictions[item]
+        if counterfactual_prediction is None and self._classifier is not None:
+            counterfactual = self.get_counterfactual(item)
+            counterfactual_prediction = self._classifier(counterfactual)
+            self.final_report.counterfactual_predictions[item] = (
+                counterfactual_prediction
+            )
+        return counterfactual_prediction
+
+    def __getitem__(self, item):
+        """
+        Parameters
+        ----------
+        item: int
+            Index of the explanation to return. The samples are ordered by QuAC score from best to worst.
+
+        Returns
+        -------
+        query: np.array
+            The query image for the explanation.
+        counterfactual: np.array
+            The counterfactual image for the explanation.
+            This is generated by merging the query and the generated image, using the mask.
+        mask: np.array
+            The mask used to generate the counterfactual image.
+            This is a binary mask with the same size as the query image, including the channel dimension.
+            Pixels that are masked-in (1) are taken from the generated image.
+            Pixels that are masked-out (0) are taken from the query image.
+        query_prediction: np.array
+            The classifier output (softmaxxed) for the query image.
+        counterfactual_prediction: np.array
+            The classifier output (softmaxxed) for the counterfactual image.
+        source_class: int
+            The index of the source class for the explanation.
+        target_class: int
+            The index of the target class for the explanation.
+        quac_score: float
+            The QuAC score for the explanation.
+        """
+        return {
+            "query": self.get_query(item),
+            "counterfactual": self.get_counterfactual(item),
+            "mask": self.get_mask(item),
+            "query_prediction": self.get_query_prediction(item),
+            "counterfactual_prediction": self.get_counterfactual_prediction(item),
+            "source_class": self.final_report.labels[item],
+            "target_class": self.final_report.target_labels[item],
+            "quac_score": self.final_report.quac_scores[item],
+        }
