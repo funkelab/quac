@@ -140,9 +140,9 @@ def get_counterfactual(  # type: ignore
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far=Optional[torch.Tensor],
-    best_cf_so_far=Optional[torch.Tensor],
-    best_cf_path_so_far=Optional[str],
+    best_pred_so_far: Optional[torch.Tensor] = None,
+    best_cf_so_far: Optional[torch.Tensor] = None,
+    best_cf_path_so_far: Optional[str] = None,
     error_if_not_found=False,
     return_path=False,
     return_pred=False,
@@ -211,6 +211,7 @@ def get_counterfactual(  # type: ignore
     predictions = torch.argmax(p, dim=-1)
     # Get best so far
     best_idx_so_far = torch.argmax(p[:, target])
+
     if p[best_idx_so_far, target] > best_pred_so_far[target]:
         best_pred_so_far = p[best_idx_so_far]  # , target]
         best_cf_so_far = xcf[best_idx_so_far].cpu()
