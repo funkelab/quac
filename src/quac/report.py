@@ -47,12 +47,15 @@ class Report:
         self.interp_mask_values = np.arange(0.0, 1.0001, 0.01)
         # Initialize the optimal thresholds
         self.optimal_thresholds = []
+        # Initialize mask and counterfactual paths
+        self.mask_paths = []
+        self.counterfactual_paths = []
+        # Initialize counterfactual predictions
+        self.counterfactual_predictions = []
 
     def accumulate(self, inputs, predictions, evaluation_results):
         """
         Store a new result.
-        If `save_intermediates` is `True`, the hybrids are stored to disk.
-        Otherwise they are discarded.
         """
         # Store the input information
         self.paths.append(inputs.path)
@@ -62,13 +65,21 @@ class Report:
         self.attribution_paths.append(inputs.attribution_path)
         # Store the prediction results
         self.predictions.append(predictions["original"])
-        self.target_predictions.append(predictions["counterfactual"])
+        self.target_predictions.append(predictions["generated"])
         # Store the evaluation results
         self.thresholds.append(evaluation_results["thresholds"])
         self.normalized_mask_sizes.append(evaluation_results["mask_sizes"])
         self.score_changes.append(evaluation_results["score_change"])
-        # TODO Store the hybrids to disk ?
         self.optimal_thresholds.append(evaluation_results["optimal_threshold"])
+        # mask and counterfactual path
+        self.mask_paths.append(evaluation_results.get("mask_path", None))
+        self.counterfactual_paths.append(
+            evaluation_results.get("counterfactual_path", None)
+        )
+        # counterfactual prediction
+        self.counterfactual_predictions.append(
+            evaluation_results.get("counterfactual_prediction", None)
+        )
 
     def interpolate_score_values(self, normalized_mask_sizes, score_changes):
         """Computes the score changes interpolated at the desired mask sizes"""
@@ -149,6 +160,13 @@ class Report:
                     "optimal_thresholds": self.make_json_serializable(
                         self.optimal_thresholds
                     ),
+                    "mask_paths": self.make_json_serializable(self.mask_paths),
+                    "counterfactual_paths": self.make_json_serializable(
+                        self.counterfactual_paths
+                    ),
+                    "counterfactual_predictions": self.make_json_serializable(
+                        self.counterfactual_predictions
+                    ),
                 },
                 fd,
             )
@@ -170,6 +188,9 @@ class Report:
             self.attribution_paths = data.get("attribution_paths", [])
             self.quac_scores = data.get("quac_scores", None)
             self.optimal_thresholds = data.get("optimal_thresholds", [])
+            self.mask_paths = data.get("mask_paths", [])
+            self.counterfactual_paths = data.get("counterfactual_paths", [])
+            self.counterfactual_predictions = data.get("counterfactual_predictions", [])
 
     def get_curve(self):
         """Gets the median and IQR of the QuAC curve"""

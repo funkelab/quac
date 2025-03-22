@@ -48,16 +48,6 @@ def parse_args():
         help="Dataset to use for generating images.",
     )
     parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        default=None,
-        help="""
-        Output directory for the generated reports.
-        Defaults to an `reports` folder in the experiment root directory, 
-        based on the config file.""",
-    )
-    parser.add_argument(
         "-i",
         "--input_fake",
         type=str,
@@ -102,10 +92,10 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.attrs or f"{experiment.solver.root_dir}/attributions"
-    counterfactual_directory = (
-        args.input or f"{experiment.solver.root_dir}/generated_images"
-    )
-    report_directory = args.output or f"{experiment.solver.root_dir}/reports"
+    generated_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    counterfactual_directory = f"{experiment.solver.root_dir}/counterfactuals"
+    mask_directory = f"{experiment.solver.root_dir}/masks"
+    report_directory = f"{experiment.solver.root_dir}/reports"
 
     # Load the classifier
     classifier = load_classifier(
@@ -131,12 +121,14 @@ if __name__ == "__main__":
         evaluator = Evaluator(
             classifier,
             source_directory=data_directory,
-            counterfactual_directory=counterfactual_directory,
+            generated_directory=generated_directory,
             attribution_directory=attribution_directory / name,
+            counterfactual_directory=counterfactual_directory / name,
+            mask_directory=mask_directory / name,
             transform=transform,
         )
 
         # Run QuAC evaluation on your attribution and store a report
         report = evaluator.quantify(processor=Processor())
         # The report will be stored based on the processor's name, which is "default" by default
-        report.store(report_directory)
+        report.store(report_directory / name)
