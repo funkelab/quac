@@ -382,12 +382,12 @@ class Sample:
 
 # TODO remove?
 @dataclass
-class CounterfactualSample:
-    counterfactual: torch.Tensor
+class ConvertedSample:
+    generated: torch.Tensor
     target_class_index: int
     source_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -395,11 +395,11 @@ class CounterfactualSample:
 @dataclass
 class PairedSample:
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -408,11 +408,11 @@ class PairedSample:
 class SampleWithAttribution:
     attribution: np.ndarray
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
     attribution_path: Optional[Path] = None
@@ -483,9 +483,9 @@ class PairedImageDataset(Dataset):
             target_sample = self.transform(target_sample)
         output = PairedSample(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             source_class_index=class_index,
             target_class_index=target_class_index,
             source_class=self.classes[class_index],
@@ -497,7 +497,7 @@ class PairedImageDataset(Dataset):
         return len(self.samples)
 
 
-class CounterfactualDataset(Dataset):
+class ConvertedDataset(Dataset):
     def __init__(self, counterfactual_directory, transform=None, allow_empty=True):
         classes, class_to_idx = find_classes(counterfactual_directory)
         self.classes = classes
@@ -515,9 +515,9 @@ class CounterfactualDataset(Dataset):
         sample = default_loader(path)
         if self.transform is not None:
             sample = self.transform(sample)
-        output = CounterfactualSample(
-            counterfactual_path=Path(path),
-            counterfactual=sample,
+        output = ConvertedSample(
+            generated_path=Path(path),
+            generated=sample,
             source_class_index=source_class_index,
             source_class=self.classes[source_class_index],
             target_class_index=target_class_index,
@@ -576,10 +576,10 @@ class PairedWithAttribution(Dataset):
 
         output = SampleWithAttribution(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             attribution_path=Path(attribution_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             attribution=attribution,
             source_class_index=class_index,
             target_class_index=target_class_index,

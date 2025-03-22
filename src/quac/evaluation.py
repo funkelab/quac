@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 from quac.data import (
     PairedImageDataset,
-    CounterfactualDataset,
+    ConvertedDataset,
     PairedWithAttribution,
     write_image,
 )
@@ -194,11 +194,11 @@ class BaseEvaluator:
         for inputs in tqdm(self.dataset_with_attribution):
             predictions = {
                 "original": self.run_inference(inputs.image)[0],
-                "generated": self.run_inference(inputs.counterfactual)[0],
+                "generated": self.run_inference(inputs.generated)[0],
             }
             results = self.evaluate(
                 inputs.image,
-                inputs.counterfactual,
+                inputs.generated,
                 inputs.source_class_index,
                 inputs.target_class_index,
                 inputs.attribution,
@@ -251,22 +251,31 @@ class BaseEvaluator:
             results["counterfactual_path"] = counterfactual_path
 
     def evaluate(
-        self, x, x_t, y, y_t, attribution, predictions, processor, vmin=-1, vmax=1
+        self,
+        x,
+        x_t,
+        y,
+        y_t,
+        attribution,
+        predictions,
+        processor,
+        vmin=-1,
+        vmax=1,
     ):
         """
         Run QuAC evaluation on the data point.
 
         Parameters
         ----------
-                x: the input image
-                x_t: the counterfactual image
-                y: the class of the input image
-                y_t: the class of the counterfactual image
-                attribution: the attribution map
-                predictions: the predictions of the classifier
-                processor: the attribution processing function (to get mask)
-                vmin: the minimal possible value of the attribution, to be used for thresholding. Defaults to -1
-                vmax: the maximal possible value of the attribution, to be used for thresholding. Defaults to 1.
+        x: the input image
+        x_t: the counterfactual image
+        y: the class of the input image
+        y_t: the class of the counterfactual image
+        attribution: the attribution map
+        predictions: the predictions of the classifier
+        processor: the attribution processing function (to get mask)
+        vmin: the minimal possible value of the attribution, to be used for thresholding. Defaults to -1
+        vmax: the maximal possible value of the attribution, to be used for thresholding. Defaults to 1.
         """
         # copy parts of "fake" into "real", see how much the classification of
         # "real" changes into "fake_class"
@@ -361,7 +370,7 @@ class Evaluator(BaseEvaluator):
     @property
     def counterfactual_dataset(self):
         # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = CounterfactualDataset(
+        dataset = ConvertedDataset(
             self.counterfactual_directory, transform=self.transform
         )
         return dataset
