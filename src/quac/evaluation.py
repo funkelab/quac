@@ -8,7 +8,6 @@ from quac.data import (
     PairedImageDataset,
     CounterfactualDataset,
     PairedWithAttribution,
-    read_image,
     write_image,
 )
 from quac.report import Report
@@ -110,6 +109,18 @@ class UnblurredProcessor(Processor):
         if not return_size:
             return np.array(mask)
         return np.array(mask), mask_size
+
+
+def optimal_threshold_index(mask_sizes, mask_scores):
+    """
+    Find the index of the optimal threshold.
+    The optimal threshold has a minimal mask size, and maximizes the score change.
+    We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.
+    """
+    mask_scores = np.array(mask_scores)
+    mask_sizes = np.array(mask_sizes)
+    tradeoff_scores = np.abs(mask_sizes) - mask_scores
+    return np.argmin(tradeoff_scores)
 
 
 class BaseEvaluator:
@@ -295,14 +306,16 @@ class BaseEvaluator:
             results["hybrids"].append(hybrid)
             results["mask_sizes"].append(mask_size / np.prod(x.shape))
 
-            # Classification
-            # classification_hybrid = self.run_inference(hybrid)[0]
-            # score_change = classification_hybrid[y_t] - classification_real[y_t]
-            # results["score_change"].append(score_change)
+        # Classification
         hybrid = np.stack(results["hybrids"], axis=0)
         classification_hybrid = self.run_inference(hybrid)
         score_change = classification_hybrid[:, y_t] - classification_real[y_t]
         results["score_change"] = score_change
+        # Thresholding index
+        results["optimal_threshold"] = results["thresholds"][
+            optimal_threshold_index(results["mask_sizes"], results["score_change"])
+        ]
+        # TODO return optimal mask
         return results
 
     @torch.no_grad()
@@ -421,15 +434,6 @@ class FinalReport:
             logging.warning("Merging reports to create final report.")
             self._final_report = self._merge()
         return self._final_report
-
-    def read_image(self, path):
-        """
-        Read an image from disk and apply the transform if provided.
-        """
-        image = read_image(path)
-        if self.transform is not None:
-            image = self.transform(image)
-        return image
 
     @classmethod
     def from_directory(cls, eval_directory, **kwargs):

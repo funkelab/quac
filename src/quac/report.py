@@ -45,6 +45,8 @@ class Report:
         self.quac_scores = None
         # Initialize interpolation values
         self.interp_mask_values = np.arange(0.0, 1.0001, 0.01)
+        # Initialize the optimal thresholds
+        self.optimal_thresholds = []
 
     def accumulate(self, inputs, predictions, evaluation_results):
         """
@@ -66,6 +68,7 @@ class Report:
         self.normalized_mask_sizes.append(evaluation_results["mask_sizes"])
         self.score_changes.append(evaluation_results["score_change"])
         # TODO Store the hybrids to disk ?
+        self.optimal_thresholds.append(evaluation_results["optimal_threshold"])
 
     def interpolate_score_values(self, normalized_mask_sizes, score_changes):
         """Computes the score changes interpolated at the desired mask sizes"""
@@ -143,6 +146,9 @@ class Report:
                         self.attribution_paths
                     ),
                     "quac_scores": self.make_json_serializable(self.quac_scores),
+                    "optimal_thresholds": self.make_json_serializable(
+                        self.optimal_thresholds
+                    ),
                 },
                 fd,
             )
@@ -163,6 +169,7 @@ class Report:
             self.target_predictions = data.get("target_predictions", [])
             self.attribution_paths = data.get("attribution_paths", [])
             self.quac_scores = data.get("quac_scores", None)
+            self.optimal_thresholds = data.get("optimal_thresholds", [])
 
     def get_curve(self):
         """Gets the median and IQR of the QuAC curve"""
@@ -203,7 +210,7 @@ class Report:
         if ax is None:
             plt.show()
 
-    def optimal_thresholds(self, min_percentage=0.0):
+    def get_optimal_thresholds(self, min_percentage=0.0):
         """Get the optimal threshold for each sample
 
         The optimal threshold has a minimal mask size, and maximizes the score change.
@@ -215,6 +222,10 @@ class Report:
             The optimal threshold chosen needs to account for at least this percentage of total score change.
             Increasing this value will favor high percentage changes even when they require larger masks.
         """
+        warnings.warn(
+            "This function is deprecated, threshold computed during evaluation.",
+            DeprecationWarning,
+        )
         mask_scores = np.array(self.score_changes)
         mask_sizes = np.array(self.normalized_mask_sizes)
         thresholds = np.array(self.thresholds)
@@ -234,18 +245,3 @@ class Report:
             thresholds, threshold_idx[:, None], axis=1
         ).squeeze()
         return optimal_thresholds
-
-    def get_optimal_threshold(self, index, return_index=False):
-        # TODO Deprecate, use vectorized version!
-        warnings.warn(
-            "This function is deprecated, please use the vectorized version instead.",
-            DeprecationWarning,
-        )
-        mask_scores = np.array(self.score_changes[index])
-        mask_sizes = np.array(self.normalized_mask_sizes[index])
-
-        pareto_scores = mask_sizes**2 + (1 - mask_scores) ** 2
-        threshold_idx = np.argmin(pareto_scores)
-        if return_index:
-            return self.thresholds[index][threshold_idx], threshold_idx
-        return self.thresholds[index][threshold_idx]
