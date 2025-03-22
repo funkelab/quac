@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 @pytest.fixture
 def result():
     result = {
+        "counterfactual_path": "path/to/counterfactual",
+        "mask_path": "path/to/mask",
         "thresholds": [0.1, 0.2, 0.3],
         "mask_sizes": [10, 20, 30],
         "score_change": [0.1, 0.2, 0.3],
@@ -22,12 +24,12 @@ def result():
 def inputs():
     inputs = SampleWithAttribution(
         image=torch.Tensor([1, 2, 3]),
-        counterfactual=torch.Tensor([4, 5, 6]),
+        generated=torch.Tensor([4, 5, 6]),
         attribution=torch.Tensor([7, 8, 9]),
         source_class_index=0,
         target_class_index=1,
         path=Path("sample_path"),
-        counterfactual_path=Path("target_path"),
+        generated_path=Path("target_path"),
         source_class="duck",
         target_class="pigeon",
         attribution_path=Path("attribution_path"),
