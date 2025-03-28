@@ -32,14 +32,14 @@ class Explanation:
         counterfactual_prediction: Union[list, np.ndarray],
         source_class: int,
         target_class: int,
-        score: float = None,
+        score: Optional[float] = None,
         # Optional
-        attribution_path: str = None,
-        generated_path: str = None,
+        attribution_path: Optional[str] = None,
+        generated_path: Optional[str] = None,
         generated_prediction: Optional[Union[list, np.ndarray]] = None,
         normalized_mask_sizes: Optional[Union[list, np.ndarray]] = None,
         score_changes: Optional[Union[list, np.ndarray]] = None,
-        optimal_threshold: float = None,
+        optimal_threshold: Optional[float] = None,
         method: Optional[str] = None,
     ):
         self._query_path = query_path
