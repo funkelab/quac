@@ -1,7 +1,8 @@
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 import torch
 from pathlib import Path
+from quac.data import read_image
 
 
 def serialize(obj):
@@ -27,17 +28,17 @@ class Explanation:
         query_path: str,
         counterfactual_path: str,
         mask_path: str,
-        query_prediction: list | np.ndarray,
-        counterfactual_prediction: list | np.ndarray,
+        query_prediction: Union[list, np.ndarray],
+        counterfactual_prediction: Union[list, np.ndarray],
         source_class: int,
         target_class: int,
         score: float = None,
         # Optional
         attribution_path: str = None,
         generated_path: str = None,
-        generated_prediction: Optional[list | np.ndarray] = None,
-        normalized_mask_sizes: Optional[list | np.ndarray] = None,
-        score_changes: Optional[list | np.ndarray] = None,
+        generated_prediction: Optional[Union[list, np.ndarray]] = None,
+        normalized_mask_sizes: Optional[Union[list, np.ndarray]] = None,
+        score_changes: Optional[Union[list, np.ndarray]] = None,
         optimal_threshold: float = None,
         method: Optional[str] = None,
     ):
@@ -80,6 +81,9 @@ class Explanation:
             # The other, optional, attributes are not checked for equality
         return False
 
+    def __repr__(self):
+        return f"Explanation(query_path={self._query_path}, counterfactual_path={self._counterfactual_path}, mask_path={self._mask_path}, source_class={self.source_class}, target_class={self.target_class})"
+
     @property
     def query(self) -> torch.Tensor:
         if self._query is None:
@@ -95,14 +99,14 @@ class Explanation:
     @property
     def mask(self) -> torch.Tensor:
         if self._mask is None:
-            self._mask = torch.from_numpy(np.load(self.mask_path))
+            self._mask = torch.from_numpy(np.load(self._mask_path))
         return self._mask
 
     def read_image(self, path: str) -> torch.Tensor:
         """
         Read an image from a given path.
         """
-        return torch.tensor(np.load(path))
+        return read_image(path)  # Assuming read_image is defined elsewhere
 
 
 def explanation_encoder(explanation: Explanation):
