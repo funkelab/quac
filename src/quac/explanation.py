@@ -60,9 +60,9 @@ class Explanation:
         self._method = method
 
         # Computed
-        self._query = None
-        self._counterfactual = None
-        self._mask = None
+        self._query: Optional[torch.Tensor] = None
+        self._counterfactual: Optional[torch.Tensor] = None
+        self._mask: Optional[torch.Tensor] = None
 
     def __eq__(self, value):
         if isinstance(value, Explanation):

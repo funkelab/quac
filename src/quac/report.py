@@ -5,7 +5,6 @@ from pathlib import Path
 from quac.explanation import Explanation, explanation_encoder
 from scipy.interpolate import interp1d
 import logging
-from typing import Self
 
 
 def merge_reports(reports, **kwargs):
@@ -178,7 +177,7 @@ class Report:
             plt.show()
 
     # Filtering functions
-    def from_source(self, source_class, name=None) -> Self:
+    def from_source(self, source_class, name=None) -> "Report":
         """
         Create a Report containing only the explanations with the given source class.
         """
@@ -190,7 +189,7 @@ class Report:
         ]
         return filtered_report
 
-    def to_target(self, target_class, name=None) -> Self:
+    def to_target(self, target_class, name=None) -> "Report":
         """
         Create a filtered Report containing only the explanations with the given target class.
         """
@@ -202,7 +201,7 @@ class Report:
         ]
         return filtered_report
 
-    def score_threshold(self, threshold, name=None) -> Self:
+    def score_threshold(self, threshold, name=None) -> "Report":
         """
         Create a filtered Report containing only the explanations with a QuAC score above the given threshold.
         """
@@ -214,7 +213,7 @@ class Report:
         ]
         return filtered_report
 
-    def top_n(self, n, name=None) -> Self:
+    def top_n(self, n, name=None) -> "Report":
         """
         Create a filtered Report containing only the top n explanations.
         """
@@ -225,7 +224,7 @@ class Report:
         return filtered_report
 
     @classmethod
-    def from_directory(cls, eval_directory, **kwargs):
+    def from_directory(cls, eval_directory, **kwargs) -> "Report":
         """
         Find and load all reports in a given directory, merging them into a single report.
         The best attribution method for each sample is chosen based on the QuAC score.
