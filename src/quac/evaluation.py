@@ -1,8 +1,5 @@
 import cv2
-from functools import lru_cache
-import logging
 import numpy as np
-import pandas as pd
 from pathlib import Path
 from quac.data import (
     PairedImageDataset,
@@ -15,13 +12,15 @@ from torchvision.datasets import ImageFolder
 from torch.nn import functional as F
 import torch
 from tqdm import tqdm
-from typing import Union
 
 
 def image_to_tensor(image, device=None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    image_tensor = torch.tensor(image, device=device)
+    if isinstance(image, np.ndarray):
+        image_tensor = torch.from_numpy(image).to(device)
+    else:
+        image_tensor = image.clone().detach().to(device)
     if len(np.shape(image)) == 2:
         image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
     elif len(np.shape(image)) == 3:
@@ -230,7 +229,7 @@ class BaseEvaluator:
                 Path(self.mask_output_dir) / f"{source_class}/{target_class}"
             )
             mask_output_dir.mkdir(parents=True, exist_ok=True)
-            mask_path = mask_output_dir / inputs.path.stem + ".npy"
+            mask_path = mask_output_dir / (inputs.path.stem + ".npy")
             np.save(mask_path, results["mask"])
             results["mask_path"] = mask_path
 
@@ -301,7 +300,7 @@ class BaseEvaluator:
             masks.append(mask)
 
         # Classification
-        hybrid = np.stack(results["hybrids"], axis=0)
+        hybrid = np.stack(hybrids, axis=0)
         classification_hybrid = self.run_inference(hybrid)
         score_change = classification_hybrid[:, y_t] - classification_real[y_t]
         results["score_change"] = score_change
@@ -310,7 +309,7 @@ class BaseEvaluator:
             results["mask_sizes"], results["score_change"]
         )
         # Thresholding index
-        results["optimal_threshold"] = results["thresholds"][optimal_threshold_index]
+        results["optimal_threshold"] = results["thresholds"][optimal_index]
         results["mask"] = masks[optimal_index]
         results["hybrid"] = hybrids[optimal_index]
         predictions["counterfactual"] = classification_hybrid[optimal_index]
@@ -338,27 +337,36 @@ class Evaluator(BaseEvaluator):
         self,
         classifier,
         source_directory,
-        counterfactual_directory,
+        generated_directory,
         attribution_directory,
         transform=None,
         num_thresholds=200,
         device=None,
+        mask_output_dir=None,
+        counterfactual_output_dir=None,
     ):
         # Check that they all exist
         for directory in [
             source_directory,
-            counterfactual_directory,
+            generated_directory,
             attribution_directory,
         ]:
             if not Path(directory).exists():
                 raise FileNotFoundError(f"Directory {directory} does not exist")
 
         super().__init__(
-            classifier, None, None, None, num_thresholds=num_thresholds, device=device
+            classifier,
+            None,
+            None,
+            None,
+            num_thresholds=num_thresholds,
+            device=device,
+            mask_output_dir=mask_output_dir,
+            counterfactual_output_dir=counterfactual_output_dir,
         )
         self.transform = transform
         self.source_directory = source_directory
-        self.counterfactual_directory = counterfactual_directory
+        self.generated_directory = generated_directory
         self.attribution_directory = attribution_directory
 
     @property
@@ -370,9 +378,7 @@ class Evaluator(BaseEvaluator):
     @property
     def counterfactual_dataset(self):
         # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = ConvertedDataset(
-            self.counterfactual_directory, transform=self.transform
-        )
+        dataset = ConvertedDataset(self.generated_directory, transform=self.transform)
         return dataset
 
     @property
@@ -380,7 +386,7 @@ class Evaluator(BaseEvaluator):
         # NOTE: Recomputed each time, but should be used sparingly.
         dataset = PairedImageDataset(
             self.source_directory,
-            self.counterfactual_directory,
+            self.generated_directory,
             transform=self.transform,
         )
         return dataset
@@ -389,295 +395,8 @@ class Evaluator(BaseEvaluator):
     def dataset_with_attribution(self):
         dataset = PairedWithAttribution(
             self.source_directory,
-            self.counterfactual_directory,
+            self.generated_directory,
             self.attribution_directory,
             transform=self.transform,
         )
         return dataset
-
-
-class FinalReport:
-    """
-    Collates and stores the (best) results from multiple reports.
-    """
-
-    def __init__(self, reports, transform=None, classifier=None, output_dir=None):
-        """
-        Initialize the final report with a dictionary of reports.
-        To read reports from a directory, use `Final_report.from_directory` instead.
-
-        Parameters
-        ----------
-        reports: dict
-            A dictionary mapping method names to their respective reports.
-        transform: callable, optional
-            A transform to be applied to the images when loading them.
-            This can be used, for example, to crop the images to a specific size.
-        classifier: nn.Module, optional
-            A classifier to be used for the evaluation.
-        output_dir: str, optional
-            A directory where the masks and counterfactuals will be saved on-the-fly.
-            If None, they will not be saved.
-        """
-        self._reports = reports
-        self._final_report = None
-        self._processor = Processor()
-        self._classifier = classifier
-        self._output_dir = output_dir
-        self.transform = transform
-
-    @property
-    def final_report(self):
-        if self._final_report is None:
-            logging.warning("Merging reports to create final report.")
-            self._final_report = self._merge()
-        return self._final_report
-
-    @classmethod
-    def from_directory(cls, eval_directory, **kwargs):
-        """
-        Find and load all reports in a given directory.
-
-        Parameters
-        ----------
-        eval_directory: str
-            Path to the directory used for QuAC evaluation.
-            We expect it to be organized as follows:
-
-            ```
-            eval_directory/
-                method/
-                    report.json
-                method2/
-                    report.json
-            ```
-
-        kwargs: additional arguments to be passed to the FinalReport constructor.
-
-        Returns
-        -------
-        reports: dict
-            A dictionary mapping method names to their respective reports.
-        """
-        reports = {}
-        # Search for all json files in the directory or any subdirectory
-        for json_file in Path(eval_directory).rglob("*.json"):
-            name = str(json_file.parent)
-            report = Report(name=name)
-            try:
-                report.load(json_file)
-                reports[report.name] = report
-            except KeyError:
-                logging.warning(f"Could not load {json_file}, not a valid report.")
-        return FinalReport(reports, **kwargs)
-
-    def _merge(self):
-        """
-        Merge all available reports into a single, final report.
-        This chooses the best attribution method for each sample, based on the QuAC score.
-        It also sorts the samples by QuAC score.
-        """
-        # Create a dataframe with all of the QuAC scores
-        quac_scores = pd.DataFrame(
-            {method: report.quac_scores for method, report in self._reports.items()}
-        )
-        # Get the report "name" with the highest QuAC score for each sample
-        best_methods = quac_scores.idxmax(axis=1)  # This is a pandas Series
-        # Add the QuAC score, turning it into a pandas DataFrame
-        best_methods = pd.DataFrame(best_methods, columns=["method"])
-        best_methods["quac_score"] = quac_scores.max(axis=1)
-
-        # Sort the samples by QuAC score
-        best_methods = best_methods.sort_values("quac_score", ascending=False)
-
-        # Merge all reports into a single one
-        final_report = Report(name="final")
-        final_report.quac_scores = best_methods["quac_score"].tolist()
-        # Store the best results for each sample
-        for idx, row in best_methods.iterrows():
-            report = self._reports[row["method"]]
-            final_report.paths.append(report.paths[idx])
-            final_report.target_paths.append(report.target_paths[idx])
-            final_report.labels.append(report.labels[idx])
-            final_report.target_labels.append(report.target_labels[idx])
-            final_report.predictions.append(report.predictions[idx])
-            final_report.target_predictions.append(report.target_predictions[idx])
-            final_report.attribution_paths.append(report.attribution_paths[idx])
-            final_report.thresholds.append(report.thresholds[idx])
-            final_report.normalized_mask_sizes.append(report.normalized_mask_sizes[idx])
-            final_report.score_changes.append(report.score_changes[idx])
-
-        # Add an empty column for the computed values
-        final_report.counterfactual_predictions = [None] * len(final_report.paths)
-        final_report.counterfactual_paths = [None] * len(final_report.paths)
-        final_report.mask_paths = [None] * len(final_report.paths)
-
-        # The data in the final report is now sorted by QuAC score
-        return final_report
-
-    @lru_cache(maxsize=10)
-    def get_query(self, item: int) -> torch.Tensor:
-        """
-        Get the query image for a given explanation.
-        """
-        query_path = self.final_report.paths[item]
-        return self.read_image(query_path)
-
-    def get_query_prediction(self, item: int) -> torch.Tensor:
-        """
-        Get the classifier output for the query image.
-        """
-        return self.final_report.predictions[item]
-
-    @lru_cache(maxsize=10)
-    def get_generated(self, item: int) -> torch.Tensor:
-        """
-        Get the generated image for a given explanation.
-        """
-        generated_path = self.final_report.target_paths[item]
-        return self.read_image(generated_path)
-
-    @lru_cache(maxsize=10)
-    def get_mask(self, item: int) -> torch.Tensor:
-        """
-        Get the mask for a given explanation, using the attribution and the threshold.
-        """
-        try:
-            mask_path = self.final_report.mask_paths[item]
-            mask = np.load(mask_path)
-        except (KeyError, ValueError, TypeError):  # path is "None", or not defined
-            # Get the attribution
-            attribution_path = self.final_report.attribution_paths[item]
-            attribution = np.load(attribution_path)
-            # Get the threshold
-            threshold = self.final_report.get_optimal_threshold(item)
-            # process the attribution to get the mask
-            mask, _ = self._processor.create_mask(attribution, threshold)
-            self.save_mask(mask, item)
-        return mask
-
-    def save_mask(self, mask, item):
-        """
-        Save the mask to disk, if an output directory is provided.
-        Else, do nothing.
-        """
-        if self._output_dir is not None:
-            source_label = self.final_report.labels[item]
-            target_label = self.final_report.target_labels[item]
-            name = self.final_report.attribution_paths[item].name
-            output_dir = Path(self._output_dir) / f"masks/{source_label}/{target_label}"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / name
-            np.save(output_path, mask)
-            if "mask_paths" not in self.final_report.__dict__:
-                self.final_report.mask_paths = [None] * len(
-                    self.final_report.attribution_paths
-                )
-            self.final_report.mask_paths[item] = output_path
-        else:
-            logging.info("No output directory provided, not saving mask to disk.")
-
-    @lru_cache(maxsize=10)
-    def get_counterfactual(self, item: int) -> torch.Tensor:
-        """
-        Get the counterfactual image for a given explanation.
-        """
-        try:
-            counterfactual_path = self.final_report.counterfactual_paths[item]
-            counterfactual = self.read_image(counterfactual_path)
-        except (KeyError, ValueError, OSError):  # path is "None", or not defined
-            query = self.get_query(item)
-            generated = self.get_generated(item)
-            mask = self.get_mask(item)
-            counterfactual = query * (1 - mask) + generated * mask
-            self.save_counterfactual(counterfactual, item)
-        return counterfactual
-
-    def save_counterfactual(self, counterfactual, item):
-        """
-        Save the counterfactual image to disk, if an output directory is provided.
-        Else, do nothing.
-        """
-        if self._output_dir is not None:
-            source_label = self.final_report.labels[item]
-            target_label = self.final_report.target_labels[item]
-            name = self.final_report.paths[item].name
-            output_dir = (
-                Path(self._output_dir)
-                / f"counterfactuals/{source_label}/{target_label}"
-            )
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / name
-            write_image(counterfactual, output_path)
-            # Add path to final report
-            if "counterfactual_paths" not in self.final_report.__dict__:
-                self.final_report.counterfactual_paths = [None] * len(
-                    self.final_report.paths
-                )
-            self.final_report.counterfactual_paths[item] = output_path
-        else:
-            logging.info(
-                "No output directory provided, not saving counterfactual to disk."
-            )
-
-    def get_counterfactual_prediction(self, item: int) -> Union[torch.Tensor, None]:
-        """
-        Get the classifier output for the counterfactual image.
-        We first check if this has already been computed and stored in the final report.
-        If not, we check if the classifier is provided and compute the output.
-        Else, we return None.
-        """
-        counterfactual_prediction = self.final_report.counterfactual_predictions[item]
-        if counterfactual_prediction is None and self._classifier is not None:
-            device = next(self._classifier.parameters()).device
-            counterfactual = self.get_counterfactual(item)
-            with torch.no_grad():
-                counterfactual_prediction = (
-                    self._classifier(counterfactual[None, :].to(device)).cpu().detach()
-                )
-            counterfactual_prediction = F.softmax(counterfactual_prediction, dim=1)[0]
-            self.final_report.counterfactual_predictions[item] = (
-                counterfactual_prediction
-            )
-        return counterfactual_prediction
-
-    def __getitem__(self, item):
-        """
-        Parameters
-        ----------
-        item: int
-            Index of the explanation to return. The samples are ordered by QuAC score from best to worst.
-
-        Returns
-        -------
-        query: torch.Tensor
-            The query image for the explanation.
-        counterfactual: torch.Tensor
-            The counterfactual image for the explanation.
-            This is generated by merging the query and the generated image, using the mask.
-        mask: torch.Tensor
-            The mask used to generate the counterfactual image.
-            This is a binary mask with the same size as the query image, including the channel dimension.
-            Pixels that are masked-in (1) are taken from the generated image.
-            Pixels that are masked-out (0) are taken from the query image.
-        query_prediction: torch.Tensor
-            The classifier output (softmaxxed) for the query image.
-        counterfactual_prediction: torch.Tensor
-            The classifier output (softmaxxed) for the counterfactual image.
-        source_class: int
-            The index of the source class for the explanation.
-        target_class: int
-            The index of the target class for the explanation.
-        quac_score: float
-            The QuAC score for the explanation.
-        """
-        return {
-            "query": self.get_query(item),
-            "counterfactual": self.get_counterfactual(item),
-            "mask": self.get_mask(item),
-            "query_prediction": self.get_query_prediction(item),
-            "counterfactual_prediction": self.get_counterfactual_prediction(item),
-            "source_class": self.final_report.labels[item],
-            "target_class": self.final_report.target_labels[item],
-            "quac_score": self.final_report.quac_scores[item],
-        }
