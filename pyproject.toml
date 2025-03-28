@@ -17,7 +17,7 @@ authors = [
 dynamic = ["version"]
 dependencies = [
   "captum",
-  "numpy",
+  "numpy>=2.0",
   "munch",
   "torch",
   "torchvision",
