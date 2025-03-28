@@ -6,7 +6,7 @@ requires = ["setuptools", "wheel"]
 name = "quac"
 description = "Quantitative Attribution with Counterfactuals"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 classifiers = ["Programming Language :: Python :: 3"]
 keywords = []
 license = { text = "BSD 3-Clause License" }
@@ -25,9 +25,9 @@ dependencies = [
   "opencv-python",
   "pydantic",
   "scipy",
-  "scikit-learn", 
-  "imageio>=2.37.0,<3", 
-  "scikit-image>=0.24.0,<0.25", 
+  "scikit-learn",
+  "imageio>=2.37.0,<3",
+  "scikit-image>=0.24.0,<0.25",
   "pandas>=2.2.3,<3",
 ]
 
@@ -50,7 +50,7 @@ docs = [
 ]
 
 [project.urls]
-homepage = "https://github.com/funkelab/quac"
+homepage = "https://funkelab.github.io/quac/"
 repository = "https://github.com/funkelab/quac"
 
 [tool.pixi.project]
