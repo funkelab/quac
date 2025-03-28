@@ -48,7 +48,7 @@ def read_image(path: str) -> torch.Tensor:
     return image
 
 
-def write_image(image: torch.Tensor, path: str) -> None:
+def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
     """Writes an image to a file path.
 
     Parameters
@@ -65,6 +65,8 @@ def write_image(image: torch.Tensor, path: str) -> None:
     If the file is a JPEG or a PNG, the image will scaled to `[0, 255]` and converted to `np.uint8`.
     Else, the image will be saved as a float32.
     """
+    if isinstance(path, str):
+        path = Path(path)
     assert image.dtype == torch.float32, "Image must be of type float32"
     # convert to numpy
     image = image.permute(1, 2, 0).numpy()  # CHW to HWC
@@ -81,7 +83,7 @@ def write_image(image: torch.Tensor, path: str) -> None:
             image = (image - min_vals) / (max_vals - min_vals)
     # Now, data is in `[0, 1]`
     # Check output data type, based on the file format
-    if path.split(".")[-1] in ["jpg", "jpeg", "png", "PNG", "JPG", "JPEG"]:
+    if path.suffix in [".jpg", ".jpeg", ".png", ".PNG", ".JPG", ".JPEG"]:
         image = (image * 255).astype(np.uint8)
     imageio.imwrite(path, image)
 
