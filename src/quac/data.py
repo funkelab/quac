@@ -48,7 +48,7 @@ def read_image(path: str) -> torch.Tensor:
     return image
 
 
-def write_image(image: torch.Tensor, path: str) -> None:
+def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
     """Writes an image to a file path.
 
     Parameters
@@ -65,6 +65,8 @@ def write_image(image: torch.Tensor, path: str) -> None:
     If the file is a JPEG or a PNG, the image will scaled to `[0, 255]` and converted to `np.uint8`.
     Else, the image will be saved as a float32.
     """
+    if isinstance(path, str):
+        path = Path(path)
     assert image.dtype == torch.float32, "Image must be of type float32"
     # convert to numpy
     image = image.permute(1, 2, 0).numpy()  # CHW to HWC
@@ -81,7 +83,7 @@ def write_image(image: torch.Tensor, path: str) -> None:
             image = (image - min_vals) / (max_vals - min_vals)
     # Now, data is in `[0, 1]`
     # Check output data type, based on the file format
-    if path.split(".")[-1] in ["jpg", "jpeg", "png", "PNG", "JPG", "JPEG"]:
+    if path.suffix in [".jpg", ".jpeg", ".png", ".PNG", ".JPG", ".JPEG"]:
         image = (image * 255).astype(np.uint8)
     imageio.imwrite(path, image)
 
@@ -382,12 +384,12 @@ class Sample:
 
 # TODO remove?
 @dataclass
-class CounterfactualSample:
-    counterfactual: torch.Tensor
+class ConvertedSample:
+    generated: torch.Tensor
     target_class_index: int
     source_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -395,11 +397,11 @@ class CounterfactualSample:
 @dataclass
 class PairedSample:
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -408,11 +410,11 @@ class PairedSample:
 class SampleWithAttribution:
     attribution: np.ndarray
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
     attribution_path: Optional[Path] = None
@@ -483,9 +485,9 @@ class PairedImageDataset(Dataset):
             target_sample = self.transform(target_sample)
         output = PairedSample(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             source_class_index=class_index,
             target_class_index=target_class_index,
             source_class=self.classes[class_index],
@@ -497,7 +499,7 @@ class PairedImageDataset(Dataset):
         return len(self.samples)
 
 
-class CounterfactualDataset(Dataset):
+class ConvertedDataset(Dataset):
     def __init__(self, counterfactual_directory, transform=None, allow_empty=True):
         classes, class_to_idx = find_classes(counterfactual_directory)
         self.classes = classes
@@ -515,9 +517,9 @@ class CounterfactualDataset(Dataset):
         sample = default_loader(path)
         if self.transform is not None:
             sample = self.transform(sample)
-        output = CounterfactualSample(
-            counterfactual_path=Path(path),
-            counterfactual=sample,
+        output = ConvertedSample(
+            generated_path=Path(path),
+            generated=sample,
             source_class_index=source_class_index,
             source_class=self.classes[source_class_index],
             target_class_index=target_class_index,
@@ -576,10 +578,10 @@ class PairedWithAttribution(Dataset):
 
         output = SampleWithAttribution(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             attribution_path=Path(attribution_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             attribution=attribution,
             source_class_index=class_index,
             target_class_index=target_class_index,

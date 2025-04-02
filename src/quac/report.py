@@ -2,22 +2,55 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+from quac.explanation import Explanation, explanation_encoder
 from scipy.interpolate import interp1d
-import torch
-from tqdm import tqdm
-import warnings
+import logging
+
+
+def merge_reports(reports, **kwargs):
+    """
+    Merge all available reports into a single, final report.
+    This chooses the best attribution method for each sample, based on the QuAC score.
+    It also sorts the samples by QuAC score.
+    """
+    # Make sure that each report has the same number of samples
+    num_samples = len(reports[list(reports.keys())[0]])
+    for name, report in reports.items():
+        if len(report) != num_samples:
+            raise ValueError(
+                f"Reports have different number of samples: {len(report)} vs {num_samples}"
+            )
+
+    final_report = Report(**kwargs)
+    for i in range(num_samples):
+        options = [report[i] for report in reports.values()]  # Gets you an explanation
+        # Select one explanation for each sample, based on the QuAC score
+        best_explanation = max(options, key=lambda x: x.score)
+        best_explanation.method = name
+        final_report.explanations.append(best_explanation)
+
+    # Sort the items in the final report by QuAC score, from highest to lowest
+    final_report.explanations.sort(key=lambda x: x.score, reverse=True)
+    # The data in the final report is now sorted by QuAC score
+    return final_report
 
 
 class Report:
     """This class stores the results of the evaluation.
 
-    It contains the following information for each accumulated sample:
-    - Thresholds: the thresholds used to generate masks from the attribution
-    - Mask sizes: the size of the mask generated from the attribution, in pixels
-    - Normed mask sizes: the size of the mask generated from the attribution, normalized between 0 and 1
-    - Scores: the change in classification score for each threshold
+    The report combines a set of Explanation objects, and can be used to store and load them from disk.
+    It also has several filtering methods, to help interact with the results.
 
-    Optionally, it also stores the hybrids generated for each threshold.
+    For example, given the output of the QuAC evaluation, stored in a directory, we can do the following:
+    ```
+    report = Report.from_directory("eval_directory", name="final_report")
+
+    # Select a specific source and target, and look at the QuAC curve
+    report.from_source(0).to_target(1).plot_curve()
+
+    # OR select the top 10 explanations for the conversion from 0 to 1 and store them
+    report.from_source(0).to_target(1).top_n(10).store("top_10_explanations")
+    ```
     """
 
     def __init__(self, name=None, metadata={}):
@@ -25,47 +58,16 @@ class Report:
             self.name = "report"
         else:
             self.name = name
-        # Shows where the attribution is, if needed
-        # TODO check that the metadata is JSON serializable
         self.metadata = metadata
         # Initialize as empty
-        self.paths = []
-        self.target_paths = []
-        self.labels = []
-        self.target_labels = []
-        # Predictions/Classifier output
-        self.predictions = []
-        self.target_predictions = []
-        # Evaluations/Attribution outputs
-        self.attribution_paths = []
-        self.thresholds = []
-        self.normalized_mask_sizes = []
-        self.score_changes = []
-        # QuAC scores
-        self.quac_scores = None
-        # Initialize interpolation values
+        self.explanations = []
         self.interp_mask_values = np.arange(0.0, 1.0001, 0.01)
 
-    def accumulate(self, inputs, predictions, evaluation_results):
-        """
-        Store a new result.
-        If `save_intermediates` is `True`, the hybrids are stored to disk.
-        Otherwise they are discarded.
-        """
-        # Store the input information
-        self.paths.append(inputs.path)
-        self.target_paths.append(inputs.counterfactual_path)
-        self.labels.append(inputs.source_class_index)
-        self.target_labels.append(inputs.target_class_index)
-        self.attribution_paths.append(inputs.attribution_path)
-        # Store the prediction results
-        self.predictions.append(predictions["original"])
-        self.target_predictions.append(predictions["counterfactual"])
-        # Store the evaluation results
-        self.thresholds.append(evaluation_results["thresholds"])
-        self.normalized_mask_sizes.append(evaluation_results["mask_sizes"])
-        self.score_changes.append(evaluation_results["score_change"])
-        # TODO Store the hybrids to disk ?
+    def __len__(self):
+        return len(self.explanations)
+
+    def __getitem__(self, idx):
+        return self.explanations[idx]
 
     def interpolate_score_values(self, normalized_mask_sizes, score_changes):
         """Computes the score changes interpolated at the desired mask sizes"""
@@ -82,102 +84,73 @@ class Report:
         We use the interpolated mask and score values to compute the QuAC score.
         """
         # QuAC score = AUC of above x-y values
-        quac_score = np.trapz(interp_score_values, self.interp_mask_values)
+        quac_score = np.trapezoid(interp_score_values, self.interp_mask_values)
         return quac_score
 
-    def compute_scores(self):
-        """Compute all QuAC scores"""
-        if self.quac_scores is None:
-            quac_scores = []
-            for normalized_mask_sizes, score_changes in tqdm(
-                zip(self.normalized_mask_sizes, self.score_changes),
-                total=len(self.normalized_mask_sizes),
-            ):
-                interp_score_values = self.interpolate_score_values(
-                    normalized_mask_sizes, score_changes
-                )
-                quac_scores.append(self.get_quac_score(interp_score_values))
-            self.quac_scores = quac_scores
-        return self.quac_scores
-
-    def make_json_serializable(self, obj):
-        """Make an object JSON serializable"""
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, torch.Tensor):
-            return obj.cpu().numpy().tolist()
-        elif isinstance(obj, Path):
-            return str(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, (list, tuple)):
-            return [self.make_json_serializable(x) for x in obj]
-        return obj
+    def accumulate(self, inputs, predictions, evaluation_results):
+        """
+        Store a new result.
+        """
+        quac_score = self.get_quac_score(
+            self.interpolate_score_values(
+                evaluation_results["mask_sizes"], evaluation_results["score_change"]
+            )
+        )
+        explanation = Explanation(
+            query_path=str(inputs.path),
+            counterfactual_path=str(evaluation_results["counterfactual_path"]),
+            mask_path=str(evaluation_results["mask_path"]),
+            query_prediction=predictions["original"],
+            counterfactual_prediction=predictions["counterfactual"],
+            source_class=inputs.source_class_index,
+            target_class=inputs.target_class_index,
+            score=quac_score,
+            attribution_path=str(inputs.attribution_path),
+            generated_path=str(inputs.generated_path),
+            generated_prediction=predictions["generated"],
+            normalized_mask_sizes=evaluation_results["mask_sizes"],
+            score_changes=evaluation_results["score_change"],
+            optimal_threshold=evaluation_results.get("optimal_threshold", None),
+        )
+        self.explanations.append(explanation)
 
     def store(self, save_dir):
-        """Store report to disk"""
-        if self.quac_scores is None:
-            self.compute_scores()
+        """Store the report in a JSON file."""
+        output = {
+            "name": self.name,
+            "metadata": self.metadata,
+            "results": self.explanations,
+        }
         save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
-        with open(save_dir / f"{self.name}.json", "w") as fd:
-            json.dump(
-                {
-                    "metadata": self.metadata,
-                    "thresholds": self.make_json_serializable(self.thresholds),
-                    "normalized_mask_sizes": self.make_json_serializable(
-                        self.normalized_mask_sizes
-                    ),
-                    "score_changes": self.make_json_serializable(self.score_changes),
-                    "paths": self.make_json_serializable(self.paths),
-                    "target_paths": self.make_json_serializable(self.target_paths),
-                    "labels": self.make_json_serializable(self.labels),
-                    "target_labels": self.make_json_serializable(self.target_labels),
-                    "predictions": self.make_json_serializable(self.predictions),
-                    "target_predictions": self.make_json_serializable(
-                        self.target_predictions
-                    ),
-                    "attribution_paths": self.make_json_serializable(
-                        self.attribution_paths
-                    ),
-                    "quac_scores": self.make_json_serializable(self.quac_scores),
-                },
-                fd,
-            )
+        with open(save_dir / f"{self.name}.json", "w") as json_file:
+            json.dump(output, json_file, default=explanation_encoder)
 
     def load(self, filename):
         """Load report from disk"""
         with open(filename, "r") as fd:
             data = json.load(fd)
             self.metadata = data.get("metadata", {})
-            self.thresholds = data["thresholds"]
-            self.normalized_mask_sizes = data["normalized_mask_sizes"]
-            self.score_changes = data["score_changes"]
-            self.paths = data.get("paths", [])
-            self.target_paths = data.get("target_paths", [])
-            self.labels = data.get("labels", [])
-            self.target_labels = data.get("target_labels", [])
-            self.predictions = data.get("predictions", [])
-            self.target_predictions = data.get("target_predictions", [])
-            self.attribution_paths = data.get("attribution_paths", [])
-            self.quac_scores = data.get("quac_scores", None)
+            self.name = data.get("name", "default_report")
+            self.explanations = [Explanation(**result) for result in data["results"]]
 
     def get_curve(self):
         """Gets the median and IQR of the QuAC curve"""
-        # TODO Cache the results, takes forever otherwise
+        # TODO explanation might not have the right attributes
+        # -- maybe remove this from this class and make it a utility function instead
         plot_values = []
-        for normalized_mask_sizes, score_changes in zip(
-            self.normalized_mask_sizes, self.score_changes
-        ):
+        normalized_mask_sizes = [
+            explanation._normalized_mask_sizes for explanation in self.explanations
+        ]
+        score_changes = [
+            explanation._score_changes for explanation in self.explanations
+        ]
+        for normalized_mask, score_change in zip(normalized_mask_sizes, score_changes):
             interp_score_values = self.interpolate_score_values(
-                normalized_mask_sizes, score_changes
+                normalized_mask, score_change
             )
             plot_values.append(interp_score_values)
         plot_values = np.array(plot_values)
-        # mean = np.mean(plot_values, axis=0)
-        # std = np.std(plot_values, axis=0)
         median = np.median(plot_values, axis=0)
         p25 = np.percentile(plot_values, 25, axis=0)
         p75 = np.percentile(plot_values, 75, axis=0)
@@ -203,49 +176,89 @@ class Report:
         if ax is None:
             plt.show()
 
-    def optimal_thresholds(self, min_percentage=0.0):
-        """Get the optimal threshold for each sample
+    # Filtering functions
+    def from_source(self, source_class, name=None) -> "Report":
+        """
+        Create a Report containing only the explanations with the given source class.
+        """
+        filtered_report = Report(name=name)
+        filtered_report.explanations = [
+            explanation
+            for explanation in self.explanations
+            if explanation.source_class == source_class
+        ]
+        return filtered_report
 
-        The optimal threshold has a minimal mask size, and maximizes the score change.
-        We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.
+    def to_target(self, target_class, name=None) -> "Report":
+        """
+        Create a filtered Report containing only the explanations with the given target class.
+        """
+        filtered_report = Report(name=name)
+        filtered_report.explanations = [
+            explanation
+            for explanation in self.explanations
+            if explanation.target_class == target_class
+        ]
+        return filtered_report
+
+    def score_threshold(self, threshold, name=None) -> "Report":
+        """
+        Create a filtered Report containing only the explanations with a QuAC score above the given threshold.
+        """
+        filtered_report = Report(name=name)
+        filtered_report.explanations = [
+            explanation
+            for explanation in self.explanations
+            if explanation.score > threshold
+        ]
+        return filtered_report
+
+    def top_n(self, n, name=None) -> "Report":
+        """
+        Create a filtered Report containing only the top n explanations.
+        """
+        filtered_report = Report(name=name)
+        filtered_report.explanations = sorted(
+            self.explanations, key=lambda x: x.score, reverse=True
+        )[:n]
+        return filtered_report
+
+    @classmethod
+    def from_directory(cls, eval_directory, **kwargs) -> "Report":
+        """
+        Find and load all reports in a given directory, merging them into a single report.
+        The best attribution method for each sample is chosen based on the QuAC score.
+        The final report selects only the best results for each sample and sorts them by QuAC score.
 
         Parameters
         ----------
-        min_percentage: float
-            The optimal threshold chosen needs to account for at least this percentage of total score change.
-            Increasing this value will favor high percentage changes even when they require larger masks.
+        eval_directory: str
+            Path to the directory used for QuAC evaluation.
+            We expect it to be organized as follows:
+
+            ```
+            eval_directory/
+                method/
+                    report.json
+                method2/
+                    report.json
+            ```
+
+        kwargs: additional arguments to be passed to the Report constructor, specifying the name and metadata.
+
+        Returns
+        -------
+        reports: dict
+            A dictionary mapping method names to their respective reports.
         """
-        mask_scores = np.array(self.score_changes)
-        mask_sizes = np.array(self.normalized_mask_sizes)
-        thresholds = np.array(self.thresholds)
-        tradeoff_scores = np.abs(mask_sizes) - mask_scores
-        # Determine what to ignore
-        if min_percentage > 0.0:
-            min_value = np.min(mask_scores, axis=1)
-            max_value = np.max(mask_scores, axis=1)
-            threshold = min_value + min_percentage * (max_value - min_value)
-            below_threshold = mask_scores < threshold[:, None]
-            tradeoff_scores[below_threshold] = (
-                np.inf
-            )  # Ignores the points with not enough score change
-        threshold_idx = np.argmin(tradeoff_scores, axis=1)
-
-        optimal_thresholds = np.take_along_axis(
-            thresholds, threshold_idx[:, None], axis=1
-        ).squeeze()
-        return optimal_thresholds
-
-    def get_optimal_threshold(self, index, return_index=False):
-        # TODO Deprecate, use vectorized version!
-        warnings.warn(
-            "This function is deprecated, please use the vectorized version instead.",
-            DeprecationWarning,
-        )
-        mask_scores = np.array(self.score_changes[index])
-        mask_sizes = np.array(self.normalized_mask_sizes[index])
-
-        pareto_scores = mask_sizes**2 + (1 - mask_scores) ** 2
-        threshold_idx = np.argmin(pareto_scores)
-        if return_index:
-            return self.thresholds[index][threshold_idx], threshold_idx
-        return self.thresholds[index][threshold_idx]
+        reports = {}
+        # Search for all json files in the directory or any subdirectory
+        for json_file in Path(eval_directory).rglob("*.json"):
+            name = str(json_file.parent)
+            report = Report(name=name)
+            try:
+                report.load(json_file)
+                reports[report.name] = report
+            except KeyError:
+                logging.warning(f"Could not load {json_file}, not a valid report.")
+        return merge_reports(reports, **kwargs)

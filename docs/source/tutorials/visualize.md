@@ -1,182 +1,151 @@
-# Visualizing the results
+# Interacting with QuAC results
 
-This guide will let you look at the best explanations you have generated, and discover interesting features in your data.
-We recommend copying the code blocks into a `jupyter` notebook, and using it interactively.
+Once you've run QuAC on your data, how do you interact with the results? 
+The main two objects that you will be interacting with are `Report` and `Explanation`. 
+This guide will walk you through some of the options that you have in interacting with these objects, and what you can get out of them.
 
-## Setup
+## The `Report`
 
-```{code-block} python
-report_directory = "/path/to/report/directory/"
-classifier_checkpoint = "/path/to/classifier/model.pt"
-```
-
-## Reports
-Let's start by loading the reports obtained in the previous step.
+The output of the previous (evaluation) step of QuAC is a `Report`, stored on disk in JSON format. 
+There is one report per attribution method, and they can be loaded directly from their path:
 
 ```{code-block} python
-:linenos:
-
 from quac.report import Report
 
-reports = {
-    method: Report(name=method)
-    for method in [
-        "discriminative_deeplift",
-        "discriminative_ig",
-    ]
-}
-
-for method, report in reports.items():
-    report.load(report_directory + method + "/default.json")
+report = Report("/path/to/report/file.json")
 ```
 
-Next, we can plot the QuAC curves for each method.
-This allows us to get an idea of how well each method is performing, overall.
+However we will generally want to merge all of the evaluations together to pick the best option for each sample. QuAC has a way to do this too:
 
 ```{code-block} python
-:linenos:
+from quac.report import Report
 
-import matplotlib.pyplot as plt
-
-fig, ax = plt.subplots()
-for method, report in reports.items():
-    report.plot_curve(ax=ax)
-# Add the legend
-plt.legend()
-plt.show()
+report = Report.from_directory("/path/to/report/directory/")
 ```
 
-The plots show the mean and interquartile range of QuAC curves for all examples in your testing dataset. The closer the curve gets to the upper left corner, the better.
+Here, we provide the path to a parent directory holding all reports. They can be in sub-directories, as is default for QuAC. This function will take some time to run, but will also return a `Report` object.
 
-## Choosing the best attribution method for each sample
+<details><summary> What happens in <tt>from_directory</tt>?</summary>
+QuAC with crawl through the directory and all of its sub-directories looking for JSON files, and try to load them as reports. Do not worry if there are JSON files in there that are *not* QuAC reports: you should see a warning for each of these files saying that it could not be loaded, but this should not impede the process.
 
-While one attribution method may be better than another on average, we can select the best method for each example on a case-by-case basis. 
-We can do this by comparing the QuAC scores per-image, and choosing the best of our options.
+After all the files have been loaded, this report will then filter through them, selecting the best possible option out of all attribution methods for each `query` image considered in the report. It will then order all of the samples by QuAC score.
+
+In the end, you get a final `Report` describing only the best explanations. 
+
+</details>
+<br>
+
+### Filtering the report
+The `Report` contains information for every source-target class pair, and the whole range of QuAC scores even some which you may not want.
+However, there are some standardized way of filtering these results to whatever it may be that you are looking for.
+
+For example: 
+- Selecting a specific source class, *e.g.* `0`: `report.from_source(0)`
+- Selecting a specific target class, *e.g.* `1`: `report.to_target(1)`
+- Thresholding only high scores: `report.score_threshold(0.9)`
+- Selecting only the best 10 samples, by QuAC score: `report.top_n(10)`
+
+These functions are all composable, and return filtered down `Report` object, so you can do something like choosing the 5 best explanations for the translation from source 2 to target 1 like this: 
+```{code-block} python
+filtered_report = report.from_source(2).to_target(1).top_n(5)
+```
+
+### Storing reports
+
+You may want to store filtered, combined, or otherwise modified reports so that you don't need to re-compute them.
+You can store a report to a particular output directory.
+The file *name* will be the same as the `report.name`, which you can set freely.
+For example:
+```{code-block} python
+filtered_report.name = "from_2_to_1_top_5"
+filtered_report.store("/path/to/directory")
+```
+
+The filtered report will then be found at `/path/to/directory/from_2_to_1_top_5.json`.
+
+
+## The `Explanation` objects
+
+The main purpose of a `Report` is to hold and organize a series of `Explanation` objects. 
+You can find out how many of these `Explanation` objects your report holds using `len(report)`.
+These can be accessed very simply by indexing, *e.g.* `report[0]`.
+
+Each `Explanation` holds the following information: 
+- a `query` tensor
+- a `counterfactual` tensor
+- a `mask` tensor, showing where `query` and `counterfactual` differ
+- a `source_class` integer label for the annotated class of the query
+- a `target_class` integer label for the desired class for the counterfactual
+- a `query_prediction` tensor: the output of the classifier on the query
+- a `counterfactual_prediction` tensor: the output of the classifier on the counterfactual
+- a `score`, the QuAC score for this particular explanation
+
+The image and mask tensors are `torch.Tensor` objects, stored in `C,H,W` order. 
+Generally, you will want to look at the images, with or without a mask overlay. 
+You can use your favorite python plotting library to do so. 
+For example, with `matplotlib`, the following function can be used to plot the explanation of your choice:
 
 ```{code-block} python
-:linenos:
+def plot_explanation(explanation, show_mask=True):
+    """
+    Plot the query and counterfactual images in an explanation.
 
-quac_scores = pd.DataFrame(
-    {method: report.quac_scores for method, report in reports.items()}
-)
-best_methods = quac_scores.idxmax(axis=1)
-best_quac_scores = quac_scores.max(axis=1)
+    Plots a 2x2 grid, with the query in the top left corner, 
+    the counterfactual in the bottom left corner, 
+    and the predictions next to their corresponding image. 
+    The mask is overlaid depending on the value of `show_mask`.
+    The QuAC score is shown as a figure title.
+    """
+    fig, ((ax1, bax1), (ax2, bax2)) = plt.subplots(
+        2, 2, gridspec_kw={"width_ratios": [1, 0.2], "wspace": -0.4}
+    )
+
+    # Plot the query and its accompanying prediction
+    ax1.imshow(explanation.query.permute(1, 2, 0))
+    ax1.axis("off")
+    ax1.set_title(f"Query: {explanation.source_class}")
+    bax1.bar(
+        np.arange(len(explanation.query_prediction)), 
+        explanation.query_prediction, color="gray"
+    )
+
+    # Plot the counterfactual and its accompanying prediction
+    ax2.imshow(explanation.counterfactual.permute(1, 2, 0))
+    ax2.set_title(f"Counterfactual: {explanation.target_class}")
+    ax2.axis("off")
+    bax2.bar(
+        np.arange(len(explanation.counterfactual_prediction)),
+        explanation.counterfactual_prediction,
+        color="gray",
+    )
+
+    if show_mask:
+        # Show a color-agnostic mask
+        ax1.imshow(
+            explanation.mask.sum(0), 
+            alpha=0.3, 
+            cmap="coolwarm"
+        )
+        ax2.imshow(
+            explanation.mask.sum(0), 
+            alpha=0.3, 
+            cmap="coolwarm"
+        )
+
+    fig.tight_layout()
+    fig.suptitle(f"Score: {explanation.score:.2f}")
+    return
 ```
 
-## Choosing the best examples
-Next we want to choose the examples to look at.
-Examples with a high QuAC score will be better explanations of the classifier's decisions.
-We therefore order the images from best to worst.
-
-
-We choose to look at the 11th best example below (remember that python indexing starts at 0).
-You can change the `idx` to choose a better (smaller number) or worse (larger number) example if you wish.
+It can be used on all of the elements in the `filtered_report` above:
 
 ```{code-block} python
-:linenos:
-
-# Order the quac scores
-order = best_quac_scores.argsort()[::-1]
-# Choose your example
-idx = 10
-# Get the corresponding report
-report = reports[best_methods[order[idx]]]
+for i in range(len(filtered_report)):
+    plot_explanation(filtered_report[i], show_mask=True)
 ```
 
-## Looking at the corresponding images
-
-The `Report` holds the path to that example, and its pair in the `generated_images`. 
-It also holds the path to the `attribution` for that pair, which is stored as a `npy` file. 
-Finally, it holds the classification of both the original image and the generated image.
-
-```{code-block} python
-:linenos:
-
-from PIL import Image
-
-# Load the images
-image_path, generated_path = report.paths[order[idx]], report.target_paths[order[idx]]
-image, generated_image = Image.open(image_path), Image.open(generated_path)
-
-# Load the attribution
-attribution_path = report.attribution_paths[order[idx]]
-attribution = np.load(attribution_path)
-
-# Load the predictions for these images
-prediction = report.predictions[order[idx]]
-target_prediction = report.target_predictions[order[idx]]
-```
-
-## Getting the optimal mask
-The counterfactual image is created by masking in part of the generated image into the original.
-The mask we use can be made from the `attribution` via thresholding by a `Processor`.
-We can get the optimal threshold from the `Report`.
-
-```{code-block} python
-:linenos:
-
-from quac.evaluation import Processor
-
-thresh = report.optimal_thresholds()[order[idx]]
-processor = Processor()
-
-mask, _ = processor.create_mask(attribution, thresh)
-channel_last_mask = mask.transpose(1, 2, 0)
-
-counterfactual = np.array(generated_image) / 255 * channel_last_mask + np.array(image) / 255 * (1.0 - channel_last_mask)
-```
-
-Let's also get the classifier output for the counterfactual image.
-To do this, we need to begin by loading the classifier itself.
-Then, we pass our image to the classifier
-
-```{note}
-When generating the counterfactual image, we made sure that that its values are between `[0, 1]`. 
-Below we will normalize that image to fall within `[-1, 1]`, which is what we have assumed as default for the classifier so far. 
-If you decided to use other values for your own classifier, make sure to modify the `mean` and `std` accordingly, or write your own normalization function. 
-
-```
-
-```{code-block} python
-:linenos:
-
-import torch
-
-classifier = torch.jit.load(classifier_checkpoint)
-mean = 0.5
-std = 0.5
-
-counterfactual_tensor = torch.tensor(counterfactual).permute(2, 0, 1).float().unsqueeze(0).to(device)
-
-# Normalize
-counterfactual_tensor = (counterfactual - mean) * std
-
-classifier_output = classifier(counterfactual_tensor)
-counterfactual_prediction = softmax(classifier_output[0].detach().cpu().numpy())
-```
-
-## Visualizing the results
-Finally, let's plot the three images, their classifications, and the corresponding mask.
-
-```{code-block} python
-:linenos:
-
-fig, axes = plt.subplots(2, 4)
-axes[1, 0].imshow(image)
-axes[1, 0].set_xlabel("Original")
-axes[0, 0].bar(np.arange(len(prediction)), prediction)
-axes[1, 1].imshow(generated_image)
-axes[1, 1].set_xlabel("Generated")
-axes[0, 1].bar(np.arange(len(target_prediction)), target_prediction)
-axes[0, 2].bar(np.arange(len(counterfactual_prediction)), counterfactual_prediction)
-axes[1, 2].imshow(counterfactual)
-axes[1, 2].set_xlabel("Counterfactual)
-axes[1, 3].imshow(channel_last_mask)
-axes[0, 3].axis("off")
-fig.suptitle(f"QuAC Score: {report.quac_scores[order[idx]]:.2f}")
-plt.show()
-```
-
-You can now see the original image, the generated image, the counterfactual image, and the mask.
-By looking at the masked region in the original and the counterfactual, you will see the differences that are important to the classifier.
-From here, you can choose to visualize other examples, or save the images for later use.
+## Final comments
+You've made it to the end of the tutorial, and the beginning of a new set of discoveries.
+QuAC can show you where to look and what to look at... what it means is up to you to find out!
+To see how we extracted insights from QuAC outputs, we strongly encourage you to have a look at [the examples page](../examples.md) and [the pre-print](https://doi.org/10.1101/2024.11.26.625505). 
+[Reach out](mailto:adjavond%40hhmi.org?subject=QuAC%20Comments) for any questions, comments, or interesting insights you've discovered while using this method!

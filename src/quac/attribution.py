@@ -47,7 +47,7 @@ class BaseAttribution:
         Note that this also takes the absolute value of the attribution.
         Generally in this framework, we only care about the absolute value of the attribution,
         because if "negative changes" need to be made, this should be inherent in
-        the counterfactual image.
+        the generated image.
         """
         attribution = torch.abs(attribution)
         # We scale the attribution to be between 0 and 1, batch-wise
@@ -55,9 +55,7 @@ class BaseAttribution:
         max_vals = attribution.flatten(1).max(1)[0][:, None, None, None]
         return (attribution - min_vals) / (max_vals - min_vals)
 
-    def _attribute(
-        self, real_img, counterfactual_img, real_class, target_class, **kwargs
-    ):
+    def _attribute(self, real_img, generated_img, real_class, target_class, **kwargs):
         raise NotImplementedError(
             "The base attribution class does not have an attribute method."
         )
@@ -65,7 +63,7 @@ class BaseAttribution:
     def attribute(
         self,
         real_img,
-        counterfactual_img,
+        generated_img,
         real_class,
         target_class,
         device="cuda",
@@ -76,12 +74,12 @@ class BaseAttribution:
         batch_added = False
         if len(real_img.shape) == 3:
             real_img = real_img[None, ...]
-            counterfactual_img = counterfactual_img[None, ...]
+            generated_img = generated_img[None, ...]
             batch_added = True
 
         attribution = self._attribute(
             real_img.to(device),
-            counterfactual_img.to(device),
+            generated_img.to(device),
             real_class,
             target_class,
             **kwargs,
@@ -103,11 +101,11 @@ class DIntegratedGradients(BaseAttribution):
         super().__init__(classifier, normalize=normalize)
         self.ig = attr.IntegratedGradients(classifier)
 
-    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
-        # FIXME in the original DAPI code, the real and counterfactual were switched.
+    def _attribute(self, real_img, generated_img, real_class, target_class):
+        # FIXME in the original DAPI code, the real and generated were switched.
         attribution = self.ig.attribute(
             real_img,
-            baselines=counterfactual_img,
+            baselines=generated_img,
             target=real_class,
         )
         return attribution
@@ -122,11 +120,11 @@ class DDeepLift(BaseAttribution):
         super().__init__(classifier, normalize=normalize)
         self.dl = attr.DeepLift(classifier)
 
-    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
-        # FIXME in the original DAPI code, the real and counterfactual were switched.
+    def _attribute(self, real_img, generated_img, real_class, target_class):
+        # FIXME in the original DAPI code, the real and generated were switched.
         attribution = self.dl.attribute(
             real_img,
-            baselines=counterfactual_img,
+            baselines=generated_img,
             target=real_class,
         )
         return attribution
@@ -141,13 +139,13 @@ class DInGrad(BaseAttribution):
         super().__init__(classifier, normalize=normalize)
         self.saliency = attr.Saliency(self.classifier)
 
-    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
-        # FIXME in the original DAPI code, the real and counterfactual were switched. See below.
-        # grads_fake = self.saliency.attribute(counterfactual_img,
+    def _attribute(self, real_img, generated_img, real_class, target_class):
+        # FIXME in the original DAPI code, the real and generated were switched. See below.
+        # grads_fake = self.saliency.attribute(generated_img,
         #                                 target=target_class)
-        # ingrad_diff_0 = grads_fake * (real_img - counterfactual_img)
+        # ingrad_diff_0 = grads_fake * (real_img - generated_img)
         grads_real = self.saliency.attribute(real_img, target=real_class).detach().cpu()
-        ingrad_diff_1 = grads_real * (counterfactual_img - real_img)
+        ingrad_diff_1 = grads_real * (generated_img - real_img)
         return ingrad_diff_1
 
 
@@ -161,7 +159,7 @@ class VanillaIntegratedGradients(BaseAttribution):
         super().__init__(classifier, normalize=normalize)
         self.ig = attr.IntegratedGradients(classifier)
 
-    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+    def _attribute(self, real_img, generated_img, real_class, target_class):
         batched_attribution = (
             self.ig.attribute(real_img, target=real_class).detach().cpu()
         )
@@ -178,7 +176,7 @@ class VanillaDeepLift(BaseAttribution):
         super().__init__(classifier, normalize=normalize)
         self.dl = attr.DeepLift(classifier)
 
-    def _attribute(self, real_img, counterfactual_img, real_class, target_class):
+    def _attribute(self, real_img, generated_img, real_class, target_class):
         batched_attribution = (
             self.dl.attribute(real_img, target=real_class).detach().cpu()
         )
@@ -204,7 +202,7 @@ class AttributionIO:
     def run(
         self,
         source_directory: str,
-        counterfactual_directory: str,
+        generated_directory: str,
         transform: Callable,
         device: str = "cuda",
     ):
@@ -213,14 +211,14 @@ class AttributionIO:
                 raise ValueError("CUDA is not available on this machine.")
         print("Loading paired data")
         dataset = PairedImageDataset(
-            source_directory, counterfactual_directory, transform=transform
+            source_directory, generated_directory, transform=transform
         )
         print("Running attributions")
         for sample in tqdm(dataset, total=len(dataset)):
             for attr_name, attribution in self.attributions.items():
                 attr = attribution.attribute(
                     sample.image,
-                    sample.counterfactual,
+                    sample.generated,
                     sample.source_class_index,
                     sample.target_class_index,
                     device=device,
