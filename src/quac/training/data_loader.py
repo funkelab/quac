@@ -415,7 +415,7 @@ class TrainingData:
     def __init__(
         self,
         source,
-        reference,
+        reference=None,
         img_size=128,
         batch_size=8,
         num_workers=4,
@@ -424,6 +424,7 @@ class TrainingData:
         std=None,
         rand_crop_prob=0,
     ):
+        ref_root = reference or source  # if reference is None, use source as reference
         self.src = get_train_loader(
             root=source,
             which="source",
@@ -436,7 +437,7 @@ class TrainingData:
             prob=rand_crop_prob,
         )
         self.reference = get_train_loader(
-            root=reference,
+            root=ref_root,
             which="reference",
             img_size=img_size,
             batch_size=batch_size,

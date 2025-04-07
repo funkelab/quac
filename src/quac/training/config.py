@@ -13,11 +13,11 @@ class ModelConfig(BaseModel):
 
 class DataConfig(BaseModel):
     source: str
-    reference: str
     img_size: int = 128
     batch_size: int = 1
     num_workers: int = 4
     grayscale: bool = False
+    reference: Optional[str] = None
     mean: Optional[float] = 0.5
     std: Optional[float] = 0.5
     rand_crop_prob: Optional[float] = 0

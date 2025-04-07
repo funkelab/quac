@@ -1,6 +1,5 @@
 data:
     source: "</path/to/your/source/data/train>"
-    reference: "</path/to/your/source/data/train>" 
     img_size: 128
     batch_size: 16
     num_workers: 12
@@ -10,7 +9,6 @@ data:
 
 validation_data:
     source: "</path/to/your/source/data/val>"
-    reference: "</path/to/your/source/data/val>" 
     img_size: 128
     batch_size: 16
     num_workers: 12
