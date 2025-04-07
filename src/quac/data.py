@@ -36,10 +36,11 @@ def read_image(path: str) -> torch.Tensor:
         image = image.astype(np.float32) / 255.0
     else:
         image = image.astype(np.float32)
-        # min-max normalization, per-channel
-        min_vals = image.min(axis=(0, 1), keepdims=True)
-        max_vals = image.max(axis=(0, 1), keepdims=True)
-        image = (image - min_vals) / (max_vals - min_vals)
+        if image.min() < 0 or image.max() > 1:
+            # min-max normalization, per-channel
+            min_vals = image.min(axis=(0, 1), keepdims=True)
+            max_vals = image.max(axis=(0, 1), keepdims=True)
+            image = (image - min_vals) / (max_vals - min_vals)
     # Add a channel dimension if it is not there
     if len(image.shape) == 2:
         image = np.expand_dims(image, axis=2)
