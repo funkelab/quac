@@ -163,7 +163,6 @@ def get_train_loader(
     transform = transforms.Compose(transform_list)
 
     if which == "source":
-        # dataset = ImageFolder(root, transform)
         dataset = AugmentedDataset(root, transform)
     elif which == "reference":
         dataset = ReferenceDataset(root, transform)

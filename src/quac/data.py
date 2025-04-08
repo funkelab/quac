@@ -7,7 +7,6 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import (
-    default_loader,
     is_image_file,
     has_file_allowed_extension,
 )
@@ -516,8 +515,8 @@ class PairedImageDataset(Dataset):
 
     def __getitem__(self, index):
         path, target_path, class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         # TODO ensure that the transforms are applied the same way to both images!
         if self.transform is not None:
             sample = self.transform(sample)
@@ -553,7 +552,7 @@ class ConvertedDataset(Dataset):
 
     def __getitem__(self, index):
         path, source_class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
+        sample = read_image(path)
         if self.transform is not None:
             sample = self.transform(sample)
         output = ConvertedSample(
@@ -608,8 +607,8 @@ class PairedWithAttribution(Dataset):
             class_index,
             target_class_index,
         ) = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         attribution = np.load(attribution_path)
         if self.transform is not None:
             sample = self.transform(sample)
