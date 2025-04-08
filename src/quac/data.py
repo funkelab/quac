@@ -441,6 +441,10 @@ class SampleWithAttribution:
 
 
 class DefaultDataset(Dataset):
+    """
+    A simple dataset that returns images and their names from a directory.
+    """
+
     def __init__(self, root, transform=None):
         self.samples = listdir(root)
         self.samples.sort()
@@ -497,7 +501,7 @@ class PairedImageDataset(Dataset):
         note:: this will not work if the file names do not match!
 
         note:: the transform is applied sequentially to the image, counterfactual, and attribution.
-        This means that if there is any randomness in the transform, the three images will faie to match.
+        This means that if there is any randomness in the transform, the three images will fail to match.
         Additionally, the attribution will be a torch tensor when the transform is applied, so no PIL-only transforms
         can be used.
         """
@@ -517,7 +521,6 @@ class PairedImageDataset(Dataset):
         path, target_path, class_index, target_class_index = self.samples[index]
         sample = read_image(path)
         target_sample = read_image(target_path)
-        # TODO ensure that the transforms are applied the same way to both images!
         if self.transform is not None:
             sample = self.transform(sample)
             target_sample = self.transform(target_sample)

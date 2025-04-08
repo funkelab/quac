@@ -88,11 +88,6 @@ def test_report(inputs, predictions, result, tmpdir):
     assert loaded_report.explanations[0] == report.explanations[0], (
         f"Loaded report: {loaded_report.explanations[0]} != {report.explanations[0]}"
     )
-    # TODO Move this to a teardown?
-    # remove the file
-    (tmpdir / f"{report.name}.json").unlink()
-    # Remove the directory
-    tmpdir.rmdir()
 
 
 def test_bad_report_io(tmp_path):
