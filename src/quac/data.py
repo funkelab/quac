@@ -421,34 +421,6 @@ class SampleWithAttribution:
     attribution_path: Optional[Path] = None
 
 
-class LabelFreePngFolder(torch.utils.data.Dataset):
-    # TODO this is redundant with quac.train.data_loader.DefaultDataset
-    """Get all images in a folder, no subfolders, no labels."""
-
-    def __init__(self, root, transform=None):
-        super().__init__()
-        self.root = Path(root)
-        self.transform = transform
-        self.samples = [
-            path
-            for path in self.root.iterdir()
-            if path.is_file()
-            and path.name.endswith(".png")
-            or path.name.endswith(".jpg")
-        ]
-        assert len(self.samples) > 0, f"No images found in {self.root}."
-
-    def __getitem__(self, index):
-        path = self.samples[index]
-        sample = read_image(path)
-        if self.transform is not None:
-            sample = self.transform(sample)
-        return sample, path.name
-
-    def __len__(self):
-        return len(self.samples)
-
-
 class PairedImageDataset(Dataset):
     def __init__(
         self, source_directory, paired_directory, transform=None, allow_empty=True

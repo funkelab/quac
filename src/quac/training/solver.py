@@ -399,7 +399,7 @@ class Solver(nn.Module):
                 val_loader.set_source(src_domain)
                 loader_src = val_loader.loader_src
 
-                for i, x_src in enumerate(tqdm(loader_src, total=len(loader_src))):
+                for i, (x_src, _) in enumerate(tqdm(loader_src, total=len(loader_src))):
                     N = x_src.size(0)
                     x_src = x_src.to(device)
                     y_trg = torch.tensor([trg_idx] * N).to(device)

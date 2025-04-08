@@ -12,26 +12,22 @@ from pathlib import Path
 from itertools import chain
 import random
 
-import imageio
 from munch import Munch
-from PIL import Image
 import numpy as np
 
 import torch
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
-from torchvision.datasets import ImageFolder
+
+from quac.data import read_image
 
 
 class RGB:
-    def __call__(self, img):
-        if isinstance(img, Image.Image):
-            return img.convert("RGB")
-        else:  # Tensor
-            if img.size(0) == 1:
-                return torch.cat([img, img, img], dim=0)
-            return img
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        if img.size(0) == 1:
+            return torch.cat([img, img, img], dim=0)
+        return img
 
 
 def listdir(dname):
@@ -62,10 +58,10 @@ class DefaultDataset(data.Dataset):
 
     def __getitem__(self, index):
         fname = self.samples[index]
-        img = Image.open(fname)
+        img = read_image(fname)
         if self.transform is not None:
             img = self.transform(img)
-        return img
+        return img, Path(fname).name
 
     def __len__(self):
         return len(self.samples)
@@ -79,15 +75,6 @@ class LabelledDataset(data.Dataset):
         # Check if empty
         assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
-
-    def _open_image(self, fname):
-        array = imageio.imread(fname)
-        # if no channel dimension, add it
-        if len(array.shape) == 2:
-            array = array[:, :, None]
-        # data will be h,w,c, switch to c,h,w
-        array = array.transpose(2, 0, 1)
-        return torch.from_numpy(array)
 
     def _make_dataset(self, root):
         # Get all subitems, sorted, ignore hidden
@@ -104,7 +91,7 @@ class LabelledDataset(data.Dataset):
     def __getitem__(self, index):
         fname = self.samples[index]
         label = self.targets[index]
-        img = self._open_image(fname)
+        img = read_image(fname)
         if self.transform is not None:
             img = self.transform(img)
         return img, label
@@ -272,46 +259,6 @@ def get_eval_loader(
     )
 
     dataset = DefaultDataset(root, transform=transform)
-    return data.DataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=drop_last,
-    )
-
-
-def get_test_loader(
-    root,
-    img_size=256,
-    batch_size=32,
-    shuffle=False,
-    drop_last=False,
-    num_workers=4,
-    grayscale=False,
-    mean=0.5,
-    std=0.5,
-    return_dataset=False,
-):
-    print("Preparing DataLoader for the generation phase...")
-    transform_list = []
-    if grayscale:
-        transform_list.append(transforms.Grayscale())
-    else:
-        transform_list.append(RGB())
-
-    transform_list += [
-        transforms.Resize([img_size, img_size]),
-        transforms.ToTensor(),
-    ]
-    if mean is not None and std is not None:
-        transform_list.append(transforms.Normalize(mean=mean, std=std))
-    transform = transforms.Compose(transform_list)
-
-    dataset = ImageFolder(root, transform)
-    if return_dataset:
-        return dataset
     return data.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
