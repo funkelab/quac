@@ -9,13 +9,13 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import datetime
+import json
 from munch import Munch
 import numpy as np
 import os
 from os.path import join as ospj
 from pathlib import Path
 from quac.training.checkpoint import CheckpointIO
-import quac.training.utils as utils
 from quac.training.classification import ClassifierWrapper
 from quac.training.data_loader import TrainingData
 import shutil
@@ -32,6 +32,30 @@ transform = transforms.Compose(
         transforms.RandomVerticalFlip(),
     ]
 )
+
+
+def save_json(json_file, filename):
+    with open(filename, "w") as f:
+        json.dump(json_file, f, indent=4, sort_keys=False)
+
+
+def print_network(network, name):
+    num_params = 0
+    for p in network.parameters():
+        num_params += p.numel()
+    # print(network)
+    print("Number of parameters of %s: %i" % (name, num_params))
+
+
+def he_init(module):
+    if isinstance(module, nn.Conv2d):
+        nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+    if isinstance(module, nn.Linear):
+        nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
 
 
 class Solver(nn.Module):
@@ -60,7 +84,7 @@ class Solver(nn.Module):
 
         # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
         for name, module in self.nets.items():
-            utils.print_network(module, name)
+            print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
             setattr(self, name + "_ema", module)
@@ -101,7 +125,7 @@ class Solver(nn.Module):
         for name, network in self.named_children():
             if "ema" not in name:
                 print("Initializing %s..." % name)
-                network.apply(utils.he_init)
+                network.apply(he_init)
 
     def _save_checkpoint(self, step):
         for ckptio in self.ckptios:
@@ -462,12 +486,12 @@ class Solver(nn.Module):
         filename = os.path.join(
             eval_dir, "conversion_rate_%.5i_%s.json" % (iteration, mode)
         )
-        utils.save_json(conversion_rate_values, filename)
+        save_json(conversion_rate_values, filename)
         # report translation rate values
         filename = os.path.join(
             eval_dir, "translation_rate_%.5i_%s.json" % (iteration, mode)
         )
-        utils.save_json(translation_rate_values, filename)
+        save_json(translation_rate_values, filename)
         if self.run is not None:
             self.run.log(conversion_rate_values, step=iteration)
             self.run.log(translation_rate_values, step=iteration)
