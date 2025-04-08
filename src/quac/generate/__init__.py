@@ -1,7 +1,7 @@
 """Utilities for generating counterfactual images."""
 
 from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
-from .data import LabelFreePngFolder
+from quac.data import LabelFreePngFolder
 
 import logging
 from quac.training.classification import ClassifierWrapper
