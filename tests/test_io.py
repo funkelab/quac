@@ -67,6 +67,6 @@ def test_tolerance(tmp_path):
     # Read the images
     read1 = read_image(tmp_path / "image1.tif")
     read2 = read_image(tmp_path / "image2.tif")
-    # Check that the images are not equal
+    # Check whether the images are the same
     assert torch.equal(read1, read2)
     assert torch.allclose(read1, read2, atol=1e-2, rtol=1e-3)
