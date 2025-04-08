@@ -222,7 +222,6 @@ def get_eval_loader(
     root,
     img_size=256,
     batch_size=32,
-    imagenet_normalize=False,
     shuffle=True,
     num_workers=4,
     drop_last=False,
@@ -231,12 +230,7 @@ def get_eval_loader(
     std=0.5,
 ):
     print("Preparing DataLoader for the evaluation phase...")
-    if imagenet_normalize:
-        height, width = 299, 299
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
-    else:
-        height, width = img_size, img_size
+    height, width = img_size, img_size
 
     if mean is not None:
         normalize = transforms.Normalize(mean=mean, std=std)
@@ -267,95 +261,6 @@ def get_eval_loader(
         pin_memory=True,
         drop_last=drop_last,
     )
-
-
-class InputFetcher:
-    def __init__(self, loader, loader_ref=None, latent_dim=16, mode=""):
-        self.loader = loader
-        self.loader_ref = loader_ref
-        self.latent_dim = latent_dim
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.mode = mode
-
-    def _fetch_inputs(self):
-        try:
-            x, y = next(self.iter)
-        except (AttributeError, StopIteration):
-            self.iter = iter(self.loader)
-            x, y = next(self.iter)
-        return x, y
-
-    def _fetch_refs(self):
-        try:
-            x, x2, y = next(self.iter_ref)
-        except (AttributeError, StopIteration):
-            self.iter_ref = iter(self.loader_ref)
-            x, x2, y = next(self.iter_ref)
-        return x, x2, y
-
-    def __next__(self):
-        x, y = self._fetch_inputs()
-        if self.mode == "train":
-            x_ref, x_ref2, y_ref = self._fetch_refs()
-            z_trg = torch.randn(x.size(0), self.latent_dim)
-            z_trg2 = torch.randn(x.size(0), self.latent_dim)
-            inputs = Munch(
-                x_src=x,
-                y_src=y,
-                y_ref=y_ref,
-                x_ref=x_ref,
-                x_ref2=x_ref2,
-                z_trg=z_trg,
-                z_trg2=z_trg2,
-            )
-        elif self.mode == "val":
-            x_ref, y_ref = self._fetch_refs()
-            inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
-        elif self.mode == "test":
-            inputs = Munch(x=x, y=y)
-        else:
-            raise NotImplementedError
-
-        return Munch({k: v.to(self.device) for k, v in inputs.items()})
-
-
-class AugmentedInputFetcher(InputFetcher):
-    def __init__(self, loader, loader_ref=None, latent_dim=16, mode=""):
-        super().__init__(loader, loader_ref, latent_dim, mode)
-
-    def _fetch_inputs(self):
-        try:
-            x, x2, y = next(self.iter)
-        except (AttributeError, StopIteration):
-            self.iter = iter(self.loader)
-            x, x2, y = next(self.iter)
-        return x, x2, y
-
-    def __next__(self):
-        x, x2, y = self._fetch_inputs()
-        if self.mode == "train":
-            x_ref, x_ref2, y_ref = self._fetch_refs()
-            z_trg = torch.randn(x.size(0), self.latent_dim)
-            z_trg2 = torch.randn(x.size(0), self.latent_dim)
-            inputs = Munch(
-                x_src=x,
-                y_src=y,
-                x_src2=x2,
-                y_ref=y_ref,
-                x_ref=x_ref,
-                x_ref2=x_ref2,
-                z_trg=z_trg,
-                z_trg2=z_trg2,
-            )
-        elif self.mode == "val":
-            x_ref, _, y_ref = self._fetch_refs()
-            inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
-        elif self.mode == "test":
-            inputs = Munch(x=x, y=y)
-        else:
-            raise NotImplementedError
-
-        return Munch({k: v.to(self.device) for k, v in inputs.items()})
 
 
 class TrainingData:
@@ -394,6 +299,41 @@ class TrainingData:
             std=std,
             prob=rand_crop_prob,
         )
+        self.iter = iter(self.src)
+        self.iter_ref = iter(self.reference)
+
+    def _fetch_inputs(self):
+        try:
+            x, x2, y = next(self.iter)
+        except (AttributeError, StopIteration):
+            self.iter = iter(self.src)
+            x, x2, y = next(self.iter)
+        return x, x2, y
+
+    def _fetch_refs(self):
+        try:
+            x, x2, y = next(self.iter_ref)
+        except (AttributeError, StopIteration):
+            self.iter_ref = iter(self.reference)
+            x, x2, y = next(self.iter_ref)
+        return x, x2, y
+
+    def __next__(self):
+        x, x2, y = self._fetch_inputs()
+        x_ref, x_ref2, y_ref = self._fetch_refs()
+        z_trg = torch.randn(x.size(0), self.latent_dim)
+        z_trg2 = torch.randn(x.size(0), self.latent_dim)
+        inputs = Munch(
+            x_src=x.to(self.device),
+            y_src=y.to(self.device),
+            x_src2=x2.to(self.device),
+            y_ref=y_ref.to(self.device),
+            x_ref=x_ref.to(self.device),
+            x_ref2=x_ref2.to(self.device),
+            z_trg=z_trg.to(self.device),
+            z_trg2=z_trg2.to(self.device),
+        )
+        return inputs
 
 
 class ValidationData:
@@ -465,6 +405,9 @@ class ValidationData:
         ]
         self._available_targets = None
         self.set_mode(mode)
+        # Loaders, reuse
+        self._loader_src = None
+        self._loader_ref = None
 
     def set_mode(self, mode):
         assert mode in ["latent", "reference"]
@@ -523,26 +466,30 @@ class ValidationData:
 
     @property
     def loader_src(self):
-        return get_eval_loader(
-            self.source_directory,
-            img_size=self.image_size,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            grayscale=self.grayscale,
-            mean=self.mean,
-            std=self.std,
-            drop_last=False,
-        )
+        if self._loader_src is None:
+            self._loader_src = get_eval_loader(
+                self.source_directory,
+                img_size=self.image_size,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                grayscale=self.grayscale,
+                mean=self.mean,
+                std=self.std,
+                drop_last=True,
+            )
+        return self._loader_src
 
     @property
     def loader_ref(self):
-        return get_eval_loader(
-            self.reference_directory,
-            img_size=self.image_size,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            grayscale=self.grayscale,
-            mean=self.mean,
-            std=self.std,
-            drop_last=True,
-        )
+        if self._loader_ref is None:
+            self._loader_ref = get_eval_loader(
+                self.reference_directory,
+                img_size=self.image_size,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                grayscale=self.grayscale,
+                mean=self.mean,
+                std=self.std,
+                drop_last=True,
+            )
+        return self._loader_ref

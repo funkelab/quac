@@ -14,10 +14,10 @@ import numpy as np
 import os
 from os.path import join as ospj
 from pathlib import Path
-from quac.training.data_loader import AugmentedInputFetcher
 from quac.training.checkpoint import CheckpointIO
 import quac.training.utils as utils
 from quac.training.classification import ClassifierWrapper
+from quac.training.data_loader import TrainingData
 import shutil
 import torch
 import torch.nn as nn
@@ -126,7 +126,7 @@ class Solver(nn.Module):
 
     def train(  # type: ignore
         self,
-        loader,
+        loader: TrainingData,
         resume_iter: int = 0,
         total_iters: int = 100000,
         log_every: int = 100,
@@ -147,13 +147,6 @@ class Solver(nn.Module):
         nets_ema = self.nets_ema
         optims = self.optims
 
-        fetcher = AugmentedInputFetcher(
-            loader.src,
-            loader.reference,
-            latent_dim=self.latent_dim,
-            mode="train",
-        )
-
         # resume training if necessary
         if resume_iter > 0:
             self._load_checkpoint(resume_iter)
@@ -164,7 +157,7 @@ class Solver(nn.Module):
         print("Start training...")
         for i in range(resume_iter, total_iters):
             # fetch images and labels
-            inputs = next(fetcher)
+            inputs = next(loader)
             x_real, x_aug, y_org = inputs.x_src, inputs.x_src2, inputs.y_src
             x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
             z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
