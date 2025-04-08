@@ -4,7 +4,7 @@ from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
 
 import logging
 from quac.training.classification import ClassifierWrapper
-from quac.training.data_loader import DefaultDataset
+from quac.data import DefaultDataset
 import torch
 from torchvision import transforms
 from typing import Union, Optional

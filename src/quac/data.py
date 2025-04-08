@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import imageio
+from itertools import chain
 import numpy as np
 import os
 from pathlib import Path
@@ -137,7 +138,26 @@ def check_requirements(
     return is_valid_file
 
 
-def make_counterfactual_dataset(
+def listdir(dname):
+    fnames = list(
+        chain(
+            *[
+                list(Path(dname).rglob("*." + ext))
+                for ext in [
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "JPG",
+                    "tiff",
+                    "tif",
+                ]
+            ]
+        )
+    )
+    return fnames
+
+
+def make_converted_dataset(
     counterfactual_directory: str,
     class_to_idx: Optional[Dict[str, int]] = None,
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
@@ -421,6 +441,24 @@ class SampleWithAttribution:
     attribution_path: Optional[Path] = None
 
 
+class DefaultDataset(Dataset):
+    def __init__(self, root, transform=None):
+        self.samples = listdir(root)
+        self.samples.sort()
+        self.transform = transform
+        self.targets = None
+
+    def __getitem__(self, index):
+        fname = self.samples[index]
+        img = read_image(fname)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, Path(fname).name
+
+    def __len__(self):
+        return len(self.samples)
+
+
 class PairedImageDataset(Dataset):
     def __init__(
         self, source_directory, paired_directory, transform=None, allow_empty=True
@@ -505,7 +543,7 @@ class ConvertedDataset(Dataset):
         classes, class_to_idx = find_classes(counterfactual_directory)
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_counterfactual_dataset(
+        self.samples = make_converted_dataset(
             counterfactual_directory,
             class_to_idx,
             is_valid_file=is_image_file,

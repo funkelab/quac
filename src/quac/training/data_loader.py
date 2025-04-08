@@ -8,8 +8,8 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
+import logging
 from pathlib import Path
-from itertools import chain
 import random
 
 from munch import Munch
@@ -20,7 +20,7 @@ from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 
-from quac.data import read_image
+from quac.data import read_image, listdir, DefaultDataset
 
 
 class RGB:
@@ -28,43 +28,6 @@ class RGB:
         if img.size(0) == 1:
             return torch.cat([img, img, img], dim=0)
         return img
-
-
-def listdir(dname):
-    fnames = list(
-        chain(
-            *[
-                list(Path(dname).rglob("*." + ext))
-                for ext in [
-                    "png",
-                    "jpg",
-                    "jpeg",
-                    "JPG",
-                    "tiff",
-                    "tif",
-                ]
-            ]
-        )
-    )
-    return fnames
-
-
-class DefaultDataset(data.Dataset):
-    def __init__(self, root, transform=None):
-        self.samples = listdir(root)
-        self.samples.sort()
-        self.transform = transform
-        self.targets = None
-
-    def __getitem__(self, index):
-        fname = self.samples[index]
-        img = read_image(fname)
-        if self.transform is not None:
-            img = self.transform(img)
-        return img, Path(fname).name
-
-    def __len__(self):
-        return len(self.samples)
 
 
 class LabelledDataset(data.Dataset):
@@ -176,7 +139,7 @@ def get_train_loader(
     mean=0.5,
     std=0.5,
 ):
-    print(
+    logging.info(
         "Preparing DataLoader to fetch %s images during the training phase..." % which
     )
 
@@ -229,7 +192,7 @@ def get_eval_loader(
     mean=0.5,
     std=0.5,
 ):
-    print("Preparing DataLoader for the evaluation phase...")
+    logging.info("Preparing DataLoader for the evaluation phase...")
     height, width = img_size, img_size
 
     if mean is not None:
