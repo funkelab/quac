@@ -29,7 +29,6 @@ solver:
 
 validation_config:
     classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
-    do_nothing: true # Pass the image directly to the classifier
     val_batch_size: 16
   
 log:

@@ -99,7 +99,9 @@ if __name__ == "__main__":
 
     # Load the classifier
     classifier = load_classifier(
-        checkpoint_path=classifier_config.classifier_checkpoint
+        checkpoint_path=classifier_config.classifier_checkpoint,
+        scale=classifier_config.scale,
+        shift=classifier_config.shift,
     )
 
     # Defining how to transform images for the classifier
