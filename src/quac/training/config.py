@@ -34,12 +34,10 @@ class RunConfig(BaseModel):
 class ValConfig(BaseModel):
     classifier_checkpoint: str
     num_outs_per_domain: int = 10
-    mean: Optional[float] = 0.5
-    std: Optional[float] = 0.5
+    scale: Optional[float] = 1.0
+    shift: Optional[float] = 0.0
     img_size: int = 128
     val_batch_size: int = 16
-    assume_normalized: bool = False
-    do_nothing: bool = False
 
 
 class LossConfig(BaseModel):
