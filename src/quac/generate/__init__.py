@@ -17,23 +17,27 @@ class CounterfactualNotFound(Exception):
     pass
 
 
-def load_classifier(
-    checkpoint, mean=0.5, std=0.5, eval=True, assume_normalized=False, device=None
-):
+def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
     """
     Load a classifier from a torchscript checkpoint.
 
-    This also creates a wrapper around the classifier, which normalizes the input.
-    The classifier expects the input range to be [-1, 1], and normalizes it with the give `mean` and `std`.
+    This also creates a wrapper around the classifier, which applies a scale and shift to the input.
 
-    Parameters:
-        checkpoint: the path to the checkpoint
-        mean: the mean to normalize the input
-        std: the standard deviation to normalize
-        eval: whether to put the classifier in evaluation mode, defaults to True
-        device: the device to use, defaults to None
+    Parameters
+    ----------
+    checkpoint: str
+        The path to the checkpoint, which must be torchscript.
+    scale: float
+        The scale factor applied to the input before classification. Defaults to 1.
+    shift: float
+        The shift factor applied to the input after scaling. Defaults to 0.
+    eval: bool
+        Whether to put the classifier in evaluation mode, defaults to True
+    device:
+        The device to use, defaults to None, in which case the device will be chosen
+        based on the model checkpoint, or can be changed later.
     """
-    classifier = ClassifierWrapper(checkpoint, mean=mean, std=std)
+    classifier = ClassifierWrapper(checkpoint, scale=scale, shift=shift)
     if device:
         classifier.to(device)
     if eval:
