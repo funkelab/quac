@@ -1,10 +1,10 @@
 """Utilities for generating counterfactual images."""
 
 from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
-from .data import LabelFreePngFolder
 
 import logging
 from quac.training.classification import ClassifierWrapper
+from quac.data import DefaultDataset
 import torch
 from torchvision import transforms
 from typing import Union, Optional
@@ -43,7 +43,7 @@ def load_classifier(
 
 def load_data(
     data_directory, img_size, grayscale=True, mean=0.5, std=0.5
-) -> LabelFreePngFolder:
+) -> DefaultDataset:
     """
     Load a dataset from a directory.
 
@@ -60,7 +60,7 @@ def load_data(
         mean: the mean to normalize the images, defaults to 0.5
         std: the standard deviation to normalize the images, defaults to 0.5
     """
-    dataset = LabelFreePngFolder(
+    dataset = DefaultDataset(
         root=data_directory,
         transform=transforms.Compose(
             [

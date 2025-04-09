@@ -1,11 +1,8 @@
 from argparse import ArgumentParser
 from pathlib import Path
 from quac.training.config import ExperimentConfig
-from quac.generate import load_classifier
-from quac.generate import load_data
-from quac.generate import get_counterfactual
-from quac.generate import load_stargan
-from torchvision.utils import save_image
+from quac.generate import load_classifier, load_data, load_stargan, get_counterfactual
+from quac.data import write_image
 from tqdm import tqdm
 import torch
 import warnings
@@ -160,4 +157,4 @@ if __name__ == "__main__":
             batch_size=10,
         )
         # Save the images here
-        save_image(xcf, output_directory / name)
+        write_image(xcf, output_directory / name)

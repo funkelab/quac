@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 import imageio
+from itertools import chain
 import numpy as np
 import os
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import (
-    default_loader,
     is_image_file,
     has_file_allowed_extension,
 )
@@ -36,10 +36,11 @@ def read_image(path: str) -> torch.Tensor:
         image = image.astype(np.float32) / 255.0
     else:
         image = image.astype(np.float32)
-        # min-max normalization, per-channel
-        min_vals = image.min(axis=(0, 1), keepdims=True)
-        max_vals = image.max(axis=(0, 1), keepdims=True)
-        image = (image - min_vals) / (max_vals - min_vals)
+        if image.min() < 0 or image.max() > 1:
+            # min-max normalization, per-channel
+            min_vals = image.min(axis=(0, 1), keepdims=True)
+            max_vals = image.max(axis=(0, 1), keepdims=True)
+            image = (image - min_vals) / (max_vals - min_vals)
     # Add a channel dimension if it is not there
     if len(image.shape) == 2:
         image = np.expand_dims(image, axis=2)
@@ -136,7 +137,26 @@ def check_requirements(
     return is_valid_file
 
 
-def make_counterfactual_dataset(
+def listdir(dname):
+    fnames = list(
+        chain(
+            *[
+                list(Path(dname).rglob("*." + ext))
+                for ext in [
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "JPG",
+                    "tiff",
+                    "tif",
+                ]
+            ]
+        )
+    )
+    return fnames
+
+
+def make_converted_dataset(
     counterfactual_directory: str,
     class_to_idx: Optional[Dict[str, int]] = None,
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
@@ -420,6 +440,28 @@ class SampleWithAttribution:
     attribution_path: Optional[Path] = None
 
 
+class DefaultDataset(Dataset):
+    """
+    A simple dataset that returns images and their names from a directory.
+    """
+
+    def __init__(self, root, transform=None):
+        self.samples = listdir(root)
+        self.samples.sort()
+        self.transform = transform
+        self.targets = None
+
+    def __getitem__(self, index):
+        fname = self.samples[index]
+        img = read_image(fname)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, Path(fname).name
+
+    def __len__(self):
+        return len(self.samples)
+
+
 class PairedImageDataset(Dataset):
     def __init__(
         self, source_directory, paired_directory, transform=None, allow_empty=True
@@ -459,7 +501,7 @@ class PairedImageDataset(Dataset):
         note:: this will not work if the file names do not match!
 
         note:: the transform is applied sequentially to the image, counterfactual, and attribution.
-        This means that if there is any randomness in the transform, the three images will faie to match.
+        This means that if there is any randomness in the transform, the three images will fail to match.
         Additionally, the attribution will be a torch tensor when the transform is applied, so no PIL-only transforms
         can be used.
         """
@@ -477,9 +519,8 @@ class PairedImageDataset(Dataset):
 
     def __getitem__(self, index):
         path, target_path, class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
-        # TODO ensure that the transforms are applied the same way to both images!
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         if self.transform is not None:
             sample = self.transform(sample)
             target_sample = self.transform(target_sample)
@@ -504,7 +545,7 @@ class ConvertedDataset(Dataset):
         classes, class_to_idx = find_classes(counterfactual_directory)
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_counterfactual_dataset(
+        self.samples = make_converted_dataset(
             counterfactual_directory,
             class_to_idx,
             is_valid_file=is_image_file,
@@ -514,7 +555,7 @@ class ConvertedDataset(Dataset):
 
     def __getitem__(self, index):
         path, source_class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
+        sample = read_image(path)
         if self.transform is not None:
             sample = self.transform(sample)
         output = ConvertedSample(
@@ -569,8 +610,8 @@ class PairedWithAttribution(Dataset):
             class_index,
             target_class_index,
         ) = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         attribution = np.load(attribution_path)
         if self.transform is not None:
             sample = self.transform(sample)

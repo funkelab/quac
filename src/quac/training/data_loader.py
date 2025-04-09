@@ -8,67 +8,26 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
+import logging
 from pathlib import Path
-from itertools import chain
 import random
 
-import imageio
 from munch import Munch
-from PIL import Image
 import numpy as np
 
 import torch
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
-from torchvision.datasets import ImageFolder
+
+from quac.data import read_image, listdir, DefaultDataset
 
 
 class RGB:
-    def __call__(self, img):
-        if isinstance(img, Image.Image):
-            return img.convert("RGB")
-        else:  # Tensor
-            if img.size(0) == 1:
-                return torch.cat([img, img, img], dim=0)
-            return img
-
-
-def listdir(dname):
-    fnames = list(
-        chain(
-            *[
-                list(Path(dname).rglob("*." + ext))
-                for ext in [
-                    "png",
-                    "jpg",
-                    "jpeg",
-                    "JPG",
-                    "tiff",
-                    "tif",
-                ]
-            ]
-        )
-    )
-    return fnames
-
-
-class DefaultDataset(data.Dataset):
-    def __init__(self, root, transform=None):
-        self.samples = listdir(root)
-        self.samples.sort()
-        self.transform = transform
-        self.targets = None
-
-    def __getitem__(self, index):
-        fname = self.samples[index]
-        img = Image.open(fname)
-        if self.transform is not None:
-            img = self.transform(img)
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        if img.size(0) == 1:
+            return torch.cat([img, img, img], dim=0)
         return img
-
-    def __len__(self):
-        return len(self.samples)
 
 
 class LabelledDataset(data.Dataset):
@@ -79,15 +38,6 @@ class LabelledDataset(data.Dataset):
         # Check if empty
         assert len(self.samples) > 0, "Dataset is empty, no files found."
         self.transform = transform
-
-    def _open_image(self, fname):
-        array = imageio.imread(fname)
-        # if no channel dimension, add it
-        if len(array.shape) == 2:
-            array = array[:, :, None]
-        # data will be h,w,c, switch to c,h,w
-        array = array.transpose(2, 0, 1)
-        return torch.from_numpy(array)
 
     def _make_dataset(self, root):
         # Get all subitems, sorted, ignore hidden
@@ -104,7 +54,7 @@ class LabelledDataset(data.Dataset):
     def __getitem__(self, index):
         fname = self.samples[index]
         label = self.targets[index]
-        img = self._open_image(fname)
+        img = read_image(fname)
         if self.transform is not None:
             img = self.transform(img)
         return img, label
@@ -189,7 +139,7 @@ def get_train_loader(
     mean=0.5,
     std=0.5,
 ):
-    print(
+    logging.info(
         "Preparing DataLoader to fetch %s images during the training phase..." % which
     )
 
@@ -213,7 +163,6 @@ def get_train_loader(
     transform = transforms.Compose(transform_list)
 
     if which == "source":
-        # dataset = ImageFolder(root, transform)
         dataset = AugmentedDataset(root, transform)
     elif which == "reference":
         dataset = ReferenceDataset(root, transform)
@@ -235,7 +184,6 @@ def get_eval_loader(
     root,
     img_size=256,
     batch_size=32,
-    imagenet_normalize=False,
     shuffle=True,
     num_workers=4,
     drop_last=False,
@@ -243,13 +191,8 @@ def get_eval_loader(
     mean=0.5,
     std=0.5,
 ):
-    print("Preparing DataLoader for the evaluation phase...")
-    if imagenet_normalize:
-        height, width = 299, 299
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
-    else:
-        height, width = img_size, img_size
+    logging.info("Preparing DataLoader for the evaluation phase...")
+    height, width = img_size, img_size
 
     if mean is not None:
         normalize = transforms.Normalize(mean=mean, std=std)
@@ -282,140 +225,11 @@ def get_eval_loader(
     )
 
 
-def get_test_loader(
-    root,
-    img_size=256,
-    batch_size=32,
-    shuffle=False,
-    drop_last=False,
-    num_workers=4,
-    grayscale=False,
-    mean=0.5,
-    std=0.5,
-    return_dataset=False,
-):
-    print("Preparing DataLoader for the generation phase...")
-    transform_list = []
-    if grayscale:
-        transform_list.append(transforms.Grayscale())
-    else:
-        transform_list.append(RGB())
-
-    transform_list += [
-        transforms.Resize([img_size, img_size]),
-        transforms.ToTensor(),
-    ]
-    if mean is not None and std is not None:
-        transform_list.append(transforms.Normalize(mean=mean, std=std))
-    transform = transforms.Compose(transform_list)
-
-    dataset = ImageFolder(root, transform)
-    if return_dataset:
-        return dataset
-    return data.DataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=drop_last,
-    )
-
-
-class InputFetcher:
-    def __init__(self, loader, loader_ref=None, latent_dim=16, mode=""):
-        self.loader = loader
-        self.loader_ref = loader_ref
-        self.latent_dim = latent_dim
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.mode = mode
-
-    def _fetch_inputs(self):
-        try:
-            x, y = next(self.iter)
-        except (AttributeError, StopIteration):
-            self.iter = iter(self.loader)
-            x, y = next(self.iter)
-        return x, y
-
-    def _fetch_refs(self):
-        try:
-            x, x2, y = next(self.iter_ref)
-        except (AttributeError, StopIteration):
-            self.iter_ref = iter(self.loader_ref)
-            x, x2, y = next(self.iter_ref)
-        return x, x2, y
-
-    def __next__(self):
-        x, y = self._fetch_inputs()
-        if self.mode == "train":
-            x_ref, x_ref2, y_ref = self._fetch_refs()
-            z_trg = torch.randn(x.size(0), self.latent_dim)
-            z_trg2 = torch.randn(x.size(0), self.latent_dim)
-            inputs = Munch(
-                x_src=x,
-                y_src=y,
-                y_ref=y_ref,
-                x_ref=x_ref,
-                x_ref2=x_ref2,
-                z_trg=z_trg,
-                z_trg2=z_trg2,
-            )
-        elif self.mode == "val":
-            x_ref, y_ref = self._fetch_refs()
-            inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
-        elif self.mode == "test":
-            inputs = Munch(x=x, y=y)
-        else:
-            raise NotImplementedError
-
-        return Munch({k: v.to(self.device) for k, v in inputs.items()})
-
-
-class AugmentedInputFetcher(InputFetcher):
-    def __init__(self, loader, loader_ref=None, latent_dim=16, mode=""):
-        super().__init__(loader, loader_ref, latent_dim, mode)
-
-    def _fetch_inputs(self):
-        try:
-            x, x2, y = next(self.iter)
-        except (AttributeError, StopIteration):
-            self.iter = iter(self.loader)
-            x, x2, y = next(self.iter)
-        return x, x2, y
-
-    def __next__(self):
-        x, x2, y = self._fetch_inputs()
-        if self.mode == "train":
-            x_ref, x_ref2, y_ref = self._fetch_refs()
-            z_trg = torch.randn(x.size(0), self.latent_dim)
-            z_trg2 = torch.randn(x.size(0), self.latent_dim)
-            inputs = Munch(
-                x_src=x,
-                y_src=y,
-                x_src2=x2,
-                y_ref=y_ref,
-                x_ref=x_ref,
-                x_ref2=x_ref2,
-                z_trg=z_trg,
-                z_trg2=z_trg2,
-            )
-        elif self.mode == "val":
-            x_ref, _, y_ref = self._fetch_refs()
-            inputs = Munch(x_src=x, y_src=y, x_ref=x_ref, y_ref=y_ref)
-        elif self.mode == "test":
-            inputs = Munch(x=x, y=y)
-        else:
-            raise NotImplementedError
-
-        return Munch({k: v.to(self.device) for k, v in inputs.items()})
-
-
 class TrainingData:
     def __init__(
         self,
         source,
-        reference,
+        reference=None,
         img_size=128,
         batch_size=8,
         num_workers=4,
@@ -424,6 +238,7 @@ class TrainingData:
         std=None,
         rand_crop_prob=0,
     ):
+        ref_root = reference or source  # if reference is None, use source as reference
         self.src = get_train_loader(
             root=source,
             which="source",
@@ -436,7 +251,7 @@ class TrainingData:
             prob=rand_crop_prob,
         )
         self.reference = get_train_loader(
-            root=reference,
+            root=ref_root,
             which="reference",
             img_size=img_size,
             batch_size=batch_size,
@@ -446,6 +261,41 @@ class TrainingData:
             std=std,
             prob=rand_crop_prob,
         )
+        self.iter = iter(self.src)
+        self.iter_ref = iter(self.reference)
+
+    def _fetch_inputs(self):
+        try:
+            x, x2, y = next(self.iter)
+        except (AttributeError, StopIteration):
+            self.iter = iter(self.src)
+            x, x2, y = next(self.iter)
+        return x, x2, y
+
+    def _fetch_refs(self):
+        try:
+            x, x2, y = next(self.iter_ref)
+        except (AttributeError, StopIteration):
+            self.iter_ref = iter(self.reference)
+            x, x2, y = next(self.iter_ref)
+        return x, x2, y
+
+    def __next__(self):
+        x, x2, y = self._fetch_inputs()
+        x_ref, x_ref2, y_ref = self._fetch_refs()
+        z_trg = torch.randn(x.size(0), self.latent_dim)
+        z_trg2 = torch.randn(x.size(0), self.latent_dim)
+        inputs = Munch(
+            x_src=x.to(self.device),
+            y_src=y.to(self.device),
+            x_src2=x2.to(self.device),
+            y_ref=y_ref.to(self.device),
+            x_ref=x_ref.to(self.device),
+            x_ref2=x_ref2.to(self.device),
+            z_trg=z_trg.to(self.device),
+            z_trg2=z_trg2.to(self.device),
+        )
+        return inputs
 
 
 class ValidationData:
@@ -517,6 +367,9 @@ class ValidationData:
         ]
         self._available_targets = None
         self.set_mode(mode)
+        # Loaders, reuse
+        self._loader_src = None
+        self._loader_ref = None
 
     def set_mode(self, mode):
         assert mode in ["latent", "reference"]
@@ -575,26 +428,30 @@ class ValidationData:
 
     @property
     def loader_src(self):
-        return get_eval_loader(
-            self.source_directory,
-            img_size=self.image_size,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            grayscale=self.grayscale,
-            mean=self.mean,
-            std=self.std,
-            drop_last=False,
-        )
+        if self._loader_src is None:
+            self._loader_src = get_eval_loader(
+                self.source_directory,
+                img_size=self.image_size,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                grayscale=self.grayscale,
+                mean=self.mean,
+                std=self.std,
+                drop_last=True,
+            )
+        return self._loader_src
 
     @property
     def loader_ref(self):
-        return get_eval_loader(
-            self.reference_directory,
-            img_size=self.image_size,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            grayscale=self.grayscale,
-            mean=self.mean,
-            std=self.std,
-            drop_last=True,
-        )
+        if self._loader_ref is None:
+            self._loader_ref = get_eval_loader(
+                self.reference_directory,
+                img_size=self.image_size,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                grayscale=self.grayscale,
+                mean=self.mean,
+                std=self.std,
+                drop_last=True,
+            )
+        return self._loader_ref

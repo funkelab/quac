@@ -293,7 +293,6 @@ class BaseEvaluator:
             # hybrid = real parts copied to fake
             hybrid = x_t * mask + x * (1.0 - mask)
             # Append results
-            # TODO Do we want to store the hybrid?
             results["thresholds"].append(threshold)
             results["mask_sizes"].append(mask_size / np.prod(x.shape))
             hybrids.append(hybrid)

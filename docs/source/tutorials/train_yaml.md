@@ -16,7 +16,6 @@ Here is an example data loading configuration in YAML format.
 ```{code-block} yaml
 data:
     source: "</path/to/your/source/data/train>"
-    reference: "</path/to/your/source/data/train>" 
     img_size: 128
     batch_size: 16
     num_workers: 12
@@ -26,7 +25,6 @@ data:
 
 validation_data:
     source: "</path/to/your/source/data/val>"
-    reference: "</path/to/your/source/data/val>" 
     img_size: 128
     batch_size: 16
     num_workers: 12
@@ -35,7 +33,7 @@ validation_data:
     grayscale: true
 ```
 
-- The `source` and `reference` values hold the (absolute) path your data. The data in `source` is used as the **query** image, and the data in `reference` as the **reference** image. 
+- The `source` value holds (absolute) path your data.
 - The `mean` and `std` values will be used to normalize your data before passing it into the {term}`conversion network`. These are passed to a [`torchvision.transforms.Normalize`](https://pytorch.org/vision/main/generated/torchvision.transforms.Normalize.html?highlight=normalize#torchvision.transforms.Normalize).We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
 - If you have RGB data, set `grayscale` to `false`. Else, set it to `true`. 
 - Set `img_size` to the input size expected by your classifier. Your images will be resized accordingly by bi-cubic interpolation.
