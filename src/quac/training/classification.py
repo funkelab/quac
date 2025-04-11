@@ -7,8 +7,8 @@ class ClassifierWrapper(torch.nn.Module):
 
     Parameters
     ----------
-    model_checkpoint: str
-        Path to the torchscript model checkpoint.
+    model: :class:`torch.jit.ScriptModule`
+        A loaded torchscript model.
     scale: float
         Scale factor. Defaults to 1. Applied to the data before passing it to the model.
     shift: float
@@ -17,12 +17,12 @@ class ClassifierWrapper(torch.nn.Module):
 
     def __init__(
         self,
-        model_checkpoint,
+        model,
         scale=1,
         shift=0,
     ):
         super().__init__()
-        self.model = torch.jit.load(model_checkpoint)
+        self.model = model
         self.model.eval()
         self.scale = scale
         self.shift = shift

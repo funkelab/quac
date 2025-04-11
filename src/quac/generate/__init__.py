@@ -37,7 +37,8 @@ def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
         The device to use, defaults to None, in which case the device will be chosen
         based on the model checkpoint, or can be changed later.
     """
-    classifier = ClassifierWrapper(checkpoint, scale=scale, shift=shift)
+    model = torch.jit.load(checkpoint)
+    classifier = ClassifierWrapper(model, scale=scale, shift=shift)
     if device:
         classifier.to(device)
     if eval:
