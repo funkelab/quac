@@ -19,29 +19,31 @@ data:
     img_size: 128
     batch_size: 16
     num_workers: 12
-    mean: 0.5 
-    std: 0.5
     grayscale: true
+    rgb: false
 
 validation_data:
     source: "</path/to/your/source/data/val>"
     img_size: 128
     batch_size: 16
     num_workers: 12
-    mean: 0.5
-    std: 0.5
     grayscale: true
+    rgb: false
 ```
 
 - The `source` value holds (absolute) path your data.
-- The `mean` and `std` values will be used to normalize your data before passing it into the {term}`conversion network`. These are passed to a [`torchvision.transforms.Normalize`](https://pytorch.org/vision/main/generated/torchvision.transforms.Normalize.html?highlight=normalize#torchvision.transforms.Normalize).We *strongly* recommend `mean=0.5, std=0.5`, which will put your data in range `[-1, 1]`.
-- If you have RGB data, set `grayscale` to `false`. Else, set it to `true`. 
+- If you have RGB data, set `grayscale` to `false` and `rgb` to true. If you do not set these, RGB data is assumed. 
 - Set `img_size` to the input size expected by your classifier. Your images will be resized accordingly by bi-cubic interpolation.
 - `batch_size` and `num_workers` are passed to a [`torch.utils.data.Dataloader`](https://pytorch.org/tutorials/beginner/basics/data_tutorial.html).
 
 If you have a `test` data set, add it to the configuration under `test_data`.
 In most cases, `train`, `validation` and `test` will have the same configuration. 
 However, you may want to increase `batch_size` for `validation` and `test` for more efficient inference.
+
+```note
+If you choose to, you can also add a `scale` and `shift` parameter to your data parameters. 
+The data will be read into a `[0, 1]` range, so the `scale` and `shift` parameters can help you move it into a different rante. By default, these are set to `scale=2` and `shift=-1` to get data in the `[-1, 1]` range. Since generative adversarial networks are sensitive to train, it is not recommended to deviate from this range.
+```
 
 ## Model configuration
 
@@ -77,20 +79,21 @@ solver:
 validation_config:
     classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
     val_batch_size: 16
+    scale: 1
+    shift: 0
 ```
 
 - `solver.root_dir`: this is an (absolute) path to the directory where you want to store the results. The checkpoints, logs, and other training artifacts will be stored there. 
 - `validation_config` defines how we will use the classifier to validate the quality of our conversion network. 
     - `classifier_checkpoint` points to the path where your torchscript classifier is. This should be the path you decided on [when you prepared your classifier](classifier.md)
-    - `scale` and `shift` parameters are used to (optionally) change the range of data before passing it to the classifier.
-
+    - `scale` and `shift` parameters are used to (optionally) change the range of data before passing it to the classifier. The default 
 ```{note}
 Ideally, your classifier and your conversion network should expect data in the same range.
 
 If that is not the case, you will need to add the `scale` and `shift` parameters to your `validation_config`. 
 Any image passed to the classifier will first be scaled and then shifted `scale * x + shift` before.
 
-For example, if your classifier wants data in `[0, 1]`, but the conversion network uses the recommended `[-1, 1]` range, set: 
+For example: the conversion network creates data in the `[-1, 1]` range, so if your classifier wants data, so set: 
 - `scale: 0.5`
 - `shift: 0.5` 
 ```

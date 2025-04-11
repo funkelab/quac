@@ -3,8 +3,6 @@ data:
     img_size: 128
     batch_size: 16
     num_workers: 12
-    mean: 0.5 
-    std: 0.5
     grayscale: true
 
 validation_data:
@@ -12,8 +10,6 @@ validation_data:
     img_size: 128
     batch_size: 16
     num_workers: 12
-    mean: 0.5
-    std: 0.5
     grayscale: true
     
 model:
