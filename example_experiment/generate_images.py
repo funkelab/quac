@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from quac.training.config import ExperimentConfig
+from quac.config import ExperimentConfig
 from quac.generate import load_classifier, load_data, load_stargan, get_counterfactual
 from quac.data import write_image
 from tqdm import tqdm
@@ -105,6 +105,8 @@ if __name__ == "__main__":
         data_directory=Path(data_config.source) / args.source_class,
         img_size=data_config.img_size,
         grayscale=data_config.grayscale,
+        scale=data_config.scale,
+        shift=data_config.shift,
     )
 
     reference_dataset = None
@@ -113,6 +115,8 @@ if __name__ == "__main__":
             data_directory=Path(data_config.reference) / args.target_class,
             img_size=data_config.img_size,
             grayscale=data_config.grayscale,
+            scale=data_config.scale,
+            shift=data_config.shift,
         )
 
     target_index = get_target_index(data_config.source, args.target_class)

@@ -10,7 +10,42 @@ from torchvision.datasets.folder import (
     is_image_file,
     has_file_allowed_extension,
 )
+from torchvision import transforms
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
+
+
+class RGB:
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        if img.size(0) == 1:
+            return torch.cat([img, img, img], dim=0)
+        return img
+
+
+class ScaleShift:
+    def __init__(self, scale: float = 1, shift: float = 0):
+        self.scale = scale
+        self.shift = shift
+
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        return img * self.scale + self.shift
+
+
+def create_transform(img_size, grayscale=True, rgb=False, scale=1, shift=0):
+    assert not (grayscale and rgb), "Cannot use both grayscale and rgb"
+    channel_transform = None
+    if grayscale:
+        channel_transform = transforms.Grayscale()
+    elif rgb:
+        channel_transform = RGB()
+
+    transforms_list = [
+        transforms.Resize([img_size, img_size]),
+        ScaleShift(scale, shift),
+    ]
+
+    if channel_transform:
+        transforms_list.append(channel_transform)
+    return transforms.Compose(transforms_list)
 
 
 def read_image(path: str) -> torch.Tensor:

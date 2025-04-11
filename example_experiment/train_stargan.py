@@ -1,5 +1,5 @@
 # Training the StarGAN
-from quac.training.config import ExperimentConfig
+from quac.config import ExperimentConfig
 from quac.training.data_loader import TrainingData, ValidationData
 from quac.training.stargan import build_model
 from quac.training.solver import Solver

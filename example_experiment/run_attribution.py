@@ -1,39 +1,9 @@
 from argparse import ArgumentParser
-from quac.training.config import ExperimentConfig
+from quac.config import ExperimentConfig, get_data_config
 from quac.generate import load_classifier
 from quac.attribution import DIntegratedGradients, DDeepLift, AttributionIO
-from torchvision import transforms
-import warnings
+from quac.data import create_transform
 import yaml
-
-
-def get_data_config(experiment, dataset="test"):
-    # TODO this is duplicated with generate_images.py
-    # and should be moved to a common place
-    dataset = dataset or "test"
-    if dataset == "train":
-        return experiment.data
-    elif dataset == "test":
-        if experiment.test_data:
-            return experiment.test_data
-        warnings.warn("No test data found, using validation data.")
-    return experiment.validation_data
-
-
-def create_transform(img_size, mean, std, grayscale):
-    # TODO, this copies code from quac.generate (__init__.py)
-    # and should be moved to a common utilities file
-    transform = (
-        transforms.Compose(
-            [
-                transforms.Resize([img_size, img_size]),
-                transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ]
-        ),
-    )
-    return transform
 
 
 def parse_args():
@@ -104,9 +74,10 @@ if __name__ == "__main__":
 
     transform = create_transform(
         img_size=data_config.img_size,
-        mean=classifier_config.mean,
-        std=classifier_config.std,
         grayscale=data_config.grayscale,
+        rgb=data_config.rgb,
+        scale=data_config.scale,
+        shift=data_config.shift,
     )
 
     # This will run attributions and store all of the results in the output_directory

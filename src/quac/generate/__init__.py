@@ -4,9 +4,8 @@ from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
 
 import logging
 from quac.training.classification import ClassifierWrapper
-from quac.data import DefaultDataset
+from quac.data import DefaultDataset, create_transform
 import torch
-from torchvision import transforms
 from typing import Union, Optional
 
 logging.basicConfig(level=logging.WARNING)
@@ -47,34 +46,42 @@ def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
 
 
 def load_data(
-    data_directory, img_size, grayscale=True, mean=0.5, std=0.5
+    data_directory,
+    img_size,
+    grayscale=False,
+    rgb=True,
+    scale=1,
+    shift=0,
 ) -> DefaultDataset:
     """
     Load a dataset from a directory.
 
     This assumes that the images are in a folder, with no subfolders, and no labels.
-    The images are resized to `img_size`, and normalized with the given `mean` and `std`.
+    The images are resized to `img_size`, and scaled then shifted using `scale` and `shift`.
     If `grayscale` is True, the images are converted to grayscale.
 
     The returned dataset will return the image file name as the second element of the tuple.
 
-    Parameters:
-        data_directory: the directory to load the images from
-        img_size: the size to resize the images to
-        grayscale: whether to convert the images to grayscale, defaults to True
-        mean: the mean to normalize the images, defaults to 0.5
-        std: the standard deviation to normalize the images, defaults to 0.5
+    Parameters
+    ----------
+    data_directory: str
+        the directory to load the images from
+    img_size: int
+        the size to resize the images to
+    grayscale: bool
+        whether to convert the images to grayscale, defaults to false.
+    rgb: bool
+        Whether to convert the images to RGB, defaults to true.
+        Note that this cannot be set to true if grayscale is true.
+    scale: float
+        the scale factor to apply to the images, defaults to 1.
+    shift: float
+        the shift factor to apply to the images, defaults to 0.
     """
+    transform = create_transform(img_size, grayscale, rgb, scale, shift)
     dataset = DefaultDataset(
         root=data_directory,
-        transform=transforms.Compose(
-            [
-                transforms.Resize([img_size, img_size]),
-                transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ]
-        ),
+        transform=transform,
     )
     return dataset
 
