@@ -20,14 +20,7 @@ from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 
-from quac.data import read_image, listdir, DefaultDataset
-
-
-class RGB:
-    def __call__(self, img: torch.Tensor) -> torch.Tensor:
-        if img.size(0) == 1:
-            return torch.cat([img, img, img], dim=0)
-        return img
+from quac.data import read_image, listdir, DefaultDataset, create_transform
 
 
 class LabelledDataset(data.Dataset):
@@ -79,11 +72,10 @@ class AugmentedDataset(LabelledDataset):
         fname = self.samples[index]
         label = self.targets[index]
         img = self._open_image(fname)
-        # Augment the image to create a second image
-        img2 = self.augment(img)
         if self.transform is not None:
             img = self.transform(img)
-            img2 = self.transform(img2)
+        # Augment the image to create a second image
+        img2 = self.augment(img)
         return img, img2, label
 
     def __len__(self):
@@ -109,8 +101,8 @@ class ReferenceDataset(LabelledDataset):
     def __getitem__(self, index):
         fname, fname2 = self.samples[index]
         label = self.targets[index]
-        img = self._open_image(fname)
-        img2 = self._open_image(fname2)
+        img = read_image(fname)
+        img2 = read_image(fname2)
         if self.transform is not None:
             img = self.transform(img)
             img2 = self.transform(img2)
@@ -136,31 +128,28 @@ def get_train_loader(
     prob=0.5,
     num_workers=4,
     grayscale=False,
-    mean=0.5,
-    std=0.5,
+    rgb=True,
+    scale=2,
+    shift=-1,
+    rand_crop_prob=0,
 ):
     logging.info(
         "Preparing DataLoader to fetch %s images during the training phase..." % which
     )
-
+    # Basic image loading, resizing, and normalization
+    transform = create_transform(img_size, grayscale, rgb, scale, shift)
+    # Augmentations
     crop = transforms.RandomResizedCrop(img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
     rand_crop = transforms.Lambda(lambda x: crop(x) if random.random() < prob else x)
-
-    transform_list = [rand_crop]
-    if grayscale:
-        transform_list.append(transforms.Grayscale())
-    else:
-        transform_list.append(RGB())
-
-    transform_list += [
-        transforms.Resize([img_size, img_size]),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.ToTensor(),
-    ]
-    if mean is not None and std is not None:
-        transform_list.append(transforms.Normalize(mean=mean, std=std))
-    transform = transforms.Compose(transform_list)
+    # Combine
+    transform = transforms.Compose(
+        [
+            transform,
+            rand_crop,
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+        ]
+    )
 
     if which == "source":
         dataset = AugmentedDataset(root, transform)
@@ -188,31 +177,13 @@ def get_eval_loader(
     num_workers=4,
     drop_last=False,
     grayscale=False,
-    mean=0.5,
-    std=0.5,
+    rgb=True,
+    scale=2,
+    shift=-1,
 ):
     logging.info("Preparing DataLoader for the evaluation phase...")
-    height, width = img_size, img_size
-
-    if mean is not None:
-        normalize = transforms.Normalize(mean=mean, std=std)
-    else:
-        normalize = transforms.Lambda(lambda x: x)
-
-    transform_list = []
-    if grayscale:
-        transform_list.append(transforms.Grayscale())
-    else:
-        transform_list.append(RGB())
-
-    transform = transforms.Compose(
-        [
-            *transform_list,
-            transforms.Resize([height, width]),
-            transforms.ToTensor(),
-            normalize,
-        ]
-    )
+    # Basic image loading, resizing, and normalization
+    transform = create_transform(img_size, grayscale, rgb, scale, shift)
 
     dataset = DefaultDataset(root, transform=transform)
     return data.DataLoader(
@@ -234,8 +205,9 @@ class TrainingData:
         batch_size=8,
         num_workers=4,
         grayscale=False,
-        mean=None,
-        std=None,
+        rgb=True,
+        scale=2,
+        shift=-1,
         rand_crop_prob=0,
     ):
         ref_root = reference or source  # if reference is None, use source as reference
@@ -246,8 +218,9 @@ class TrainingData:
             batch_size=batch_size,
             num_workers=num_workers,
             grayscale=grayscale,
-            mean=mean,
-            std=std,
+            rgb=rgb,
+            scale=scale,
+            shift=shift,
             prob=rand_crop_prob,
         )
         self.reference = get_train_loader(
@@ -257,8 +230,9 @@ class TrainingData:
             batch_size=batch_size,
             num_workers=num_workers,
             grayscale=grayscale,
-            mean=mean,
-            std=std,
+            rgb=rgb,
+            scale=scale,
+            shift=shift,
             prob=rand_crop_prob,
         )
         self.iter = iter(self.src)

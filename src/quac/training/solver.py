@@ -380,12 +380,11 @@ class Solver(nn.Module):
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Load classifier
+        model = torch.jit.load(val_config.classifier_checkpoint)
         classifier = ClassifierWrapper(
-            val_config.classifier_checkpoint,
-            val_config.mean,
-            val_config.std,
-            assume_normalized=val_config.assume_normalized,
-            do_nothing=val_config.do_nothing,
+            model=model,
+            shift=val_config.shift,
+            scale=val_config.scale,
         )
         classifier.to(device)
         assert mode in ["latent", "reference"]
