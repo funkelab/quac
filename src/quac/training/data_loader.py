@@ -52,6 +52,9 @@ class LabelledDataset(data.Dataset):
             img = self.transform(img)
         return img, label
 
+    def __len__(self):
+        return len(self.targets)
+
 
 class AugmentedDataset(LabelledDataset):
     """Adds an augmented version of the input to the sample."""
