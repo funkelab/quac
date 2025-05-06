@@ -117,7 +117,7 @@ class ReferenceDataset(LabelledDataset):
         return len(self.targets)
 
 
-def _make_balanced_sampler(labels):
+def make_balanced_sampler(labels):
     class_counts = np.bincount(labels)
     assert np.all(class_counts > 0), f"Some of the classes are empty. {class_counts}"
     class_weights = 1.0 / class_counts
@@ -163,7 +163,7 @@ def get_train_loader(
     else:
         raise NotImplementedError
 
-    sampler = _make_balanced_sampler(dataset.targets)
+    sampler = make_balanced_sampler(dataset.targets)
     return data.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
