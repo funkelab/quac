@@ -37,6 +37,8 @@ class LabelledDataset(data.Dataset):
         domains = sorted(Path(root).glob("[!.]*"))
         # only directories, absolute paths
         domains = [d.absolute() for d in domains if d.is_dir()]
+        # Get class names
+        self.classes = [d.name for d in domains]
         fnames, labels = [], []
         for idx, class_dir in enumerate(domains):
             cls_fnames = listdir(class_dir)
