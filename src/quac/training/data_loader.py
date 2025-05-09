@@ -63,7 +63,7 @@ class AugmentedDataset(LabelledDataset):
 
     def __init__(self, root, transform=None, augment=None):
         super().__init__(root, transform, augment)  # Creates self.samples, self.targets
-        if self.augment is None:
+        if augment is None:
             # Default augmentation: random horizontal flip, random vertical flip
             augment = transforms.Compose(
                 [
