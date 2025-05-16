@@ -87,7 +87,7 @@ def load_data(
 
 
 def load_stargan(
-    latent_model_checkpoint_dir: str,
+    checkpoint_dir: str,
     img_size: int = 128,
     input_dim: int = 1,
     style_dim: int = 64,
@@ -117,7 +117,7 @@ def load_stargan(
     """
     if kind == "reference":
         latent_inference_model: InferenceModel = ReferenceInferenceModel(
-            checkpoint_dir=latent_model_checkpoint_dir,
+            checkpoint_dir=checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
             style_dim=style_dim,
@@ -128,7 +128,7 @@ def load_stargan(
         )
     else:
         latent_inference_model: InferenceModel = LatentInferenceModel(  # type: ignore[no-redef]
-            checkpoint_dir=latent_model_checkpoint_dir,
+            checkpoint_dir=checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
             style_dim=style_dim,

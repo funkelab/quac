@@ -430,10 +430,12 @@ class Solver(nn.Module):
                             try:
                                 # TODO don't need to re-do this every time, just use
                                 # the same set of reference images for the whole dataset!
-                                x_ref = next(iter_ref).to(device)
-                            except TypeError:  # iter_ref is None
+                                x_ref, _ = next(iter_ref)
+                                x_ref = x_ref.to(device)
+                            except (TypeError, StopIteration):  # iter_ref is None
                                 iter_ref = iter(loader_ref)
-                                x_ref = next(iter_ref).to(device)
+                                x_ref, _ = next(iter_ref)
+                                x_ref = x_ref.to(device)
 
                             if x_ref.size(0) > N:
                                 x_ref = x_ref[:N]
@@ -446,11 +448,7 @@ class Solver(nn.Module):
 
                         x_fake = self.nets_ema.generator(x_src, s_trg)
                         # Run the classification
-                        pred = classifier(
-                            x_fake,
-                            assume_normalized=val_config.assume_normalized,
-                            do_nothing=val_config.do_nothing,
-                        )
+                        pred = classifier(x_fake)
                         predictions.append(pred.cpu().numpy())
                 predictions = np.stack(predictions, axis=0)
                 assert len(predictions) > 0

@@ -76,7 +76,7 @@ class AugmentedDataset(LabelledDataset):
     def __getitem__(self, index):
         fname = self.samples[index]
         label = self.targets[index]
-        img = self._open_image(fname)
+        img = read_image(fname)
         if self.transform is not None:
             img = self.transform(img)
         # Augment the image to create a second image
@@ -92,20 +92,20 @@ class ReferenceDataset(LabelledDataset):
 
     def __init__(self, root, transform=None):
         super().__init__(root, transform)  # Creates self.samples, self.targets
-        # Create a second set of samples
-        fnames2 = []
-        for fname in self.samples:
-            # Get the class of the current image
-            class_dir = Path(fname).parent
-            # Get a random image from the same class
-            cls_fnames = listdir(class_dir)
-            fname2 = random.choice(cls_fnames)
-            fnames2.append(fname2)
-        self.samples = list(zip(self.samples, fnames2))
+
+    def select_from_class(self, label, idx):
+        """Select a random image from a given class."""
+        is_class = set(np.where(np.array(self.targets) == label)[0])
+        idx2 = random.choice(list(is_class - {idx}))
+        return self.samples[idx2]
 
     def __getitem__(self, index):
-        fname, fname2 = self.samples[index]
+        # fname, fname2 = self.samples[index]
+        fname = self.samples[index]
         label = self.targets[index]
+        # Randomly select a second image from the same class
+        fname2 = self.select_from_class(label, index)
+        # Read the images
         img = read_image(fname)
         img2 = read_image(fname2)
         if self.transform is not None:
@@ -145,7 +145,9 @@ def get_train_loader(
     transform = create_transform(img_size, grayscale, rgb, scale, shift)
     # Augmentations
     crop = transforms.RandomResizedCrop(img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
-    rand_crop = transforms.Lambda(lambda x: crop(x) if random.random() < prob else x)
+    rand_crop = transforms.Lambda(
+        lambda x: crop(x) if random.random() < rand_crop_prob else x
+    )
     # Combine
     transform = transforms.Compose(
         [
@@ -214,7 +216,9 @@ class TrainingData:
         scale=2,
         shift=-1,
         rand_crop_prob=0,
+        latent_dim=64,
     ):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ref_root = reference or source  # if reference is None, use source as reference
         self.src = get_train_loader(
             root=source,
@@ -242,6 +246,7 @@ class TrainingData:
         )
         self.iter = iter(self.src)
         self.iter_ref = iter(self.reference)
+        self.latent_dim = latent_dim
 
     def _fetch_inputs(self):
         try:
@@ -292,8 +297,9 @@ class ValidationData:
         batch_size=32,
         num_workers=4,
         grayscale=False,
-        mean=None,
-        std=None,
+        rgb=True,
+        scale=2,
+        shift=-1,
         **kwargs,
     ):
         """
@@ -315,10 +321,10 @@ class ValidationData:
             The number of workers for the data loader.
         grayscale : bool
             Whether the images are grayscale.
-        mean: float
-            The mean for normalization, for the classifier.
-        std: float
-            The standard deviation for normalization, for the classifier.
+        scale : float
+            The scale factor for the images.
+        shift : float
+            The shift factor for the images.
         kwargs : dict
             Unused keyword arguments, for compatibility with configuration.
         """
@@ -328,8 +334,9 @@ class ValidationData:
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.grayscale = grayscale
-        self.mean = mean
-        self.std = std
+        self.rgb = rgb
+        self.scale = scale
+        self.shift = shift
         # The source and target classes
         self.source = None
         self.target = None
@@ -414,8 +421,9 @@ class ValidationData:
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 grayscale=self.grayscale,
-                mean=self.mean,
-                std=self.std,
+                rgb=self.rgb,
+                scale=self.scale,
+                shift=self.shift,
                 drop_last=True,
             )
         return self._loader_src
@@ -429,8 +437,9 @@ class ValidationData:
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 grayscale=self.grayscale,
-                mean=self.mean,
-                std=self.std,
+                rgb=self.rgb,
+                scale=self.scale,
+                shift=self.shift,
                 drop_last=True,
             )
         return self._loader_ref

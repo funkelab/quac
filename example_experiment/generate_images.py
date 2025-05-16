@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     classifier = load_classifier(
         classifier_config.classifier_checkpoint,
-        sclae=classifier_config.scale,
+        scale=classifier_config.scale,
         shift=classifier_config.shift,
         eval=True,
         device=device,
