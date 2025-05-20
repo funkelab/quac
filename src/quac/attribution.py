@@ -1,6 +1,7 @@
 """Holds all of the discriminative attribution methods that are accepted by QuAC."""
 
 from captum import attr
+import logging
 import numpy as np
 import scipy
 from pathlib import Path
@@ -209,11 +210,13 @@ class AttributionIO:
         if device == "cuda":
             if not torch.cuda.is_available():
                 raise ValueError("CUDA is not available on this machine.")
-        print("Loading paired data")
+        logging.info(
+            f"Loading paired data from {source_directory} and {generated_directory}"
+        )
         dataset = PairedImageDataset(
             source_directory, generated_directory, transform=transform
         )
-        print("Running attributions")
+        logging.info("Running attributions")
         for sample in tqdm(dataset, total=len(dataset)):
             for attr_name, attribution in self.attributions.items():
                 attr = attribution.attribute(

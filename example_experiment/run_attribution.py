@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import torch
 from quac.config import ExperimentConfig, get_data_config
 from quac.generate import load_classifier
 from quac.attribution import DIntegratedGradients, DDeepLift, AttributionIO
@@ -27,7 +28,7 @@ def parse_args():
     )
     parser.add_argument(
         "-i",
-        "--input_fake",
+        "--input",
         type=str,
         default=None,
         help="""
@@ -51,16 +52,17 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.output or f"{experiment.solver.root_dir}/attributions"
-    counterfactual_directory = (
-        args.input or f"{experiment.solver.root_dir}/generated_images"
-    )
+    generated_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
 
     # Load the classifier
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     classifier = load_classifier(
-        checkpoint_path=classifier_config.classifier_checkpoint,
+        checkpoint=classifier_config.classifier_checkpoint,
         scale=classifier_config.scale,
         shift=classifier_config.shift,
     )
+    classifier.to(device)
+    classifier.eval()
 
     # Defining attributions
     # TODO Offer a way to select which attributions to run
@@ -84,6 +86,6 @@ if __name__ == "__main__":
     # Shows a progress bar
     attributor.run(
         source_directory=data_directory,
-        counterfactual_directory=counterfactual_directory,
+        generated_directory=generated_directory,
         transform=transform,
     )
