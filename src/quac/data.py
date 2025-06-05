@@ -1,15 +1,127 @@
 from dataclasses import dataclass
+import imageio
+from itertools import chain
 import numpy as np
 import os
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import (
-    default_loader,
     is_image_file,
     has_file_allowed_extension,
 )
+from torchvision import transforms
 from typing import Optional, Callable, List, Tuple, Dict, Union, cast
+
+
+class RGB:
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        if img.size(0) == 1:
+            return torch.cat([img, img, img], dim=0)
+        return img
+
+
+class ScaleShift:
+    def __init__(self, scale: float = 1, shift: float = 0):
+        self.scale = scale
+        self.shift = shift
+
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        return img * self.scale + self.shift
+
+
+def create_transform(img_size, grayscale=True, rgb=False, scale=1, shift=0):
+    assert not (grayscale and rgb), "Cannot use both grayscale and rgb"
+    channel_transform = None
+    if grayscale:
+        channel_transform = transforms.Grayscale()
+    elif rgb:
+        channel_transform = RGB()
+
+    transforms_list = [
+        transforms.Resize([img_size, img_size]),
+        ScaleShift(scale, shift),
+    ]
+
+    if channel_transform:
+        transforms_list.append(channel_transform)
+    return transforms.Compose(transforms_list)
+
+
+def read_image(path: str) -> torch.Tensor:
+    """Reads an image from a file path and returns it as a numpy array.
+
+    Parameters
+    ----------
+    path: str
+        Path to the image to read.
+
+    Returns
+    -------
+    image: torch.Tensor
+        The image read from the path.
+        The image is always min-max normalized.
+        Its values are between 0 and 1.
+        Its dtype is np.float32.
+        It is in CHW format (channels, height, width).
+    """
+    image = imageio.imread(path)
+    # Check data type
+    if image.dtype == np.uint8:
+        image = image.astype(np.float32) / 255.0
+    else:
+        image = image.astype(np.float32)
+        if image.min() < 0 or image.max() > 1:
+            # min-max normalization, per-channel
+            min_vals = image.min(axis=(0, 1), keepdims=True)
+            max_vals = image.max(axis=(0, 1), keepdims=True)
+            image = (image - min_vals) / (max_vals - min_vals)
+    # Add a channel dimension if it is not there
+    if len(image.shape) == 2:
+        image = np.expand_dims(image, axis=2)
+    # Permute to CHW format
+    image = torch.from_numpy(image).permute(2, 0, 1)  # HWC to CHW
+    return image
+
+
+def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
+    """Writes an image to a file path.
+
+    Parameters
+    ----------
+    path: str
+        Path to save the image to.
+    image: torch.Tensor
+        The image to save. It is assumed to be of data type float32
+
+    The image will be "normalized" to range `[0, 1]` before saving.
+    If it is in the range [-1, 1], it will be shifted to [0, 1] using: $ x = (x + 1) / 2 $.
+    If it is in any other range, it will be min-max normalized per channel.
+
+    If the file is a JPEG or a PNG, the image will scaled to `[0, 255]` and converted to `np.uint8`.
+    Else, the image will be saved as a float32.
+    """
+    if isinstance(path, str):
+        path = Path(path)
+    assert image.dtype == torch.float32, "Image must be of type float32"
+    # convert to numpy
+    image = image.permute(1, 2, 0).numpy()  # CHW to HWC
+    # Checks whether the data is in `[0, 1]`
+    if image.min() < 0 or image.max() > 1:
+        # Check if the data is in `[-1, 1]`
+        if image.min() >= -1 and image.max() <= 1:
+            # Shift the data to `[0, 1]`
+            image = (image + 1) / 2
+        else:
+            # min-max normalization, per-channel
+            min_vals = image.min(axis=(0, 1), keepdims=True)
+            max_vals = image.max(axis=(0, 1), keepdims=True)
+            image = (image - min_vals) / (max_vals - min_vals)
+    # Now, data is in `[0, 1]`
+    # Check output data type, based on the file format
+    if path.suffix in [".jpg", ".jpeg", ".png", ".PNG", ".JPG", ".JPEG"]:
+        image = (image * 255).astype(np.uint8)
+    imageio.imwrite(path, image)
 
 
 def find_classes(directory):
@@ -60,7 +172,26 @@ def check_requirements(
     return is_valid_file
 
 
-def make_counterfactual_dataset(
+def listdir(dname):
+    fnames = list(
+        chain(
+            *[
+                list(Path(dname).rglob("*." + ext))
+                for ext in [
+                    "png",
+                    "jpg",
+                    "jpeg",
+                    "JPG",
+                    "tiff",
+                    "tif",
+                ]
+            ]
+        )
+    )
+    return fnames
+
+
+def make_converted_dataset(
     counterfactual_directory: str,
     class_to_idx: Optional[Dict[str, int]] = None,
     extensions: Optional[Union[str, Tuple[str, ...]]] = None,
@@ -308,12 +439,12 @@ class Sample:
 
 # TODO remove?
 @dataclass
-class CounterfactualSample:
-    counterfactual: torch.Tensor
+class ConvertedSample:
+    generated: torch.Tensor
     target_class_index: int
     source_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -321,11 +452,11 @@ class CounterfactualSample:
 @dataclass
 class PairedSample:
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
 
@@ -334,14 +465,36 @@ class PairedSample:
 class SampleWithAttribution:
     attribution: np.ndarray
     image: torch.Tensor
-    counterfactual: torch.Tensor
+    generated: torch.Tensor
     source_class_index: int
     target_class_index: int
     path: Optional[Path] = None
-    counterfactual_path: Optional[Path] = None
+    generated_path: Optional[Path] = None
     source_class: Optional[str] = None
     target_class: Optional[str] = None
     attribution_path: Optional[Path] = None
+
+
+class DefaultDataset(Dataset):
+    """
+    A simple dataset that returns images and their names from a directory.
+    """
+
+    def __init__(self, root, transform=None):
+        self.samples = listdir(root)
+        self.samples.sort()
+        self.transform = transform
+        self.targets = None
+
+    def __getitem__(self, index):
+        fname = self.samples[index]
+        img = read_image(fname)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, Path(fname).name
+
+    def __len__(self):
+        return len(self.samples)
 
 
 class PairedImageDataset(Dataset):
@@ -383,7 +536,7 @@ class PairedImageDataset(Dataset):
         note:: this will not work if the file names do not match!
 
         note:: the transform is applied sequentially to the image, counterfactual, and attribution.
-        This means that if there is any randomness in the transform, the three images will faie to match.
+        This means that if there is any randomness in the transform, the three images will fail to match.
         Additionally, the attribution will be a torch tensor when the transform is applied, so no PIL-only transforms
         can be used.
         """
@@ -401,17 +554,16 @@ class PairedImageDataset(Dataset):
 
     def __getitem__(self, index):
         path, target_path, class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
-        # TODO ensure that the transforms are applied the same way to both images!
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         if self.transform is not None:
             sample = self.transform(sample)
             target_sample = self.transform(target_sample)
         output = PairedSample(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             source_class_index=class_index,
             target_class_index=target_class_index,
             source_class=self.classes[class_index],
@@ -423,12 +575,12 @@ class PairedImageDataset(Dataset):
         return len(self.samples)
 
 
-class CounterfactualDataset(Dataset):
+class ConvertedDataset(Dataset):
     def __init__(self, counterfactual_directory, transform=None, allow_empty=True):
         classes, class_to_idx = find_classes(counterfactual_directory)
         self.classes = classes
         self.class_to_idx = class_to_idx
-        self.samples = make_counterfactual_dataset(
+        self.samples = make_converted_dataset(
             counterfactual_directory,
             class_to_idx,
             is_valid_file=is_image_file,
@@ -438,12 +590,12 @@ class CounterfactualDataset(Dataset):
 
     def __getitem__(self, index):
         path, source_class_index, target_class_index = self.samples[index]
-        sample = default_loader(path)
+        sample = read_image(path)
         if self.transform is not None:
             sample = self.transform(sample)
-        output = CounterfactualSample(
-            counterfactual_path=Path(path),
-            counterfactual=sample,
+        output = ConvertedSample(
+            generated_path=Path(path),
+            generated=sample,
             source_class_index=source_class_index,
             source_class=self.classes[source_class_index],
             target_class_index=target_class_index,
@@ -493,8 +645,8 @@ class PairedWithAttribution(Dataset):
             class_index,
             target_class_index,
         ) = self.samples[index]
-        sample = default_loader(path)
-        target_sample = default_loader(target_path)
+        sample = read_image(path)
+        target_sample = read_image(target_path)
         attribution = np.load(attribution_path)
         if self.transform is not None:
             sample = self.transform(sample)
@@ -502,10 +654,10 @@ class PairedWithAttribution(Dataset):
 
         output = SampleWithAttribution(
             path=Path(path),
-            counterfactual_path=Path(target_path),
+            generated_path=Path(target_path),
             attribution_path=Path(attribution_path),
             image=sample,
-            counterfactual=target_sample,
+            generated=target_sample,
             attribution=attribution,
             source_class_index=class_index,
             target_class_index=target_class_index,

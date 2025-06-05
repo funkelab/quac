@@ -9,7 +9,6 @@ from quac.training.stargan import (
 )
 from quac.training.checkpoint import CheckpointIO
 import torch
-from typing import Optional
 
 
 class InferenceModel(torch.nn.Module):

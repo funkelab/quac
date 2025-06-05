@@ -1,12 +1,11 @@
 """Utilities for generating counterfactual images."""
 
 from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
-from .data import LabelFreePngFolder
 
 import logging
 from quac.training.classification import ClassifierWrapper
+from quac.data import DefaultDataset, create_transform
 import torch
-from torchvision import transforms
 from typing import Union, Optional
 
 logging.basicConfig(level=logging.WARNING)
@@ -17,23 +16,28 @@ class CounterfactualNotFound(Exception):
     pass
 
 
-def load_classifier(
-    checkpoint, mean=0.5, std=0.5, eval=True, assume_normalized=False, device=None
-):
+def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
     """
     Load a classifier from a torchscript checkpoint.
 
-    This also creates a wrapper around the classifier, which normalizes the input.
-    The classifier expects the input range to be [-1, 1], and normalizes it with the give `mean` and `std`.
+    This also creates a wrapper around the classifier, which applies a scale and shift to the input.
 
-    Parameters:
-        checkpoint: the path to the checkpoint
-        mean: the mean to normalize the input
-        std: the standard deviation to normalize
-        eval: whether to put the classifier in evaluation mode, defaults to True
-        device: the device to use, defaults to None
+    Parameters
+    ----------
+    checkpoint: str
+        The path to the checkpoint, which must be torchscript.
+    scale: float
+        The scale factor applied to the input before classification. Defaults to 1.
+    shift: float
+        The shift factor applied to the input after scaling. Defaults to 0.
+    eval: bool
+        Whether to put the classifier in evaluation mode, defaults to True
+    device:
+        The device to use, defaults to None, in which case the device will be chosen
+        based on the model checkpoint, or can be changed later.
     """
-    classifier = ClassifierWrapper(checkpoint, mean=mean, std=std)
+    model = torch.jit.load(checkpoint)
+    classifier = ClassifierWrapper(model, scale=scale, shift=shift)
     if device:
         classifier.to(device)
     if eval:
@@ -42,40 +46,48 @@ def load_classifier(
 
 
 def load_data(
-    data_directory, img_size, grayscale=True, mean=0.5, std=0.5
-) -> LabelFreePngFolder:
+    data_directory,
+    img_size,
+    grayscale=False,
+    rgb=True,
+    scale=1,
+    shift=0,
+) -> DefaultDataset:
     """
     Load a dataset from a directory.
 
     This assumes that the images are in a folder, with no subfolders, and no labels.
-    The images are resized to `img_size`, and normalized with the given `mean` and `std`.
+    The images are resized to `img_size`, and scaled then shifted using `scale` and `shift`.
     If `grayscale` is True, the images are converted to grayscale.
 
     The returned dataset will return the image file name as the second element of the tuple.
 
-    Parameters:
-        data_directory: the directory to load the images from
-        img_size: the size to resize the images to
-        grayscale: whether to convert the images to grayscale, defaults to True
-        mean: the mean to normalize the images, defaults to 0.5
-        std: the standard deviation to normalize the images, defaults to 0.5
+    Parameters
+    ----------
+    data_directory: str
+        the directory to load the images from
+    img_size: int
+        the size to resize the images to
+    grayscale: bool
+        whether to convert the images to grayscale, defaults to false.
+    rgb: bool
+        Whether to convert the images to RGB, defaults to true.
+        Note that this cannot be set to true if grayscale is true.
+    scale: float
+        the scale factor to apply to the images, defaults to 1.
+    shift: float
+        the shift factor to apply to the images, defaults to 0.
     """
-    dataset = LabelFreePngFolder(
+    transform = create_transform(img_size, grayscale, rgb, scale, shift)
+    dataset = DefaultDataset(
         root=data_directory,
-        transform=transforms.Compose(
-            [
-                transforms.Resize([img_size, img_size]),
-                transforms.Grayscale() if grayscale else transforms.Lambda(lambda x: x),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ]
-        ),
+        transform=transform,
     )
     return dataset
 
 
 def load_stargan(
-    latent_model_checkpoint_dir: str,
+    checkpoint_dir: str,
     img_size: int = 128,
     input_dim: int = 1,
     style_dim: int = 64,
@@ -105,7 +117,7 @@ def load_stargan(
     """
     if kind == "reference":
         latent_inference_model: InferenceModel = ReferenceInferenceModel(
-            checkpoint_dir=latent_model_checkpoint_dir,
+            checkpoint_dir=checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
             style_dim=style_dim,
@@ -116,7 +128,7 @@ def load_stargan(
         )
     else:
         latent_inference_model: InferenceModel = LatentInferenceModel(  # type: ignore[no-redef]
-            checkpoint_dir=latent_model_checkpoint_dir,
+            checkpoint_dir=checkpoint_dir,
             img_size=img_size,
             input_dim=input_dim,
             style_dim=style_dim,
@@ -140,13 +152,11 @@ def get_counterfactual(  # type: ignore
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far=Optional[torch.Tensor],
-    best_cf_so_far=Optional[torch.Tensor],
-    best_cf_path_so_far=Optional[str],
+    best_pred_so_far: Optional[torch.Tensor] = None,
+    best_cf_so_far: Optional[torch.Tensor] = None,
+    best_cf_path_so_far: Optional[str] = None,
     error_if_not_found=False,
-    return_path=False,
-    return_pred=False,
-) -> tuple[torch.Tensor, Optional[Union[str, torch.Tensor]], Optional[torch.Tensor]]:
+) -> tuple[Optional[torch.Tensor], Optional[str], Optional[torch.Tensor]]:
     """
     Tries to find a counterfactual for the given sample, given the target.
     It creates a batch, and returns one of the samples if it is classified correctly.
@@ -176,9 +186,9 @@ def get_counterfactual(  # type: ignore
     # Copy x batch_size times
     x_multiple = torch.stack([x] * batch_size)
     if kind == "reference":
-        assert (
-            dataset_ref is not None
-        ), "Reference dataset required for reference style."
+        assert dataset_ref is not None, (
+            "Reference dataset required for reference style."
+        )
         if len(dataset_ref) // batch_size < max_tries:
             max_tries = len(dataset_ref) // batch_size
             logger.warning(
@@ -211,6 +221,7 @@ def get_counterfactual(  # type: ignore
     predictions = torch.argmax(p, dim=-1)
     # Get best so far
     best_idx_so_far = torch.argmax(p[:, target])
+
     if p[best_idx_so_far, target] > best_pred_so_far[target]:
         best_pred_so_far = p[best_idx_so_far]  # , target]
         best_cf_so_far = xcf[best_idx_so_far].cpu()
@@ -239,8 +250,6 @@ def get_counterfactual(  # type: ignore
                 best_pred_so_far=best_pred_so_far,
                 best_cf_so_far=best_cf_so_far,
                 best_cf_path_so_far=best_cf_path_so_far,
-                return_path=return_path,
-                return_pred=return_pred,
             )
         else:
             if error_if_not_found:
@@ -251,10 +260,4 @@ def get_counterfactual(  # type: ignore
                 f"Counterfactual not found after {max_tries} tries, using best so far."
             )
     # Return the best counterfactual so far
-    if return_path and kind == "reference":
-        if return_pred:
-            return best_cf_so_far, best_cf_path_so_far, best_pred_so_far
-        return best_cf_so_far, best_cf_path_so_far  # type: ignore
-    if return_pred:
-        return best_cf_so_far, best_pred_so_far  # type: ignore
-    return best_cf_so_far
+    return best_cf_so_far, best_cf_path_so_far, best_pred_so_far

@@ -9,22 +9,21 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import datetime
+import json
 from munch import Munch
 import numpy as np
 import os
 from os.path import join as ospj
 from pathlib import Path
-from quac.training.data_loader import AugmentedInputFetcher
 from quac.training.checkpoint import CheckpointIO
-import quac.training.utils as utils
 from quac.training.classification import ClassifierWrapper
+from quac.training.data_loader import TrainingData
 import shutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from tqdm import tqdm
-import wandb
 
 
 transform = transforms.Compose(
@@ -33,6 +32,30 @@ transform = transforms.Compose(
         transforms.RandomVerticalFlip(),
     ]
 )
+
+
+def save_json(json_file, filename):
+    with open(filename, "w") as f:
+        json.dump(json_file, f, indent=4, sort_keys=False)
+
+
+def print_network(network, name):
+    num_params = 0
+    for p in network.parameters():
+        num_params += p.numel()
+    # print(network)
+    print("Number of parameters of %s: %i" % (name, num_params))
+
+
+def he_init(module):
+    if isinstance(module, nn.Conv2d):
+        nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+    if isinstance(module, nn.Linear):
+        nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
 
 
 class Solver(nn.Module):
@@ -61,7 +84,7 @@ class Solver(nn.Module):
 
         # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
         for name, module in self.nets.items():
-            utils.print_network(module, name)
+            print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
             setattr(self, name + "_ema", module)
@@ -98,11 +121,11 @@ class Solver(nn.Module):
             ]
 
         self.to(self.device)
-        # TODO The EMA doesn't need to be in named_childeren()
+        # TODO The EMA doesn't need to be in named_children()
         for name, network in self.named_children():
             if "ema" not in name:
                 print("Initializing %s..." % name)
-                network.apply(utils.he_init)
+                network.apply(he_init)
 
     def _save_checkpoint(self, step):
         for ckptio in self.ckptios:
@@ -127,7 +150,7 @@ class Solver(nn.Module):
 
     def train(  # type: ignore
         self,
-        loader,
+        loader: TrainingData,
         resume_iter: int = 0,
         total_iters: int = 100000,
         log_every: int = 100,
@@ -148,13 +171,6 @@ class Solver(nn.Module):
         nets_ema = self.nets_ema
         optims = self.optims
 
-        fetcher = AugmentedInputFetcher(
-            loader.src,
-            loader.reference,
-            latent_dim=self.latent_dim,
-            mode="train",
-        )
-
         # resume training if necessary
         if resume_iter > 0:
             self._load_checkpoint(resume_iter)
@@ -165,7 +181,7 @@ class Solver(nn.Module):
         print("Start training...")
         for i in range(resume_iter, total_iters):
             # fetch images and labels
-            inputs = next(fetcher)
+            inputs = next(loader)
             x_real, x_aug, y_org = inputs.x_src, inputs.x_src2, inputs.y_src
             x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
             z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
@@ -345,7 +361,7 @@ class Solver(nn.Module):
     def evaluate(
         self,
         val_loader,
-        iteration=None,
+        iteration,
         num_outs_per_domain=10,
         mode="latent",
         val_config=None,
@@ -357,9 +373,6 @@ class Solver(nn.Module):
         ----------
         val_loader
         """
-        if iteration is None:  # Choose the iteration to evaluate
-            resume_iter = resume_iter
-            self._load_checkpoint(resume_iter)
 
         # Generate images for evaluation
         eval_dir = self.root_dir / "eval"
@@ -367,17 +380,17 @@ class Solver(nn.Module):
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Load classifier
+        model = torch.jit.load(val_config.classifier_checkpoint)
         classifier = ClassifierWrapper(
-            val_config.classifier_checkpoint,
-            val_config.mean,
-            val_config.std,
-            assume_normalized=val_config.assume_normalized,
-            do_nothing=val_config.do_nothing,
+            model=model,
+            shift=val_config.shift,
+            scale=val_config.scale,
         )
         classifier.to(device)
         assert mode in ["latent", "reference"]
 
         val_loader.set_mode(mode)
+        iter_ref = None
 
         domains = val_loader.available_targets
         print("Number of domains: %d" % len(domains))
@@ -402,7 +415,7 @@ class Solver(nn.Module):
                 val_loader.set_source(src_domain)
                 loader_src = val_loader.loader_src
 
-                for i, x_src in enumerate(tqdm(loader_src, total=len(loader_src))):
+                for i, (x_src, _) in enumerate(tqdm(loader_src, total=len(loader_src))):
                     N = x_src.size(0)
                     x_src = x_src.to(device)
                     y_trg = torch.tensor([trg_idx] * N).to(device)
@@ -414,14 +427,15 @@ class Solver(nn.Module):
                             z_trg = torch.randn(N, self.latent_dim).to(device)
                             s_trg = self.nets_ema.mapping_network(z_trg, y_trg)
                         else:
-                            # x_ref = x_trg.clone()
                             try:
                                 # TODO don't need to re-do this every time, just use
                                 # the same set of reference images for the whole dataset!
-                                x_ref = next(iter_ref).to(device)
-                            except:
+                                x_ref, _ = next(iter_ref)
+                                x_ref = x_ref.to(device)
+                            except (TypeError, StopIteration):  # iter_ref is None
                                 iter_ref = iter(loader_ref)
-                                x_ref = next(iter_ref).to(device)
+                                x_ref, _ = next(iter_ref)
+                                x_ref = x_ref.to(device)
 
                             if x_ref.size(0) > N:
                                 x_ref = x_ref[:N]
@@ -434,11 +448,7 @@ class Solver(nn.Module):
 
                         x_fake = self.nets_ema.generator(x_src, s_trg)
                         # Run the classification
-                        pred = classifier(
-                            x_fake,
-                            assume_normalized=val_config.assume_normalized,
-                            do_nothing=val_config.do_nothing,
-                        )
+                        pred = classifier(x_fake)
                         predictions.append(pred.cpu().numpy())
                 predictions = np.stack(predictions, axis=0)
                 assert len(predictions) > 0
@@ -473,12 +483,12 @@ class Solver(nn.Module):
         filename = os.path.join(
             eval_dir, "conversion_rate_%.5i_%s.json" % (iteration, mode)
         )
-        utils.save_json(conversion_rate_values, filename)
+        save_json(conversion_rate_values, filename)
         # report translation rate values
         filename = os.path.join(
             eval_dir, "translation_rate_%.5i_%s.json" % (iteration, mode)
         )
-        utils.save_json(translation_rate_values, filename)
+        save_json(translation_rate_values, filename)
         if self.run is not None:
             self.run.log(conversion_rate_values, step=iteration)
             self.run.log(translation_rate_values, step=iteration)
@@ -592,14 +602,14 @@ def adv_loss(logits, target):
 def r1_reg(d_out, x_in):
     # zero-centered gradient penalty for real images
     batch_size = x_in.size(0)
-    grad_dout = torch.autograd.grad(
+    grad_d_out = torch.autograd.grad(
         outputs=d_out.sum(),
         inputs=x_in,
         create_graph=True,
         retain_graph=True,
         only_inputs=True,
     )[0]
-    grad_dout2 = grad_dout.pow(2)
-    assert grad_dout2.size() == x_in.size()
-    reg = 0.5 * grad_dout2.view(batch_size, -1).sum(1).mean(0)
+    grad_d_out2 = grad_d_out.pow(2)
+    assert grad_d_out2.size() == x_in.size()
+    reg = 0.5 * grad_d_out2.view(batch_size, -1).sum(1).mean(0)
     return reg

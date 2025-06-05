@@ -1,0 +1,43 @@
+data:
+    source: "</path/to/your/source/data/train>"
+    img_size: 128
+    batch_size: 16
+    num_workers: 12
+    grayscale: true
+
+validation_data:
+    source: "</path/to/your/source/data/val>"
+    img_size: 128
+    batch_size: 16
+    num_workers: 12
+    grayscale: true
+    
+model:
+    img_size: 128
+    style_dim: 64
+    latent_dim: 16
+    num_domains: 3
+    input_dim: 1
+    final_activation: "tanh"
+
+solver:
+    root_dir: "/directory/to/save/your/results"
+
+validation_config:
+    classifier_checkpoint: "/path/to/your/torchscript/checkpoint"
+    val_batch_size: 16
+  
+log:
+    log_dir: "tutorial_logs"
+    project: "quac_example_project"
+    name: "name_of_your_run"
+    notes: "Stargan training on my dataset"
+    tags:
+        - stargan
+        - training
+
+run:
+    log_every: 1000
+    total_iters: 5000
+    save_every: 1000
+    eval_every: 1000

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, Union, Literal
+import warnings
 
 
 class ModelConfig(BaseModel):
@@ -13,13 +14,14 @@ class ModelConfig(BaseModel):
 
 class DataConfig(BaseModel):
     source: str
-    reference: str
     img_size: int = 128
     batch_size: int = 1
     num_workers: int = 4
     grayscale: bool = False
-    mean: Optional[float] = 0.5
-    std: Optional[float] = 0.5
+    rgb: bool = True  # default based on model default
+    reference: Optional[str] = None
+    scale: Optional[float] = 2
+    shift: Optional[float] = -1
     rand_crop_prob: Optional[float] = 0
 
 
@@ -34,12 +36,10 @@ class RunConfig(BaseModel):
 class ValConfig(BaseModel):
     classifier_checkpoint: str
     num_outs_per_domain: int = 10
-    mean: Optional[float] = 0.5
-    std: Optional[float] = 0.5
+    scale: Optional[float] = 1.0
+    shift: Optional[float] = 0.0
     img_size: int = 128
     val_batch_size: int = 16
-    assume_normalized: bool = False
-    do_nothing: bool = False
 
 
 class LossConfig(BaseModel):
@@ -86,3 +86,18 @@ class ExperimentConfig(BaseModel):
     loss: LossConfig = LossConfig()
     # Optional
     test_data: Optional[DataConfig] = None
+
+
+def get_data_config(experiment, dataset="test"):
+    """
+    Choose a data configuration to use for training or testing.
+    If "test" is not available, use "validation".
+    """
+    dataset = dataset or "test"
+    if dataset == "train":
+        return experiment.data
+    elif dataset == "test":
+        if experiment.test_data:
+            return experiment.test_data
+        warnings.warn("No test data found, using validation data.")
+    return experiment.validation_data
