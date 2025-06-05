@@ -180,24 +180,32 @@ class Report:
     def from_source(self, source_class, name=None) -> "Report":
         """
         Create a Report containing only the explanations with the given source class.
+
+        This filters explanations based on both the original and the *predicted* source class.
+        That is, if an explanation has a source of class 0, but the model predicted it as class 1, it will not be included.
         """
         filtered_report = Report(name=name)
         filtered_report.explanations = [
             explanation
             for explanation in self.explanations
             if explanation.source_class == source_class
+            and np.argmax(explanation.query_prediction) == source_class
         ]
         return filtered_report
 
     def to_target(self, target_class, name=None) -> "Report":
         """
         Create a filtered Report containing only the explanations with the given target class.
+
+        This filters explanations based on both the original and the *predicted* target class.
+        That is, if an explanation has a target of class 0, but the model predicted it as class 1, it will not be included.
         """
         filtered_report = Report(name=name)
         filtered_report.explanations = [
             explanation
             for explanation in self.explanations
             if explanation.target_class == target_class
+            and np.argmax(explanation.counterfactual_prediction) == target_class
         ]
         return filtered_report
 
