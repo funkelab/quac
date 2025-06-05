@@ -18,7 +18,7 @@ def parse_args():
     )
     parser.add_argument(
         "-i",
-        "--input_fake",
+        "--input",
         type=str,
         default=None,
         help="""
@@ -46,6 +46,18 @@ def parse_args():
         Names of the attributions to evaluate.
         Defaults to all directories in the attribution directory.""",
     )
+    parser.add_argument(
+        "-k",
+        "--kind",
+        type=str,
+        default="latent",
+        choices=["latent", "reference"],
+        help="""
+        Kind of generated images to use for attribution.
+        `latent` for images generated from the latent space,
+        `reference` for images generated from the reference space.
+        """,
+    )
     return parser.parse_args()
 
 
@@ -61,7 +73,9 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.attrs or f"{experiment.solver.root_dir}/attributions"
-    generated_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    generated_directory = (
+        args.input or f"{experiment.solver.root_dir}/generated_images/{args.kind}"
+    )
     counterfactual_directory = f"{experiment.solver.root_dir}/counterfactuals"
     mask_directory = f"{experiment.solver.root_dir}/masks"
     report_directory = f"{experiment.solver.root_dir}/reports"
