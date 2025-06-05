@@ -40,7 +40,7 @@ If you have a `test` data set, add it to the configuration under `test_data`.
 In most cases, `train`, `validation` and `test` will have the same configuration. 
 However, you may want to increase `batch_size` for `validation` and `test` for more efficient inference.
 
-```note
+```{note}
 If you choose to, you can also add a `scale` and `shift` parameter to your data parameters. 
 The data will be read into a `[0, 1]` range, so the `scale` and `shift` parameters can help you move it into a different rante. By default, these are set to `scale=2` and `shift=-1` to get data in the `[-1, 1]` range. Since generative adversarial networks are sensitive to train, it is not recommended to deviate from this range.
 ```
