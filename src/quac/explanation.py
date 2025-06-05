@@ -81,6 +81,20 @@ class Explanation:
             # The other, optional, attributes are not checked for equality
         return False
 
+    def __hash__(self):
+        return hash(
+            (
+                self._query_path,
+                self._counterfactual_path,
+                self._mask_path,
+                tuple(self.query_prediction),
+                tuple(self.counterfactual_prediction),
+                self.source_class,
+                self.target_class,
+                self.score,
+            )
+        )
+
     def __repr__(self):
         return f"Explanation(query_path={self._query_path}, counterfactual_path={self._counterfactual_path}, mask_path={self._mask_path}, source_class={self.source_class}, target_class={self.target_class})"
 
