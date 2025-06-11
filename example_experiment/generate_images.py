@@ -105,6 +105,7 @@ if __name__ == "__main__":
         data_directory=Path(data_config.source) / args.source_class,
         img_size=data_config.img_size,
         grayscale=data_config.grayscale,
+        rgb=data_config.rgb,
         scale=data_config.scale,
         shift=data_config.shift,
     )
@@ -115,6 +116,7 @@ if __name__ == "__main__":
             data_directory=Path(data_config.reference) / args.target_class,
             img_size=data_config.img_size,
             grayscale=data_config.grayscale,
+            rgb=data_config.rgb,
             scale=data_config.scale,
             shift=data_config.shift,
         )
