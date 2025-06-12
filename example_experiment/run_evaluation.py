@@ -109,8 +109,8 @@ if __name__ == "__main__":
             source_directory=data_directory,
             generated_directory=generated_directory,
             attribution_directory=attribution_directory / name,
-            counterfactual_directory=counterfactual_directory / name,
-            mask_directory=mask_directory / name,
+            counterfactual_output_dir=counterfactual_directory / name,
+            mask_output_dir=mask_directory / name,
             transform=transform,
         )
 
