@@ -37,6 +37,16 @@ def parse_args():
         as defined in the config file.
         """,
     )
+    parser.add_argument(
+        "-k",
+        "--kind",
+        type=str,
+        choices=["latent", "reference"],
+        default="latent",
+        help="""
+        Kind of image generation that was done. Used to find the generated images. 
+        """,
+    )
     return parser.parse_args()
 
 
@@ -52,7 +62,9 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.output or f"{experiment.solver.root_dir}/attributions"
-    generated_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    generated_directory = (
+        args.input or f"{experiment.solver.root_dir}/generated_images/{args.kind}"
+    )
 
     # Load the classifier
     device = "cuda" if torch.cuda.is_available() else "cpu"
