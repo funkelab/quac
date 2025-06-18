@@ -18,7 +18,6 @@ dynamic = ["version"]
 dependencies = [
   "captum",
   "numpy>=2.0",
-  "munch",
   "torch==2.4.0",
   "torchvision",
   "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",

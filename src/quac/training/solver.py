@@ -10,7 +10,6 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import json
-from munch import Munch
 import numpy as np
 import os
 from os.path import join as ospj
@@ -89,7 +88,7 @@ class Solver(nn.Module):
         for name, module in self.nets_ema.items():
             setattr(self, name + "_ema", module)
 
-        self.optims = Munch()
+        self.optims = dict()
         for net in self.nets.keys():
             self.optims[net] = torch.optim.Adam(
                 params=self.nets[net].parameters(),
@@ -182,8 +181,8 @@ class Solver(nn.Module):
         for i in range(resume_iter, total_iters):
             # fetch images and labels
             inputs = next(loader)
-            x_real, x_aug, y_org = inputs.x_src, inputs.x_src2, inputs.y_src
-            x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
+            x_real, x_aug, y_org = inputs["x_src"], inputs["x_src2"], inputs["y_src"]
+            x_ref, x_ref2, y_trg = inputs["x_ref"], inputs["x_ref2"], inputs["y_ref"]
             z_trg = torch.randn(x_real.size(0), self.latent_dim)
             z_trg2 = torch.randn(x_real.size(0), self.latent_dim)
 
@@ -519,9 +518,7 @@ def compute_d_loss(nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, lambda_re
     loss_fake = adv_loss(out, 0)
 
     loss = loss_real + loss_fake + lambda_reg * loss_reg
-    return loss, Munch(
-        real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item()
-    )
+    return loss, dict(real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item())
 
 
 def compute_g_loss(
@@ -582,7 +579,7 @@ def compute_g_loss(
     )
     return (
         loss,
-        Munch(
+        dict(
             adv=loss_adv.item(),
             sty=loss_sty.item(),
             ds=loss_ds.item(),

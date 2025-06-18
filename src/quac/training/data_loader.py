@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 import random
 
-from munch import Munch
 import numpy as np
 
 from torch.utils import data
@@ -263,7 +262,7 @@ class TrainingData:
     def __next__(self):
         x, x2, y = self._fetch_inputs()
         x_ref, x_ref2, y_ref = self._fetch_refs()
-        inputs = Munch(
+        inputs = dict(
             x_src=x,
             y_src=y,
             x_src2=x2,
