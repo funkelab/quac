@@ -74,7 +74,6 @@ class Solver(nn.Module):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.nets = nets
-        self.latent_dim = nets.mapping_network.latent_dim
         self.nets_ema = nets_ema
         self.run = run
         self.root_dir = Path(root_dir)
