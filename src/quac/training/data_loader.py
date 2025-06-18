@@ -15,7 +15,6 @@ import random
 from munch import Munch
 import numpy as np
 
-import torch
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
@@ -217,7 +216,6 @@ class TrainingData:
         shift=-1,
         rand_crop_prob=0,
     ):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ref_root = reference or source  # if reference is None, use source as reference
         self.src = get_train_loader(
             root=source,
@@ -266,12 +264,12 @@ class TrainingData:
         x, x2, y = self._fetch_inputs()
         x_ref, x_ref2, y_ref = self._fetch_refs()
         inputs = Munch(
-            x_src=x.to(self.device),
-            y_src=y.to(self.device),
-            x_src2=x2.to(self.device),
-            y_ref=y_ref.to(self.device),
-            x_ref=x_ref.to(self.device),
-            x_ref2=x_ref2.to(self.device),
+            x_src=x,
+            y_src=y,
+            x_src2=x2,
+            y_ref=y_ref,
+            x_ref=x_ref,
+            x_ref2=x_ref2,
         )
         return inputs
 

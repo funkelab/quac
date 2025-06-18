@@ -188,6 +188,10 @@ class Solver(nn.Module):
             z_trg = torch.randn(x_real.size(0), self.latent_dim)
             z_trg2 = torch.randn(x_real.size(0), self.latent_dim)
 
+            # Put everything on the right device
+            for item in [x_real, x_ref, x_ref2, x_aug, y_org, y_trg, z_trg, z_trg2]:
+                item.to(self.device)
+
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
                 nets, x_real, y_org, y_trg, z_trg=z_trg, lambda_reg=lambda_reg
