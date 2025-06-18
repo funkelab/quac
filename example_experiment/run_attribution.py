@@ -1,8 +1,9 @@
 from argparse import ArgumentParser
 import torch
+import quac.attribution
 from quac.config import ExperimentConfig, get_data_config
 from quac.generate import load_classifier
-from quac.attribution import DIntegratedGradients, DDeepLift, AttributionIO
+from quac.attribution import AttributionIO
 from quac.data import create_transform
 import yaml
 
@@ -77,12 +78,11 @@ if __name__ == "__main__":
     classifier.eval()
 
     # Defining attributions
-    # TODO Offer a way to select which attributions to run
+    attributions = experiment.attribution.attributions
+    attributions_dict = {name: getattr(quac.attribution, name) for name in attributions}
+
     attributor = AttributionIO(
-        attributions={
-            "discriminative_ig": DIntegratedGradients(classifier),
-            "discriminative_deeplift": DDeepLift(classifier),
-        },
+        attributions=attributions_dict,
         output_directory=attribution_directory,
     )
 

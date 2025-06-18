@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+import quac.attribution
 from typing import Optional, Union, Literal
 import warnings
 
@@ -70,6 +71,23 @@ class TensorboardLogConfig(BaseModel):
     comment: str = ""
 
 
+class AttributionConfig(BaseModel):
+    """
+    Attributions available
+    """
+
+    attributions: list = ["DIntegratedGradients", "DDeepLift"]
+
+    # Verify that the attributions are available
+    def __init__(self, **data):
+        super().__init__(**data)
+        for attr in self.attributions:
+            if not hasattr(quac.attribution, attr):
+                raise ValueError(
+                    f"Attribution {attr} is not available in quac.attribution"
+                )
+
+
 class ExperimentConfig(BaseModel):
     # Metadata for keeping track of experiments
     log_type: Literal["wandb", "tensorboard"] = "wandb"
@@ -83,6 +101,7 @@ class ExperimentConfig(BaseModel):
     model: ModelConfig = ModelConfig()
     run: RunConfig = RunConfig()
     loss: LossConfig = LossConfig()
+    attribution: AttributionConfig = AttributionConfig()
     # Optional
     test_data: Optional[DataConfig] = None
 
