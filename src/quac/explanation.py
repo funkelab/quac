@@ -3,6 +3,7 @@ from typing import Optional, Union
 import torch
 from pathlib import Path
 from quac.data import read_image
+import matplotlib.pyplot as plt
 
 
 def serialize(obj):
@@ -121,6 +122,14 @@ class Explanation:
         Read an image from a given path.
         """
         return read_image(path)  # Assuming read_image is defined elsewhere
+
+    def plot_quac_curve(self, ax=None):
+        """
+        Plot the QUAC curve for the explanation.
+        """
+        ax = ax or plt
+        ax.plot(self._normalized_mask_sizes, self._score_changes)
+        return ax
 
 
 def explanation_encoder(explanation: Explanation):
