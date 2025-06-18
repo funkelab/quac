@@ -89,10 +89,10 @@ class Solver(nn.Module):
             setattr(self, name + "_ema", module)
 
         self.optims = dict()
-        for net in self.nets.keys():
-            self.optims[net] = torch.optim.Adam(
-                params=self.nets[net].parameters(),
-                lr=f_lr if net == "mapping_network" else lr,
+        for name, net in self.nets.named_children():
+            self.optims[name] = torch.optim.Adam(
+                params=net.parameters(),
+                lr=f_lr if name == "mapping_network" else lr,
                 betas=(beta1, beta2),
                 weight_decay=weight_decay,
             )
@@ -165,9 +165,6 @@ class Solver(nn.Module):
         val_config=None,
     ):
         start = datetime.datetime.now()
-        nets = self.nets
-        nets_ema = self.nets_ema
-        optims = self.optims
 
         # resume training if necessary
         if resume_iter > 0:
@@ -188,22 +185,22 @@ class Solver(nn.Module):
 
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
-                nets, x_real, y_org, y_trg, z_trg=z_trg, lambda_reg=lambda_reg
+                self.nets, x_real, y_org, y_trg, z_trg=z_trg, lambda_reg=lambda_reg
             )
             self._reset_grad()
             d_loss.backward()
-            optims.discriminator.step()
+            self.optims["discriminator"].step()
 
             d_loss, d_losses_ref = compute_d_loss(
-                nets, x_real, y_org, y_trg, x_ref=x_ref, lambda_reg=lambda_reg
+                self.nets, x_real, y_org, y_trg, x_ref=x_ref, lambda_reg=lambda_reg
             )
             self._reset_grad()
             d_loss.backward()
-            optims.discriminator.step()
+            self.optims["discriminator"].step()
 
             # train the generator
             g_loss, g_losses_latent, fake_x_latent = compute_g_loss(
-                nets,
+                self.nets,
                 x_real,
                 y_org,
                 y_trg,
@@ -213,12 +210,12 @@ class Solver(nn.Module):
             )
             self._reset_grad()
             g_loss.backward()
-            optims.generator.step()
-            optims.mapping_network.step()
-            optims.style_encoder.step()
+            self.optims["generator"].step()
+            self.optims["mapping_network"].step()
+            self.optims["style_encoder"].step()
 
             g_loss, g_losses_ref, fake_x_reference = compute_g_loss(
-                nets,
+                self.nets,
                 x_real,
                 y_org,
                 y_trg,
@@ -229,12 +226,16 @@ class Solver(nn.Module):
             )
             self._reset_grad()
             g_loss.backward()
-            optims.generator.step()
+            self.optims["generator"].step()
 
             # compute moving average of network parameters
-            moving_average(nets.generator, nets_ema.generator, beta=0.999)
-            moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
-            moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
+            moving_average(self.nets.generator, self.nets_ema.generator, beta=0.999)
+            moving_average(
+                self.nets.style_encoder, self.nets_ema.style_encoder, beta=0.999
+            )
+            moving_average(
+                self.nets.mapping_network, self.nets_ema.mapping_network, beta=0.999
+            )
 
             if (i + 1) % eval_every == 0 and val_loader is not None:
                 self.evaluate(
@@ -253,11 +254,11 @@ class Solver(nn.Module):
                 elapsed = datetime.datetime.now() - start
                 # Log the images made by the EMA model!
                 with torch.no_grad():
-                    ema_fake_x_latent = nets_ema.generator(
-                        x_real, nets_ema.mapping_network(z_trg, y_trg)
+                    ema_fake_x_latent = self.nets_ema.generator(
+                        x_real, self.nets_ema.mapping_network(z_trg, y_trg)
                     )
-                    ema_fake_x_reference = nets_ema.generator(
-                        x_real, nets_ema.style_encoder(x_ref, y_trg)
+                    ema_fake_x_reference = self.nets_ema.generator(
+                        x_real, self.nets_ema.style_encoder(x_ref, y_trg)
                     )
                 self.log(
                     d_losses_latent,
