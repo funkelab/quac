@@ -74,6 +74,7 @@ class Solver(nn.Module):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.nets = nets
+        self.latent_dim = nets.mapping_network.latent_dim
         self.nets_ema = nets_ema
         self.run = run
         self.root_dir = Path(root_dir)
@@ -184,7 +185,8 @@ class Solver(nn.Module):
             inputs = next(loader)
             x_real, x_aug, y_org = inputs.x_src, inputs.x_src2, inputs.y_src
             x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
-            z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
+            z_trg = torch.randn(x_real.size(0), self.latent_dim)
+            z_trg2 = torch.randn(x_real.size(0), self.latent_dim)
 
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
