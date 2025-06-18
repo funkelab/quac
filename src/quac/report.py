@@ -269,6 +269,11 @@ class Report:
                 reports[report.name] = report
             except KeyError:
                 logging.warning(f"Could not load {json_file}, not a valid report.")
+        # Check if there are any reports
+        if len(reports) == 0:
+            raise ValueError(
+                f"No reports found in {eval_directory}. Please check the directory structure."
+            )
         return merge_reports(reports, **kwargs)
 
     def reroot(self, input: str, output: str):
