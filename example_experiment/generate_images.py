@@ -1,8 +1,8 @@
 from argparse import ArgumentParser
 from pathlib import Path
 from quac.config import ExperimentConfig
-from quac.generate import load_classifier, load_data, load_stargan, get_counterfactual
-from quac.data import write_image
+from quac.generate import load_classifier, load_stargan, get_counterfactual
+from quac.data import write_image, create_transform, DefaultDataset
 from tqdm import tqdm
 import torch
 import warnings
@@ -101,24 +101,23 @@ if __name__ == "__main__":
 
     data_config = get_data_config(experiment, args.dataset)
 
-    dataset = load_data(
-        data_directory=Path(data_config.source) / args.source_class,
+    transform = create_transform(
         img_size=data_config.img_size,
         grayscale=data_config.grayscale,
         rgb=data_config.rgb,
         scale=data_config.scale,
         shift=data_config.shift,
     )
+    dataset = DefaultDataset(
+        root=Path(data_config.source) / args.source_class,
+        transform=transform,
+    )
 
     reference_dataset = None
     if args.kind == "reference":
-        reference_dataset = load_data(
-            data_directory=Path(data_config.reference) / args.target_class,
-            img_size=data_config.img_size,
-            grayscale=data_config.grayscale,
-            rgb=data_config.rgb,
-            scale=data_config.scale,
-            shift=data_config.shift,
+        reference_dataset = DefaultDataset(
+            root=Path(data_config.reference) / args.target_class,
+            transform=transform,
         )
 
     target_index = get_target_index(data_config.source, args.target_class)
