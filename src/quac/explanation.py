@@ -148,8 +148,10 @@ class Explanation:
         self._query_path = self._query_path.replace(input, output)
         self._counterfactual_path = self._counterfactual_path.replace(input, output)
         self._mask_path = self._mask_path.replace(input, output)
-        self._attribution_path = self._attribution_path.replace(input, output)
-        self._generated_path = self._generated_path.replace(input, output)
+        if self._generated_path is not None:
+            self._generated_path = self._generated_path.replace(input, output)
+        if self._attribution_path is not None:
+            self._attribution_path = self._attribution_path.replace(input, output)
 
 
 def explanation_encoder(explanation: Explanation):
