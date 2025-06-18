@@ -43,7 +43,6 @@ class ValConfig(BaseModel):
 
 
 class LossConfig(BaseModel):
-    lambda_ds: float = 0.0  # No diversity by default
     lambda_sty: float = 1.0
     lambda_cyc: float = 1.0
     lambda_reg: float = 1.0

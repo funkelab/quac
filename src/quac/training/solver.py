@@ -156,7 +156,6 @@ class Solver(nn.Module):
         save_every: int = 10000,
         eval_every: int = 10000,
         # sample_dir: str = "samples",
-        lambda_ds: float = 1.0,
         ds_iter: int = 10000,
         lambda_reg: float = 1.0,
         lambda_sty: float = 1.0,
@@ -173,9 +172,6 @@ class Solver(nn.Module):
         # resume training if necessary
         if resume_iter > 0:
             self._load_checkpoint(resume_iter)
-
-        # remember the initial value of ds weight
-        initial_lambda_ds = lambda_ds
 
         print("Start training...")
         for i in range(resume_iter, total_iters):
@@ -213,7 +209,6 @@ class Solver(nn.Module):
                 y_trg,
                 z_trgs=[z_trg, z_trg2],
                 lambda_sty=lambda_sty,
-                lambda_ds=lambda_ds,
                 lambda_cyc=lambda_cyc,
             )
             self._reset_grad()
@@ -230,7 +225,6 @@ class Solver(nn.Module):
                 x_refs=[x_ref, x_ref2],
                 x_aug=x_aug,
                 lambda_sty=lambda_sty,
-                lambda_ds=lambda_ds,
                 lambda_cyc=lambda_cyc,
             )
             self._reset_grad()
@@ -241,10 +235,6 @@ class Solver(nn.Module):
             moving_average(nets.generator, nets_ema.generator, beta=0.999)
             moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
             moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
-
-            # decay weight for diversity sensitive loss
-            if lambda_ds > 0:
-                lambda_ds -= initial_lambda_ds / ds_iter
 
             if (i + 1) % eval_every == 0 and val_loader is not None:
                 self.evaluate(
@@ -274,7 +264,6 @@ class Solver(nn.Module):
                     d_losses_ref,
                     g_losses_latent,
                     g_losses_ref,
-                    lambda_ds,
                     x_real,
                     x_ref,
                     fake_x_latent,
@@ -294,7 +283,6 @@ class Solver(nn.Module):
         d_losses_ref,
         g_losses_latent,
         g_losses_ref,
-        lambda_ds,
         x_real,
         x_ref,
         fake_x_latent,
@@ -314,7 +302,6 @@ class Solver(nn.Module):
         ):
             for key, value in loss.items():
                 all_losses[prefix + key] = value
-        all_losses["G/lambda_ds"] = lambda_ds
         # log all losses to wandb or print them
         if self.run:
             self.run.log(all_losses, step=step)
@@ -530,7 +517,6 @@ def compute_g_loss(
     x_refs=None,
     x_aug=None,
     lambda_sty: float = 1.0,
-    lambda_ds: float = 1.0,
     lambda_cyc: float = 1.0,
 ):
     assert (z_trgs is None) != (x_refs is None)
@@ -561,7 +547,6 @@ def compute_g_loss(
         s_trg2 = nets.style_encoder(x_ref2, y_trg)
     x_fake2 = nets.generator(x_real, s_trg2)
     x_fake2 = x_fake2.detach()
-    loss_ds = torch.mean(torch.abs(x_fake - x_fake2))
 
     # cycle-consistency loss
     s_org = nets.style_encoder(x_real, y_org)
@@ -574,15 +559,12 @@ def compute_g_loss(
         loss_sty2 = torch.mean(torch.abs(s_pred2 - s_org))
         loss_sty = (loss_sty + loss_sty2) / 2
 
-    loss = (
-        loss_adv + lambda_sty * loss_sty - lambda_ds * loss_ds + lambda_cyc * loss_cyc
-    )
+    loss = loss_adv + lambda_sty * loss_sty + lambda_cyc * loss_cyc
     return (
         loss,
         dict(
             adv=loss_adv.item(),
             sty=loss_sty.item(),
-            ds=loss_ds.item(),
             cyc=loss_cyc.item(),
         ),
         x_fake,
