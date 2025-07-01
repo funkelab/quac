@@ -1,8 +1,9 @@
 from argparse import ArgumentParser
 import torch
+import quac.attribution
 from quac.config import ExperimentConfig, get_data_config
 from quac.generate import load_classifier
-from quac.attribution import DIntegratedGradients, DDeepLift, AttributionIO
+from quac.attribution import AttributionIO
 from quac.data import create_transform
 import yaml
 
@@ -37,6 +38,16 @@ def parse_args():
         as defined in the config file.
         """,
     )
+    parser.add_argument(
+        "-k",
+        "--kind",
+        type=str,
+        choices=["latent", "reference"],
+        default="latent",
+        help="""
+        Kind of image generation that was done. Used to find the generated images. 
+        """,
+    )
     return parser.parse_args()
 
 
@@ -52,7 +63,9 @@ if __name__ == "__main__":
 
     data_directory = data_config.source
     attribution_directory = args.output or f"{experiment.solver.root_dir}/attributions"
-    generated_directory = args.input or f"{experiment.solver.root_dir}/generated_images"
+    generated_directory = (
+        args.input or f"{experiment.solver.root_dir}/generated_images/{args.kind}"
+    )
 
     # Load the classifier
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,12 +78,11 @@ if __name__ == "__main__":
     classifier.eval()
 
     # Defining attributions
-    # TODO Offer a way to select which attributions to run
+    attributions = experiment.attribution.attributions
+    attributions_dict = {name: getattr(quac.attribution, name) for name in attributions}
+
     attributor = AttributionIO(
-        attributions={
-            "discriminative_ig": DIntegratedGradients(classifier),
-            "discriminative_deeplift": DDeepLift(classifier),
-        },
+        attributions=attributions_dict,
         output_directory=attribution_directory,
     )
 

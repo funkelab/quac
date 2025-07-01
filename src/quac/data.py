@@ -104,7 +104,10 @@ def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
     if isinstance(path, str):
         path = Path(path)
     assert image.dtype == torch.float32, "Image must be of type float32"
-    # convert to numpy
+    if image.ndim == 2:
+        image = image.unsqueeze(
+            0
+        )  # grayscale, add channel dimension so that the rest is grayscale/rgb agnostic
     image = image.permute(1, 2, 0).numpy()  # CHW to HWC
     # Checks whether the data is in `[0, 1]`
     if image.min() < 0 or image.max() > 1:
@@ -121,7 +124,7 @@ def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
     # Check output data type, based on the file format
     if path.suffix in [".jpg", ".jpeg", ".png", ".PNG", ".JPG", ".JPEG"]:
         image = (image * 255).astype(np.uint8)
-    imageio.imwrite(path, image)
+    imageio.imwrite(path, image.squeeze())  # Remove channel dimension if it is 1
 
 
 def find_classes(directory):

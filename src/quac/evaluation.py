@@ -132,8 +132,8 @@ class BaseEvaluator:
         attribution_dataset=None,
         num_thresholds=200,
         device=None,
-        mask_output_dir=None,
-        counterfactual_output_dir=None,
+        mask_directory=None,
+        counterfactual_directory=None,
     ):
         """Initializes the evaluator.
 
@@ -155,9 +155,9 @@ class BaseEvaluator:
             The number of thresholds to be used for the evaluation. Defaults to 200.
         device: torch.device, optional
             The device to be used for the evaluation. If None, it will use the GPU if available, else CPU.
-        mask_output_dir: str, optional
+        mask_directory: str, optional
             A directory where the masks will be saved on-the-fly. If None, they will not be saved.
-        counterfactual_output_dir: str, optional
+        counterfactual_directory: str, optional
             A directory where the counterfactuals will be saved on-the-fly. If None, they will not be saved.
         """
         self.device = device
@@ -171,8 +171,8 @@ class BaseEvaluator:
         self._paired_dataset = paired_dataset
         self._dataset_with_attribution = attribution_dataset
 
-        self.mask_output_dir = mask_output_dir
-        self.counterfactual_output_dir = counterfactual_output_dir
+        self.mask_directory = mask_directory
+        self.counterfactual_directory = counterfactual_directory
 
     @property
     def source_dataset(self):
@@ -205,9 +205,9 @@ class BaseEvaluator:
                 processor,
             )
             # Store the mask and counterfactual
-            if self.mask_output_dir is not None:
+            if self.mask_directory is not None:
                 self.save_mask(inputs, results)
-            if self.counterfactual_output_dir is not None:
+            if self.counterfactual_directory is not None:
                 self.save_counterfactual(inputs, results)
             report.accumulate(
                 inputs,
@@ -224,12 +224,12 @@ class BaseEvaluator:
         target_class = inputs.target_class
 
         # Save the mask
-        if self.mask_output_dir is not None:
-            mask_output_dir = (
-                Path(self.mask_output_dir) / f"{source_class}/{target_class}"
+        if self.mask_directory is not None:
+            mask_directory = (
+                Path(self.mask_directory) / f"{source_class}/{target_class}"
             )
-            mask_output_dir.mkdir(parents=True, exist_ok=True)
-            mask_path = mask_output_dir / (inputs.path.stem + ".npy")
+            mask_directory.mkdir(parents=True, exist_ok=True)
+            mask_path = mask_directory / (inputs.path.stem + ".npy")
             np.save(mask_path, results["mask"])
             results["mask_path"] = mask_path
 
@@ -239,13 +239,13 @@ class BaseEvaluator:
         """
         source_class = inputs.source_class
         target_class = inputs.target_class
-        if self.counterfactual_output_dir is not None:
+        if self.counterfactual_directory is not None:
             # Save the counterfactual
-            counterfactual_output_dir = (
-                Path(self.counterfactual_output_dir) / f"{source_class}/{target_class}"
+            counterfactual_directory = (
+                Path(self.counterfactual_directory) / f"{source_class}/{target_class}"
             )
-            counterfactual_output_dir.mkdir(parents=True, exist_ok=True)
-            counterfactual_path = counterfactual_output_dir / inputs.path.name
+            counterfactual_directory.mkdir(parents=True, exist_ok=True)
+            counterfactual_path = counterfactual_directory / inputs.path.name
             write_image(results["hybrid"], counterfactual_path)
             results["counterfactual_path"] = counterfactual_path
 
@@ -341,8 +341,8 @@ class Evaluator(BaseEvaluator):
         transform=None,
         num_thresholds=200,
         device=None,
-        mask_output_dir=None,
-        counterfactual_output_dir=None,
+        mask_directory=None,
+        counterfactual_directory=None,
     ):
         # Check that they all exist
         for directory in [
@@ -360,8 +360,8 @@ class Evaluator(BaseEvaluator):
             None,
             num_thresholds=num_thresholds,
             device=device,
-            mask_output_dir=mask_output_dir,
-            counterfactual_output_dir=counterfactual_output_dir,
+            mask_directory=mask_directory,
+            counterfactual_directory=counterfactual_directory,
         )
         self.transform = transform
         self.source_directory = source_directory

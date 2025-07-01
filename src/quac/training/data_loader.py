@@ -12,10 +12,8 @@ import logging
 from pathlib import Path
 import random
 
-from munch import Munch
 import numpy as np
 
-import torch
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
@@ -216,9 +214,7 @@ class TrainingData:
         scale=2,
         shift=-1,
         rand_crop_prob=0,
-        latent_dim=64,
     ):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ref_root = reference or source  # if reference is None, use source as reference
         self.src = get_train_loader(
             root=source,
@@ -246,7 +242,6 @@ class TrainingData:
         )
         self.iter = iter(self.src)
         self.iter_ref = iter(self.reference)
-        self.latent_dim = latent_dim
 
     def _fetch_inputs(self):
         try:
@@ -267,17 +262,13 @@ class TrainingData:
     def __next__(self):
         x, x2, y = self._fetch_inputs()
         x_ref, x_ref2, y_ref = self._fetch_refs()
-        z_trg = torch.randn(x.size(0), self.latent_dim)
-        z_trg2 = torch.randn(x.size(0), self.latent_dim)
-        inputs = Munch(
-            x_src=x.to(self.device),
-            y_src=y.to(self.device),
-            x_src2=x2.to(self.device),
-            y_ref=y_ref.to(self.device),
-            x_ref=x_ref.to(self.device),
-            x_ref2=x_ref2.to(self.device),
-            z_trg=z_trg.to(self.device),
-            z_trg2=z_trg2.to(self.device),
+        inputs = dict(
+            x_src=x,
+            y_src=y,
+            x_src2=x2,
+            y_ref=y_ref,
+            x_ref=x_ref,
+            x_ref2=x_ref2,
         )
         return inputs
 

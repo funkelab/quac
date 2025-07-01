@@ -3,6 +3,7 @@ from typing import Optional, Union
 import torch
 from pathlib import Path
 from quac.data import read_image
+import matplotlib.pyplot as plt
 
 
 def serialize(obj):
@@ -121,6 +122,36 @@ class Explanation:
         Read an image from a given path.
         """
         return read_image(path)  # Assuming read_image is defined elsewhere
+
+    def plot_quac_curve(self, ax=None):
+        """
+        Plot the QUAC curve for the explanation.
+        """
+        ax = ax or plt
+        ax.plot(self._normalized_mask_sizes, self._score_changes)
+        return ax
+
+    def reroot(self, input: str, output: str):
+        """
+        Change the directory of the explanation files, in case they are moved to a new location.
+        This is done with a simple string replacement, and the same replacement is done for every path in the explanation.
+        As such, it is only possible to change the directory of all paths at once -- we cannot change the internal organization of the files.
+        To change the internal organization of the files, we need to manually modify the paths.
+
+        Parameters
+        ----------
+        input : str
+            The part of the input path to be replaced. E.g. "/home/user/data/".
+        output : str
+            The desired new path, to replace the input path. E.g. "/home/new_user/new_data/".
+        """
+        self._query_path = self._query_path.replace(input, output)
+        self._counterfactual_path = self._counterfactual_path.replace(input, output)
+        self._mask_path = self._mask_path.replace(input, output)
+        if self._generated_path is not None:
+            self._generated_path = self._generated_path.replace(input, output)
+        if self._attribution_path is not None:
+            self._attribution_path = self._attribution_path.replace(input, output)
 
 
 def explanation_encoder(explanation: Explanation):

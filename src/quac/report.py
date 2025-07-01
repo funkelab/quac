@@ -269,4 +269,24 @@ class Report:
                 reports[report.name] = report
             except KeyError:
                 logging.warning(f"Could not load {json_file}, not a valid report.")
+        # Check if there are any reports
+        if len(reports) == 0:
+            raise ValueError(
+                f"No reports found in {eval_directory}. Please check the directory structure."
+            )
         return merge_reports(reports, **kwargs)
+
+    def reroot(self, input: str, output: str):
+        """
+        Iteratively re-root the explanations in the report.
+        See `quac.explanation.Explanation.reroot` for more details.
+
+        Parameters
+        ----------
+        input : str
+            The part of the input path to be replaced. E.g. "/home/user/data/".
+        output : str
+            The desired new path, to replace the input path. E.g. "/home/new_user/new_data/".
+        """
+        for explanation in self.explanations:
+            explanation.reroot(input, output)

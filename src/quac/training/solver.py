@@ -10,7 +10,6 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import json
-from munch import Munch
 import numpy as np
 import os
 from os.path import join as ospj
@@ -89,11 +88,11 @@ class Solver(nn.Module):
         for name, module in self.nets_ema.items():
             setattr(self, name + "_ema", module)
 
-        self.optims = Munch()
-        for net in self.nets.keys():
-            self.optims[net] = torch.optim.Adam(
-                params=self.nets[net].parameters(),
-                lr=f_lr if net == "mapping_network" else lr,
+        self.optims = dict()
+        for name, net in self.nets.named_children():
+            self.optims[name] = torch.optim.Adam(
+                params=net.parameters(),
+                lr=f_lr if name == "mapping_network" else lr,
                 betas=(beta1, beta2),
                 weight_decay=weight_decay,
             )
@@ -157,7 +156,6 @@ class Solver(nn.Module):
         save_every: int = 10000,
         eval_every: int = 10000,
         # sample_dir: str = "samples",
-        lambda_ds: float = 1.0,
         ds_iter: int = 10000,
         lambda_reg: float = 1.0,
         lambda_sty: float = 1.0,
@@ -167,80 +165,77 @@ class Solver(nn.Module):
         val_config=None,
     ):
         start = datetime.datetime.now()
-        nets = self.nets
-        nets_ema = self.nets_ema
-        optims = self.optims
 
         # resume training if necessary
         if resume_iter > 0:
             self._load_checkpoint(resume_iter)
 
-        # remember the initial value of ds weight
-        initial_lambda_ds = lambda_ds
-
         print("Start training...")
         for i in range(resume_iter, total_iters):
             # fetch images and labels
             inputs = next(loader)
-            x_real, x_aug, y_org = inputs.x_src, inputs.x_src2, inputs.y_src
-            x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
-            z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
+            x_real, x_aug, y_org = inputs["x_src"], inputs["x_src2"], inputs["y_src"]
+            x_ref, x_ref2, y_trg = inputs["x_ref"], inputs["x_ref2"], inputs["y_ref"]
+            z_trg = torch.randn(x_real.size(0), self.latent_dim)
+            z_trg2 = torch.randn(x_real.size(0), self.latent_dim)
+
+            # Put everything on the right device
+            for item in [x_real, x_ref, x_ref2, x_aug, y_org, y_trg, z_trg, z_trg2]:
+                item.to(self.device)
 
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
-                nets, x_real, y_org, y_trg, z_trg=z_trg, lambda_reg=lambda_reg
+                self.nets, x_real, y_org, y_trg, z_trg=z_trg, lambda_reg=lambda_reg
             )
             self._reset_grad()
             d_loss.backward()
-            optims.discriminator.step()
+            self.optims["discriminator"].step()
 
             d_loss, d_losses_ref = compute_d_loss(
-                nets, x_real, y_org, y_trg, x_ref=x_ref, lambda_reg=lambda_reg
+                self.nets, x_real, y_org, y_trg, x_ref=x_ref, lambda_reg=lambda_reg
             )
             self._reset_grad()
             d_loss.backward()
-            optims.discriminator.step()
+            self.optims["discriminator"].step()
 
             # train the generator
             g_loss, g_losses_latent, fake_x_latent = compute_g_loss(
-                nets,
+                self.nets,
                 x_real,
                 y_org,
                 y_trg,
                 z_trgs=[z_trg, z_trg2],
                 lambda_sty=lambda_sty,
-                lambda_ds=lambda_ds,
                 lambda_cyc=lambda_cyc,
             )
             self._reset_grad()
             g_loss.backward()
-            optims.generator.step()
-            optims.mapping_network.step()
-            optims.style_encoder.step()
+            self.optims["generator"].step()
+            self.optims["mapping_network"].step()
+            self.optims["style_encoder"].step()
 
             g_loss, g_losses_ref, fake_x_reference = compute_g_loss(
-                nets,
+                self.nets,
                 x_real,
                 y_org,
                 y_trg,
                 x_refs=[x_ref, x_ref2],
                 x_aug=x_aug,
                 lambda_sty=lambda_sty,
-                lambda_ds=lambda_ds,
                 lambda_cyc=lambda_cyc,
             )
             self._reset_grad()
             g_loss.backward()
-            optims.generator.step()
+            self.optims["generator"].step()
 
             # compute moving average of network parameters
-            moving_average(nets.generator, nets_ema.generator, beta=0.999)
-            moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
-            moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
-
-            # decay weight for diversity sensitive loss
-            if lambda_ds > 0:
-                lambda_ds -= initial_lambda_ds / ds_iter
+            moving_average(self.nets.generator, self.nets_ema.generator, beta=0.999)
+            moving_average(
+                self.nets.style_encoder, self.nets_ema.style_encoder, beta=0.999
+            )
+            moving_average(
+                self.nets.mapping_network, self.nets_ema.mapping_network, beta=0.999
+            )
 
             if (i + 1) % eval_every == 0 and val_loader is not None:
                 self.evaluate(
@@ -259,18 +254,17 @@ class Solver(nn.Module):
                 elapsed = datetime.datetime.now() - start
                 # Log the images made by the EMA model!
                 with torch.no_grad():
-                    ema_fake_x_latent = nets_ema.generator(
-                        x_real, nets_ema.mapping_network(z_trg, y_trg)
+                    ema_fake_x_latent = self.nets_ema.generator(
+                        x_real, self.nets_ema.mapping_network(z_trg, y_trg)
                     )
-                    ema_fake_x_reference = nets_ema.generator(
-                        x_real, nets_ema.style_encoder(x_ref, y_trg)
+                    ema_fake_x_reference = self.nets_ema.generator(
+                        x_real, self.nets_ema.style_encoder(x_ref, y_trg)
                     )
                 self.log(
                     d_losses_latent,
                     d_losses_ref,
                     g_losses_latent,
                     g_losses_ref,
-                    lambda_ds,
                     x_real,
                     x_ref,
                     fake_x_latent,
@@ -290,7 +284,6 @@ class Solver(nn.Module):
         d_losses_ref,
         g_losses_latent,
         g_losses_ref,
-        lambda_ds,
         x_real,
         x_ref,
         fake_x_latent,
@@ -310,7 +303,6 @@ class Solver(nn.Module):
         ):
             for key, value in loss.items():
                 all_losses[prefix + key] = value
-        all_losses["G/lambda_ds"] = lambda_ds
         # log all losses to wandb or print them
         if self.run:
             self.run.log(all_losses, step=step)
@@ -514,9 +506,7 @@ def compute_d_loss(nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, lambda_re
     loss_fake = adv_loss(out, 0)
 
     loss = loss_real + loss_fake + lambda_reg * loss_reg
-    return loss, Munch(
-        real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item()
-    )
+    return loss, dict(real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item())
 
 
 def compute_g_loss(
@@ -528,7 +518,6 @@ def compute_g_loss(
     x_refs=None,
     x_aug=None,
     lambda_sty: float = 1.0,
-    lambda_ds: float = 1.0,
     lambda_cyc: float = 1.0,
 ):
     assert (z_trgs is None) != (x_refs is None)
@@ -559,7 +548,6 @@ def compute_g_loss(
         s_trg2 = nets.style_encoder(x_ref2, y_trg)
     x_fake2 = nets.generator(x_real, s_trg2)
     x_fake2 = x_fake2.detach()
-    loss_ds = torch.mean(torch.abs(x_fake - x_fake2))
 
     # cycle-consistency loss
     s_org = nets.style_encoder(x_real, y_org)
@@ -572,15 +560,12 @@ def compute_g_loss(
         loss_sty2 = torch.mean(torch.abs(s_pred2 - s_org))
         loss_sty = (loss_sty + loss_sty2) / 2
 
-    loss = (
-        loss_adv + lambda_sty * loss_sty - lambda_ds * loss_ds + lambda_cyc * loss_cyc
-    )
+    loss = loss_adv + lambda_sty * loss_sty + lambda_cyc * loss_cyc
     return (
         loss,
-        Munch(
+        dict(
             adv=loss_adv.item(),
             sty=loss_sty.item(),
-            ds=loss_ds.item(),
             cyc=loss_cyc.item(),
         ),
         x_fake,
