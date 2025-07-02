@@ -1,4 +1,5 @@
 # Training the StarGAN
+from argparse import ArgumentParser
 from quac.config import ExperimentConfig
 from quac.training.data_loader import TrainingData, ValidationData
 from quac.training.stargan import build_model
@@ -10,8 +11,22 @@ import yaml
 torch.backends.cudnn.benchmark = True
 
 
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to the configuration file.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    with open("config.yaml", "r") as file:
+    args = parse_args()
+    # Load the configuration
+    with open(args.config, "r") as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 

@@ -16,6 +16,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to the configuration file.",
+    )
+    parser.add_argument(
         "--source_class",
         type=str,
         required=True,
@@ -95,7 +102,7 @@ def get_target_index(source_directory, target_class):
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open("config.yaml", "r") as file:
+    with open(args.config, "r") as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 

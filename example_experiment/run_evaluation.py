@@ -10,6 +10,13 @@ import yaml
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to the configuration file.",
+    )
+    parser.add_argument(
         "--dataset",
         type=str,
         choices=["train", "validation", "test"],
@@ -64,7 +71,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open("config.yaml", "r") as file:
+    with open(args.config, "r") as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 
