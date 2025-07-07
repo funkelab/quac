@@ -79,13 +79,15 @@ if __name__ == "__main__":
     classifier_config = experiment.validation_config
 
     data_directory = data_config.source
-    attribution_directory = args.attrs or f"{experiment.solver.root_dir}/attributions"
-    generated_directory = (
+    attribution_directory = Path(
+        args.attrs or f"{experiment.solver.root_dir}/attributions"
+    )
+    generated_directory = Path(
         args.input or f"{experiment.solver.root_dir}/generated_images/{args.kind}"
     )
-    counterfactual_directory = f"{experiment.solver.root_dir}/counterfactuals"
-    mask_directory = f"{experiment.solver.root_dir}/masks"
-    report_directory = f"{experiment.solver.root_dir}/reports"
+    counterfactual_directory = Path(f"{experiment.solver.root_dir}/counterfactuals")
+    mask_directory = Path(f"{experiment.solver.root_dir}/masks")
+    report_directory = Path(f"{experiment.solver.root_dir}/reports")
 
     # Load the classifier
     classifier = load_classifier(
