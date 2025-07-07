@@ -86,7 +86,9 @@ if __name__ == "__main__":
 
     # Defining attributions
     attributions = experiment.attribution.attributions
-    attributions_dict = {name: getattr(quac.attribution, name) for name in attributions}
+    attributions_dict = {
+        name: getattr(quac.attribution, name)(classifier) for name in attributions
+    }
 
     attributor = AttributionIO(
         attributions=attributions_dict,

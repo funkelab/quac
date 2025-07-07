@@ -16,13 +16,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
-        "--config",
-        "-c",
-        type=str,
-        default="config.yaml",
-        help="Path to the configuration file.",
-    )
-    parser.add_argument(
         "--source_class",
         type=str,
         required=True,
@@ -149,8 +142,11 @@ if __name__ == "__main__":
         device=device,
     )
 
+    # Load the inference model
+    checkpoint_dir = Path(experiment.solver.root_dir) / "checkpoints"
+
     inference_model = load_stargan(
-        checkpoint_dir=experiment.solver.root_dir,
+        checkpoint_dir=checkpoint_dir,
         **experiment.model.model_dump(),
         checkpoint_iter=args.checkpoint_iter,
         kind=args.kind,
