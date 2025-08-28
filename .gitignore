@@ -11,3 +11,6 @@ docs/_build
 
 # MacOS files
 .DS_Store
+
+# data
+web_app/test_example/

@@ -6,7 +6,7 @@ requires = ["setuptools", "wheel"]
 name = "quac"
 description = "Quantitative Attribution with Counterfactuals"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 classifiers = ["Programming Language :: Python :: 3"]
 keywords = []
 license = { text = "BSD 3-Clause License" }
@@ -18,9 +18,9 @@ dynamic = ["version"]
 dependencies = [
   "captum",
   "numpy>=2.0",
-  "torch==2.4.0",
-  "torchvision",
-  "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
+  "torch>=2.4.0,<2.5",
+  "torchvision>=0.19.0",
+  "funlib-learn-torch",
   "opencv-python",
   "pydantic",
   "scipy",
@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ['pytest', 'black', 'mypy', 'pdoc', 'pre-commit']
+web = ['flask>=2.0.0', 'werkzeug>=2.0.0']
 docs = [
   "ipykernel",
   "jupyter_sphinx",
@@ -53,16 +54,21 @@ docs = [
 homepage = "https://funkelab.github.io/quac/"
 repository = "https://github.com/funkelab/quac"
 
-[tool.pixi.project]
-channels = ["nvidia/label/cuda-11.8.0", "nvidia", "conda-forge", "pytorch"]
-platforms = ["linux-64"]
+[tool.setuptools.dynamic]
+version = { attr = "quac.__version__" }
 
-[tool.pixi.pypi-dependencies]
-quac = { path = ".", editable = true }
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "black", 
+    "mypy",
+    "pdoc",
+    "pre-commit"
+]
 
-[tool.pixi.environments]
-default = { solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
-docs = { features = ["docs"], solve-group = "default" }
+[tool.uv.sources]
+# Handle the git dependency for funlib.learn.torch
+funlib-learn-torch = { git = "https://github.com/funkelab/funlib.learn.torch" }
 
-[tool.pixi.tasks]
+[tool.mypy]
+python_version = "3.10"

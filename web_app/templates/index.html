@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuAC Visualizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar for filters -->
+            <div class="col-md-3 bg-light p-3">
+                <h4>QuAC Visualizer</h4>
+                <div id="report-info" class="mb-4">
+                    <h5>Report Info</h5>
+                    <div id="report-details">Loading...</div>
+                </div>
+
+                <div class="mb-4">
+                    <h5>Filters</h5>
+                    <form id="filter-form">
+                        <div class="mb-3">
+                            <label for="source-class" class="form-label">Source Class</label>
+                            <select class="form-select" id="source-class" name="source_class">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="target-class" class="form-label">Target Class</label>
+                            <select class="form-select" id="target-class" name="target_class">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="min-score" class="form-label">Min QuAC Score</label>
+                            <input type="range" class="form-range" id="min-score" name="min_score" min="0" max="1" step="0.01" value="0">
+                            <div class="d-flex justify-content-between">
+                                <small>0</small>
+                                <small id="min-score-value">0</small>
+                                <small>1</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="max-score" class="form-label">Max QuAC Score</label>
+                            <input type="range" class="form-range" id="max-score" name="max_score" min="0" max="1" step="0.01" value="1">
+                            <div class="d-flex justify-content-between">
+                                <small>0</small>
+                                <small id="max-score-value">1</small>
+                                <small>1</small>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 mb-2">Apply Filters</button>
+                        <button type="button" id="reset-filters" class="btn btn-outline-secondary w-100">Reset Filters</button>
+                    </form>
+                </div>
+
+                <div class="mb-4">
+                    <h5>QuAC Curve</h5>
+                    <canvas id="quac-curve" width="300" height="200"></canvas>
+                </div>
+
+                <div class="mb-4">
+                    <h5>Downloads</h5>
+                    <button id="download-json" class="btn btn-outline-secondary btn-sm w-100 mb-2">Download Filtered JSON</button>
+                    <button id="download-images" class="btn btn-outline-secondary btn-sm w-100">Download Filtered Images</button>
+                </div>
+            </div>
+
+            <!-- Main content area -->
+            <div class="col-md-9">
+                <div class="row">
+                    <!-- Explanation list -->
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5>Explanations</h5>
+                            <span id="explanation-count" class="badge bg-secondary">0</span>
+                        </div>
+                        <div id="explanation-list" class="list-group" style="height: calc(100vh - 200px); overflow-y: auto;">
+                            <!-- Explanations will be populated here -->
+                        </div>
+                        <div id="load-more-container" class="text-center mt-3">
+                            <button id="load-more" class="btn btn-outline-primary">Load More</button>
+                        </div>
+                    </div>
+
+                    <!-- Image viewer -->
+                    <div class="col-md-8">
+                        <div id="image-viewer" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 id="viewer-title">Explanation Details</h5>
+                                <div>
+                                    <button id="close-viewer" class="btn btn-sm btn-outline-secondary">×</button>
+                                </div>
+                            </div>
+
+                            <!-- Explanation metadata -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-3">
+                                                    <strong>Score:</strong> <span id="exp-score" class="badge bg-primary"></span>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Source:</strong> <span id="exp-source-class"></span>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Target:</strong> <span id="exp-target-class"></span>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Method:</strong> <span id="exp-method"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Image controls -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="image-toggle" id="show-query" autocomplete="off" checked>
+                                        <label class="btn btn-outline-primary" for="show-query">Query Image</label>
+                                        
+                                        <input type="radio" class="btn-check" name="image-toggle" id="show-counterfactual" autocomplete="off">
+                                        <label class="btn btn-outline-primary" for="show-counterfactual">Counterfactual Image</label>
+                                    </div>
+                                    
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="show-mask">
+                                        <label class="form-check-label" for="show-mask">
+                                            Show Mask Overlay
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Image display area -->
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="position-relative d-flex justify-content-center">
+                                        <div id="image-container" style="position: relative; display: inline-block;">
+                                            <img id="main-image" src="" alt="Explanation Image" style="max-width: 100%; height: auto; border: 1px solid #ddd;">
+                                            <canvas id="mask-overlay" style="position: absolute; top: 0; left: 0; pointer-events: none; display: none;"></canvas>
+                                        </div>
+                                    </div>
+                                    <div class="text-center mt-2">
+                                        <small id="image-info" class="text-muted"></small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- QuAC curve for this explanation -->
+                            <div class="row mt-4">
+                                <div class="col-md-12">
+                                    <h6>Individual QuAC Curve</h6>
+                                    <canvas id="individual-curve" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Placeholder when no explanation is selected -->
+                        <div id="no-explanation" class="text-center text-muted" style="margin-top: 100px;">
+                            <h5>Select an explanation to view details</h5>
+                            <p>Click on an explanation from the list to see the query/counterfactual images with optional mask overlay.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;">
+        <div class="d-flex justify-content-center align-items-center h-100">
+            <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
