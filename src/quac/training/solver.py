@@ -72,6 +72,7 @@ class Solver(nn.Module):
     ):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("Using device:", self.device)
         self.nets = nets
         self.nets_ema = nets_ema
         self.run = run
@@ -89,7 +90,7 @@ class Solver(nn.Module):
             setattr(self, name + "_ema", module)
 
         self.optims = dict()
-        for name, net in self.nets.named_children():
+        for name, net in self.nets.items():
             self.optims[name] = torch.optim.Adam(
                 params=net.parameters(),
                 lr=f_lr if name == "mapping_network" else lr,
@@ -179,9 +180,15 @@ class Solver(nn.Module):
             z_trg = torch.randn(x_real.size(0), self.latent_dim)
             z_trg2 = torch.randn(x_real.size(0), self.latent_dim)
 
-            # Put everything on the right device
-            for item in [x_real, x_ref, x_ref2, x_aug, y_org, y_trg, z_trg, z_trg2]:
-                item.to(self.device)
+            # Apparently, you cannot use a for loop to move tensors to device
+            x_real = x_real.to(self.device)
+            x_ref = x_ref.to(self.device)
+            x_ref2 = x_ref2.to(self.device)
+            x_aug = x_aug.to(self.device) if x_aug is not None else None
+            y_org = y_org.to(self.device)
+            y_trg = y_trg.to(self.device)
+            z_trg = z_trg.to(self.device)
+            z_trg2 = z_trg2.to(self.device)
 
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
@@ -552,6 +559,7 @@ def compute_g_loss(
     # cycle-consistency loss
     s_org = nets.style_encoder(x_real, y_org)
     x_rec = nets.generator(x_fake, s_org)
+    # Debugging -- print devices
     loss_cyc = torch.mean(torch.abs(x_rec - x_real))
 
     # style invariance loss

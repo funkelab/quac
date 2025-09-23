@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 import quac.attribution
 from typing import Optional, Union, Literal
 import warnings
@@ -24,6 +24,29 @@ class DataConfig(BaseModel):
     scale: Optional[float] = 2
     shift: Optional[float] = -1
     rand_crop_prob: Optional[float] = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_grayscale_rgb_logic(cls, data):
+        # If grayscale is explicitly set to True and rgb is not explicitly provided,
+        # set rgb to False
+        if data.get("grayscale") is True and "rgb" not in data:
+            data = data.copy()  # Don't mutate the original dict
+            data["rgb"] = False
+
+        # If rgb is explicitly set to True and grayscale is not explicitly provided,
+        # set grayscale to False
+        if data.get("rgb") is True and "grayscale" not in data:
+            data = data.copy()
+            data["grayscale"] = False
+
+        # If both are set to True or both are set to False, raise an error
+        if data.get("rgb") is True and data.get("grayscale") is True:
+            raise ValueError("Both rgb and grayscale cannot be True at the same time.")
+        if data.get("rgb") is False and data.get("grayscale") is False:
+            raise ValueError("Both rgb and grayscale cannot be False at the same time.")
+
+        return data
 
 
 class RunConfig(BaseModel):

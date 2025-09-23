@@ -311,25 +311,24 @@ def make_paired_dataset(
             target_dir = os.path.join(paired_directory, source_class, target_class)
             if os.path.isdir(target_dir):
                 target_directories[target_class] = target_dir
-            for root, _, fnames in sorted(os.walk(source_dir, followlinks=True)):
-                for fname in sorted(fnames):
-                    path = os.path.join(root, fname)
-                    if is_valid_file(path):
-                        for target_class, target_dir in target_directories.items():
-                            target_path = os.path.join(target_dir, fname)
-                            if os.path.isfile(target_path) and is_valid_file(
-                                target_path
-                            ):
-                                item = (
-                                    path,
-                                    target_path,
-                                    class_index,
-                                    class_to_idx[target_class],
-                                )
-                                instances.append(item)
 
-                                if source_class not in available_classes:
-                                    available_classes.add(source_class)
+        for root, _, fnames in sorted(os.walk(source_dir, followlinks=True)):
+            for fname in sorted(fnames):
+                path = os.path.join(root, fname)
+                if is_valid_file(path):
+                    for target_class, target_dir in target_directories.items():
+                        target_path = os.path.join(target_dir, fname)
+                        if os.path.isfile(target_path) and is_valid_file(target_path):
+                            item = (
+                                path,
+                                target_path,
+                                class_index,
+                                class_to_idx[target_class],
+                            )
+                            instances.append(item)
+
+                            if source_class not in available_classes:
+                                available_classes.add(source_class)
 
     empty_classes = set(class_to_idx.keys()) - available_classes
     if empty_classes and not allow_empty:
@@ -391,34 +390,34 @@ def make_paired_attribution_dataset(
             if os.path.isdir(attribution_dir):
                 attribution_directories[target_class] = attribution_dir
 
-            for root, _, fnames in sorted(os.walk(source_dir, followlinks=True)):
-                for fname in sorted(fnames):
-                    path = os.path.join(root, fname)
-                    if is_valid_file(path):
-                        for target_class, target_dir in target_directories.items():
-                            target_path = os.path.join(target_dir, fname)
-                            # attribution path must replace the extension to npy
-                            attr_filename = fname.split(".")[-2] + ".npy"
-                            attr_path = os.path.join(
-                                attribution_directories[target_class], attr_filename
+        for root, _, fnames in sorted(os.walk(source_dir, followlinks=True)):
+            for fname in sorted(fnames):
+                path = os.path.join(root, fname)
+                if is_valid_file(path):
+                    for target_class, target_dir in target_directories.items():
+                        target_path = os.path.join(target_dir, fname)
+                        # attribution path must replace the extension to npy
+                        attr_filename = fname.split(".")[-2] + ".npy"
+                        attr_path = os.path.join(
+                            attribution_directories[target_class], attr_filename
+                        )
+
+                        if (
+                            os.path.isfile(target_path)
+                            and is_valid_file(target_path)
+                            and os.path.isfile(attr_path)
+                        ):
+                            item = (
+                                path,
+                                target_path,
+                                attr_path,
+                                class_index,
+                                class_to_idx[target_class],
                             )
+                            instances.append(item)
 
-                            if (
-                                os.path.isfile(target_path)
-                                and is_valid_file(target_path)
-                                and os.path.isfile(attr_path)
-                            ):
-                                item = (
-                                    path,
-                                    target_path,
-                                    attr_path,
-                                    class_index,
-                                    class_to_idx[target_class],
-                                )
-                                instances.append(item)
-
-                                if source_class not in available_classes:
-                                    available_classes.add(source_class)
+                            if source_class not in available_classes:
+                                available_classes.add(source_class)
 
     empty_classes = set(class_to_idx.keys()) - available_classes
     if empty_classes and not allow_empty:

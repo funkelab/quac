@@ -347,19 +347,6 @@ class Discriminator(nn.Module):
         return out
 
 
-class StarGAN(nn.Module):
-    """
-    Puts together all of the parts of the StarGAN.
-    """
-
-    def __init__(self, generator, mapping_network, style_encoder, discriminator=None):
-        super().__init__()
-        self.generator = generator
-        self.mapping_network = mapping_network
-        self.style_encoder = style_encoder
-        self.discriminator = discriminator
-
-
 def build_model(
     img_size=128,
     style_dim=64,
@@ -409,16 +396,20 @@ def build_model(
     mapping_network_ema = copy.deepcopy(mapping_network)
     style_encoder_ema = copy.deepcopy(style_encoder)
 
-    nets = StarGAN(
-        generator=generator,
-        mapping_network=mapping_network,
-        style_encoder=style_encoder,
-        discriminator=discriminator,
+    nets = torch.nn.ModuleDict(
+        {
+            "generator": generator,
+            "mapping_network": mapping_network,
+            "style_encoder": style_encoder,
+            "discriminator": discriminator,
+        }
     )
 
-    nets_ema = StarGAN(
-        generator=generator_ema,
-        mapping_network=mapping_network_ema,
-        style_encoder=style_encoder_ema,
+    nets_ema = torch.nn.ModuleDict(
+        {
+            "generator": generator_ema,
+            "mapping_network": mapping_network_ema,
+            "style_encoder": style_encoder_ema,
+        }
     )
     return nets, nets_ema

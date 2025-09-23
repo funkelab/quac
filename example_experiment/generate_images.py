@@ -95,7 +95,7 @@ def get_target_index(source_directory, target_class):
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open("config.yaml", "r") as file:
+    with open(args.config, "r") as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 
@@ -142,8 +142,11 @@ if __name__ == "__main__":
         device=device,
     )
 
+    # Load the inference model
+    checkpoint_dir = Path(experiment.solver.root_dir) / "checkpoints"
+
     inference_model = load_stargan(
-        checkpoint_dir=experiment.solver.root_dir,
+        checkpoint_dir=checkpoint_dir,
         **experiment.model.model_dump(),
         checkpoint_iter=args.checkpoint_iter,
         kind=args.kind,
