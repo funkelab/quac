@@ -493,6 +493,8 @@ class QuACVisualizer {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 2,
                 scales: {
                     x: {
                         display: true,
@@ -583,7 +585,8 @@ class QuACVisualizer {
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.5,
                     scales: {
                         x: {
                             display: true,
