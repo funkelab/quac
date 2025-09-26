@@ -378,12 +378,27 @@ canvas {
 }
 
 /* Collapsible Sidebar */
+#sidebar {
+    transform: translateX(0);
+}
+
 #sidebar.collapsed {
     transform: translateX(-100%);
 }
 
+#main-content {
+    margin-left: 300px !important;
+    width: calc(100% - 300px) !important;
+    transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
+}
+
 #main-content.expanded {
     margin-left: 0 !important;
+    width: 100% !important;
+}
+
+#sidebar-toggle {
+    transition: left 0.3s ease-in-out;
 }
 
 #sidebar-toggle.sidebar-hidden {
