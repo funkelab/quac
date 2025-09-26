@@ -13,6 +13,8 @@ class QuACVisualizer {
         this.totalExplanations = 0;
         this.charts = {};
         this.reportInfo = null;
+        this.sidebarWidth = 300; // Track current sidebar width
+        this.sidebarCollapsed = false;
         
         this.init();
     }
@@ -673,22 +675,36 @@ class QuACVisualizer {
         overlay.style.display = show ? 'block' : 'none';
     }
 
-    toggleSidebar() {
+    updateSidebarLayout(width) {
         const sidebar = document.getElementById('sidebar');
         const sidebarDivider = document.getElementById('sidebar-divider');
-        const mainContent = document.getElementById('main-content');
         const toggleButton = document.getElementById('sidebar-toggle');
+        
+        if (width === 0) {
+            // Collapsed state
+            sidebar.style.width = '0px';
+            sidebar.style.padding = '0';
+            sidebarDivider.style.display = 'none';
+            toggleButton.style.left = '10px';
+        } else {
+            // Expanded state
+            sidebar.style.width = width + 'px';
+            sidebar.style.padding = '1rem';
+            sidebarDivider.style.display = 'block';
+            toggleButton.style.left = (width + 10) + 'px';
+        }
+    }
+
+    toggleSidebar() {
         const toggleIcon = document.getElementById('toggle-icon');
         
-        sidebar.classList.toggle('collapsed');
-        sidebarDivider.classList.toggle('collapsed');
-        mainContent.classList.toggle('expanded');
-        toggleButton.classList.toggle('sidebar-hidden');
+        this.sidebarCollapsed = !this.sidebarCollapsed;
         
-        // Update toggle icon
-        if (sidebar.classList.contains('collapsed')) {
+        if (this.sidebarCollapsed) {
+            this.updateSidebarLayout(0);
             toggleIcon.textContent = '›';
         } else {
+            this.updateSidebarLayout(this.sidebarWidth);
             toggleIcon.textContent = '‹';
         }
     }
@@ -737,16 +753,14 @@ class QuACVisualizer {
     setupSidebarResizer() {
         const sidebarDivider = document.getElementById('sidebar-divider');
         const sidebar = document.getElementById('sidebar');
-        const mainContent = document.getElementById('main-content');
-        const toggleButton = document.getElementById('sidebar-toggle');
         let isResizing = false;
 
         sidebarDivider.addEventListener('mousedown', (e) => {
-            // Don't resize if sidebar is collapsed
-            if (sidebar.classList.contains('collapsed')) return;
-            
+            if (this.sidebarCollapsed) return;
             isResizing = true;
             document.body.classList.add('resizing');
+            // Disable transitions during resize
+            sidebar.style.transition = 'none';
             e.preventDefault();
         });
 
@@ -754,27 +768,12 @@ class QuACVisualizer {
             if (!isResizing) return;
 
             const mouseX = e.clientX;
-            
-            // Set minimum and maximum sidebar widths
             const minWidth = 200;
             const maxWidth = 600;
             
             if (mouseX >= minWidth && mouseX <= maxWidth) {
-                // Update CSS custom property
-                document.documentElement.style.setProperty('--sidebar-width', mouseX + 'px');
-                
-                // Update sidebar width
-                sidebar.style.width = mouseX + 'px';
-                
-                // Update divider position
-                sidebarDivider.style.left = mouseX + 'px';
-                
-                // Update toggle button position
-                toggleButton.style.left = (mouseX + 10) + 'px';
-                
-                // Update main content positioning
-                mainContent.style.marginLeft = mouseX + 'px';
-                mainContent.style.width = `calc(100% - ${mouseX}px)`;
+                this.sidebarWidth = mouseX;
+                this.updateSidebarLayout(mouseX);
             }
         });
 
@@ -782,6 +781,8 @@ class QuACVisualizer {
             if (isResizing) {
                 isResizing = false;
                 document.body.classList.remove('resizing');
+                // Re-enable transitions after resize
+                sidebar.style.transition = 'width 0.3s ease-in-out, padding 0.3s ease-in-out';
             }
         });
     }

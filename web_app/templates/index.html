@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <!-- Collapsible Sidebar -->
-    <div class="bg-light d-flex flex-column" id="sidebar" style="position: fixed; top: 0; left: 0; width: 300px; height: 100vh; overflow-y: auto; padding: 1rem; z-index: 1000; transition: transform 0.3s ease-in-out;">
+    <div class="d-flex vh-100">
+        <!-- Collapsible Sidebar -->
+        <div class="bg-light d-flex flex-column" id="sidebar" style="width: 300px; overflow-y: auto; padding: 1rem; transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;">
         <h5 class="mb-2">QuAC Visualizer</h5>
                 <div id="report-info" class="mb-2">
                     <h6 class="mb-1">Report Info</h6>
@@ -70,11 +71,11 @@
                 </div>
             </div>
 
-    <!-- Sidebar resizer -->
-    <div id="sidebar-divider" class="resizer" style="position: fixed; top: 0; left: 300px; width: 4px; height: 100vh; background: #dee2e6; cursor: col-resize; z-index: 999; border-left: 1px solid #adb5bd; border-right: 1px solid #adb5bd; transition: left 0.3s ease-in-out;"></div>
+        <!-- Sidebar resizer -->
+        <div id="sidebar-divider" class="resizer" style="width: 4px; background: #dee2e6; cursor: col-resize; border-left: 1px solid #adb5bd; border-right: 1px solid #adb5bd;"></div>
 
-    <!-- Main content area -->
-    <div class="container-fluid vh-100" id="main-content">
+        <!-- Main content area -->
+        <div class="container-fluid flex-grow-1" id="main-content">
         <!-- Sidebar toggle button -->
         <button id="sidebar-toggle" class="btn btn-outline-secondary btn-sm" style="position: fixed; top: 10px; left: 310px; z-index: 1001; transition: left 0.3s ease-in-out;">
             <span id="toggle-icon">‹</span>
@@ -196,6 +197,7 @@
                 <span class="visually-hidden">Loading...</span>
             </div>
         </div>
+    </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
