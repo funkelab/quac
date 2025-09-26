@@ -8,35 +8,35 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
+    <div class="container-fluid vh-100">
+        <div class="row h-100">
             <!-- Sidebar for filters -->
-            <div class="col-md-3 bg-light p-3">
-                <h4>QuAC Visualizer</h4>
-                <div id="report-info" class="mb-4">
-                    <h5>Report Info</h5>
-                    <div id="report-details">Loading...</div>
+            <div class="col-md-3 bg-light d-flex flex-column" style="overflow-y: auto; max-height: 100vh;">
+                <h5 class="mb-2">QuAC Visualizer</h5>
+                <div id="report-info" class="mb-2">
+                    <h6 class="mb-1">Report Info</h6>
+                    <div id="report-details" class="small">Loading...</div>
                 </div>
 
-                <div class="mb-4">
-                    <h5>Filters</h5>
+                <div class="mb-2">
+                    <h6>Filters</h6>
                     <form id="filter-form">
-                        <div class="mb-3">
-                            <label for="source-class" class="form-label">Source Class</label>
-                            <select class="form-select" id="source-class" name="source_class">
+                        <div class="mb-2">
+                            <label for="source-class" class="form-label small">Source Class</label>
+                            <select class="form-select form-select-sm" id="source-class" name="source_class">
                                 <option value="">All</option>
                             </select>
                         </div>
                         
-                        <div class="mb-3">
-                            <label for="target-class" class="form-label">Target Class</label>
-                            <select class="form-select" id="target-class" name="target_class">
+                        <div class="mb-2">
+                            <label for="target-class" class="form-label small">Target Class</label>
+                            <select class="form-select form-select-sm" id="target-class" name="target_class">
                                 <option value="">All</option>
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="min-score" class="form-label">Min QuAC Score</label>
+                        <div class="mb-2">
+                            <label for="min-score" class="form-label small">Min QuAC Score</label>
                             <input type="range" class="form-range" id="min-score" name="min_score" min="0" max="1" step="0.01" value="0">
                             <div class="d-flex justify-content-between">
                                 <small>0</small>
@@ -45,8 +45,8 @@
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="max-score" class="form-label">Max QuAC Score</label>
+                        <div class="mb-2">
+                            <label for="max-score" class="form-label small">Max QuAC Score</label>
                             <input type="range" class="form-range" id="max-score" name="max_score" min="0" max="1" step="0.01" value="1">
                             <div class="d-flex justify-content-between">
                                 <small>0</small>
@@ -55,42 +55,44 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100 mb-2">Apply Filters</button>
-                        <button type="button" id="reset-filters" class="btn btn-outline-secondary w-100">Reset Filters</button>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 mb-1">Apply Filters</button>
+                        <button type="button" id="reset-filters" class="btn btn-outline-secondary btn-sm w-100">Reset Filters</button>
                     </form>
                 </div>
 
-                <div class="mb-4">
-                    <h5>QuAC Curve</h5>
+                <div class="mb-2">
+                    <h6>QuAC Curve</h6>
                     <canvas id="quac-curve"></canvas>
                 </div>
 
-                <div class="mb-4">
-                    <h5>Downloads</h5>
-                    <button id="download-json" class="btn btn-outline-secondary btn-sm w-100 mb-2">Download Filtered JSON</button>
-                    <button id="download-images" class="btn btn-outline-secondary btn-sm w-100">Download Filtered Images</button>
+                <div class="mt-auto">
+                    <h6>Downloads</h6>
+                    <button id="download-json" class="btn btn-outline-secondary btn-sm w-100 mb-1">Download JSON</button>
+                    <button id="download-images" class="btn btn-outline-secondary btn-sm w-100">Download Images</button>
                 </div>
             </div>
 
             <!-- Main content area -->
-            <div class="col-md-9">
-                <div class="row">
+            <div class="col-md-9 h-100">
+                <div class="row h-100">
                     <!-- Explanation list -->
-                    <div class="col-md-4">
+                    <div class="col-md-4 d-flex flex-column h-100">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5>Explanations</h5>
                             <span id="explanation-count" class="badge bg-secondary">0</span>
                         </div>
-                        <div id="explanation-list" class="list-group" style="height: calc(100vh - 200px); overflow-y: auto;">
-                            <!-- Explanations will be populated here -->
-                        </div>
-                        <div id="load-more-container" class="text-center mt-3">
-                            <button id="load-more" class="btn btn-outline-primary">Load More</button>
+                        <div class="flex-grow-1 d-flex flex-column" style="min-height: 0;">
+                            <div id="explanation-list" class="list-group flex-grow-1" style="overflow-y: auto; min-height: 0;">
+                                <!-- Explanations will be populated here -->
+                            </div>
+                            <div id="load-more-container" class="text-center mt-2 flex-shrink-0">
+                                <button id="load-more" class="btn btn-outline-primary btn-sm">Load More</button>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Image viewer -->
-                    <div class="col-md-8">
+                    <div class="col-md-8 h-100">
                         <div id="image-viewer" style="display: none;">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 id="viewer-title">Explanation Details</h5>

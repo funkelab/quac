@@ -15,6 +15,70 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
+    overflow: hidden; /* Prevent page-level scrolling */
+    margin: 0;
+    padding: 0;
+}
+
+/* Ensure full height layout */
+.vh-100 {
+    height: 100vh !important;
+    max-height: 100vh !important;
+}
+
+/* Remove default Bootstrap margins that cause overflow */
+.container-fluid.vh-100 {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.row.h-100 {
+    margin: 0 !important;
+}
+
+/* Sidebar styling for better space usage */
+.col-md-3.bg-light {
+    padding: 0.75rem !important;
+}
+
+/* Main content area styling */
+.col-md-9.h-100 {
+    padding: 0.75rem !important;
+}
+
+.col-md-4.d-flex {
+    padding: 0.5rem !important;
+}
+
+.col-md-8.h-100 {
+    padding: 0.5rem !important;
+}
+
+/* Chart container sizing */
+#quac-curve {
+    max-height: 150px;
+}
+
+/* Compact sidebar styling */
+.col-md-3 h6 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.col-md-3 .small {
+    font-size: 0.8rem;
+}
+
+/* Compact form elements */
+.form-label.small {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Tighter spacing for range inputs */
+.form-range {
+    margin-bottom: 0.25rem;
 }
 
 .list-group-item {
