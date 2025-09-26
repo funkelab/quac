@@ -387,12 +387,14 @@ canvas {
     transition: opacity 0.3s ease-in-out;
 }
 
-#sidebar-toggle {
-    position: fixed;
-    top: 10px;
-    left: 310px;
-    z-index: 1001;
-    transition: left 0.3s ease-in-out;
+/* Collapsed sidebar indicator */
+#sidebar-collapsed {
+    transition: opacity 0.3s ease-in-out;
+    border-right: 1px solid #dee2e6;
+}
+
+#sidebar-collapsed:hover {
+    background-color: #e9ecef !important;
 }
 
 #sidebar-toggle {

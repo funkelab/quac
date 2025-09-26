@@ -102,8 +102,8 @@ class QuACVisualizer {
             this.resetFilters();
         });
 
-        // Sidebar toggle
-        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+        // Collapsed sidebar indicator toggle
+        document.getElementById('sidebar-collapsed').addEventListener('click', () => {
             this.toggleSidebar();
         });
 
@@ -675,37 +675,44 @@ class QuACVisualizer {
         overlay.style.display = show ? 'block' : 'none';
     }
 
-    updateSidebarLayout(width) {
+    updateSidebarLayout(width, autoCollapsed = false) {
         const sidebar = document.getElementById('sidebar');
+        const sidebarCollapsed = document.getElementById('sidebar-collapsed');
         const sidebarDivider = document.getElementById('sidebar-divider');
-        const toggleButton = document.getElementById('sidebar-toggle');
+        
+        // Auto-collapse if width is too small for content (less than 200px)
+        if (width > 0 && width < 200 && !autoCollapsed) {
+            this.sidebarCollapsed = true;
+            width = 0;
+            autoCollapsed = true;
+        }
         
         if (width === 0) {
             // Collapsed state
             sidebar.style.width = '0px';
             sidebar.style.padding = '0';
+            sidebar.style.overflow = 'hidden';
+            sidebarCollapsed.style.display = 'flex';
             sidebarDivider.style.display = 'none';
-            toggleButton.style.left = '10px';
         } else {
-            // Expanded state
+            // Expanded state  
             sidebar.style.width = width + 'px';
             sidebar.style.padding = '1rem';
+            sidebar.style.overflow = 'auto';
+            sidebarCollapsed.style.display = 'none';
             sidebarDivider.style.display = 'block';
-            toggleButton.style.left = (width + 10) + 'px';
         }
+        
+        return autoCollapsed;
     }
 
     toggleSidebar() {
-        const toggleIcon = document.getElementById('toggle-icon');
-        
         this.sidebarCollapsed = !this.sidebarCollapsed;
         
         if (this.sidebarCollapsed) {
             this.updateSidebarLayout(0);
-            toggleIcon.textContent = '›';
         } else {
             this.updateSidebarLayout(this.sidebarWidth);
-            toggleIcon.textContent = '‹';
         }
     }
 
@@ -768,12 +775,15 @@ class QuACVisualizer {
             if (!isResizing) return;
 
             const mouseX = e.clientX;
-            const minWidth = 200;
+            const minWidth = 50; // Allow dragging smaller to trigger auto-collapse
             const maxWidth = 600;
             
             if (mouseX >= minWidth && mouseX <= maxWidth) {
-                this.sidebarWidth = mouseX;
-                this.updateSidebarLayout(mouseX);
+                this.sidebarWidth = Math.max(200, mouseX); // Store minimum 200px for when we expand again
+                const autoCollapsed = this.updateSidebarLayout(mouseX);
+                if (autoCollapsed) {
+                    this.sidebarCollapsed = true;
+                }
             }
         });
 

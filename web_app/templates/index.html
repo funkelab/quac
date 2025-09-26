@@ -11,7 +11,7 @@
     <div class="d-flex vh-100">
         <!-- Collapsible Sidebar -->
         <div class="bg-light d-flex flex-column" id="sidebar" style="width: 300px; overflow-y: auto; padding: 1rem; transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;">
-        <h5 class="mb-2">QuAC Visualizer</h5>
+            <h5 class="mb-2">QuAC Visualizer</h5>
                 <div id="report-info" class="mb-2">
                     <h6 class="mb-1">Report Info</h6>
                     <div id="report-details" class="small">Loading...</div>
@@ -71,15 +71,16 @@
                 </div>
             </div>
 
+        <!-- Collapsed sidebar indicator -->
+        <div id="sidebar-collapsed" class="bg-light d-flex align-items-center justify-content-center" style="width: 40px; height: 100vh; cursor: pointer; display: none; writing-mode: vertical-rl; text-orientation: mixed; font-weight: bold; color: #6c5ce7;">
+            QuAC
+        </div>
+
         <!-- Sidebar resizer -->
         <div id="sidebar-divider" class="resizer" style="width: 4px; background: #dee2e6; cursor: col-resize; border-left: 1px solid #adb5bd; border-right: 1px solid #adb5bd;"></div>
 
         <!-- Main content area -->
         <div class="container-fluid flex-grow-1" id="main-content">
-        <!-- Sidebar toggle button -->
-        <button id="sidebar-toggle" class="btn btn-outline-secondary btn-sm" style="position: fixed; top: 10px; left: 310px; z-index: 1001; transition: left 0.3s ease-in-out;">
-            <span id="toggle-icon">‹</span>
-        </button>
         <div class="row h-100">
                 <div class="d-flex h-100">
                     <!-- Explanation list -->
