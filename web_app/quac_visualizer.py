@@ -279,15 +279,14 @@ def get_quac_curve():
 def serve_image(image_path: str):
     """Serve image files."""
     try:
-        # Create absolute path
+        # Use the image path as-is first (for absolute paths)
         full_path = Path(image_path)
-        if not full_path.is_absolute():
+
+        # If it's not absolute or doesn't exist, try relative to report base path
+        if not full_path.is_absolute() or not full_path.exists():
             if report_base_path is None:
                 return jsonify({"error": "No report base path set"}), 400
-            # Try both relative to base path and absolute
             full_path = report_base_path / image_path
-            if not full_path.exists():
-                full_path = Path(image_path)
 
         if not full_path.exists():
             return jsonify({"error": f"Image not found: {full_path}"}), 404
@@ -487,10 +486,10 @@ def main():
     try:
         if args.report_path:
             current_report = load_report_from_path(args.report_path)
-            report_base_path = Path(args.report_path).parent
+            report_base_path = Path(args.report_path).parent.resolve()
         else:
             current_report = load_report_from_path(args.report_dir)
-            report_base_path = Path(args.report_dir)
+            report_base_path = Path(args.report_dir).resolve()
 
         print(f"Loaded report: {current_report.name}")
         print(f"Number of explanations: {len(current_report)}")
