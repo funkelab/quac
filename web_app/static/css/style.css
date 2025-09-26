@@ -376,3 +376,22 @@ canvas {
         var(--secondary-color) 4px
     );
 }
+
+/* Collapsible Sidebar */
+#sidebar.collapsed {
+    transform: translateX(-100%);
+}
+
+#main-content.expanded {
+    margin-left: 0 !important;
+}
+
+#sidebar-toggle.sidebar-hidden {
+    left: 10px !important;
+}
+
+#toggle-icon {
+    font-weight: bold;
+    font-size: 16px;
+    transition: transform 0.3s ease-in-out;
+}

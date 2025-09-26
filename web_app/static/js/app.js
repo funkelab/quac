@@ -100,6 +100,11 @@ class QuACVisualizer {
             this.resetFilters();
         });
 
+        // Sidebar toggle
+        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+            this.toggleSidebar();
+        });
+
         // Range slider updates
         document.getElementById('min-score').addEventListener('input', (e) => {
             document.getElementById('min-score-value').textContent = parseFloat(e.target.value).toFixed(2);
@@ -662,6 +667,24 @@ class QuACVisualizer {
     showLoading(show) {
         const overlay = document.getElementById('loading-overlay');
         overlay.style.display = show ? 'block' : 'none';
+    }
+
+    toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('main-content');
+        const toggleButton = document.getElementById('sidebar-toggle');
+        const toggleIcon = document.getElementById('toggle-icon');
+        
+        sidebar.classList.toggle('collapsed');
+        mainContent.classList.toggle('expanded');
+        toggleButton.classList.toggle('sidebar-hidden');
+        
+        // Update toggle icon
+        if (sidebar.classList.contains('collapsed')) {
+            toggleIcon.textContent = '›';
+        } else {
+            toggleIcon.textContent = '‹';
+        }
     }
 }
 
