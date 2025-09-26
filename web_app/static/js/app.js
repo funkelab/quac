@@ -133,9 +133,14 @@ class QuACVisualizer {
             }
         });
 
-        // Mask toggle
-        document.getElementById('show-mask').addEventListener('change', (e) => {
-            this.toggleMask(e.target.checked);
+        // Mask opacity slider
+        const maskOpacitySlider = document.getElementById('mask-opacity');
+        const maskOpacityValue = document.getElementById('mask-opacity-value');
+        
+        maskOpacitySlider.addEventListener('input', (e) => {
+            const opacity = parseInt(e.target.value);
+            maskOpacityValue.textContent = `${opacity}%`;
+            this.updateMaskOpacity(opacity);
         });
 
         // Close viewer
@@ -173,9 +178,12 @@ class QuACVisualizer {
                         break;
                     case 'm':
                     case 'M':
-                        const maskCheckbox = document.getElementById('show-mask');
-                        maskCheckbox.checked = !maskCheckbox.checked;
-                        this.toggleMask(maskCheckbox.checked);
+                        const maskSlider = document.getElementById('mask-opacity');
+                        const currentOpacity = parseInt(maskSlider.value);
+                        const newOpacity = currentOpacity === 0 ? 30 : 0;
+                        maskSlider.value = newOpacity;
+                        document.getElementById('mask-opacity-value').textContent = `${newOpacity}%`;
+                        this.updateMaskOpacity(newOpacity);
                         break;
                     case 'Escape':
                         this.closeViewer();
@@ -407,10 +415,9 @@ class QuACVisualizer {
                     maskOverlay.style.width = mainImage.clientWidth + 'px';
                     maskOverlay.style.height = mainImage.clientHeight + 'px';
                     
-                    // Update mask overlay if it's enabled
-                    if (document.getElementById('show-mask').checked) {
-                        this.drawMaskOverlay();
-                    }
+                    // Update mask overlay with current opacity
+                    const opacity = parseInt(document.getElementById('mask-opacity').value);
+                    this.updateMaskOpacity(opacity);
                     
                     resolve();
                 };
@@ -425,18 +432,18 @@ class QuACVisualizer {
         }
     }
 
-    toggleMask(show) {
+    updateMaskOpacity(opacity) {
         const maskOverlay = document.getElementById('mask-overlay');
         
-        if (show && this.currentMask) {
-            maskOverlay.style.display = 'block';
-            this.drawMaskOverlay();
-        } else {
+        if (opacity === 0 || !this.currentMask) {
             maskOverlay.style.display = 'none';
+        } else {
+            maskOverlay.style.display = 'block';
+            this.drawMaskOverlay(opacity);
         }
     }
 
-    drawMaskOverlay() {
+    drawMaskOverlay(opacity = 30) {
         if (!this.currentMask) {
             console.log('No current mask data');
             return;
@@ -447,6 +454,7 @@ class QuACVisualizer {
         const maskData = this.currentMask.mask;
         
         console.log('Mask data shape:', this.currentMask.shape);
+        console.log('Mask opacity:', opacity + '%');
         
         if (!maskData || !Array.isArray(maskData) || !maskData.length) {
             console.error('Invalid mask data format');
@@ -470,6 +478,9 @@ class QuACVisualizer {
         const imageData = ctx.createImageData(width, height);
         const data = imageData.data;
         
+        // Convert opacity percentage to alpha value (0-255)
+        const alpha = Math.round((opacity / 100) * 255);
+        
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const index = (y * width + x) * 4;
@@ -478,7 +489,7 @@ class QuACVisualizer {
                 data[index] = pixel[0];      // Red
                 data[index + 1] = pixel[1];  // Green
                 data[index + 2] = pixel[2];  // Blue
-                data[index + 3] = 77;        // 30% opacity (0.3 * 255 ≈ 77)
+                data[index + 3] = alpha;     // Dynamic opacity
             }
         }
         
