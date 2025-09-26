@@ -105,6 +105,10 @@ class QuACVisualizer {
             this.toggleSidebar();
         });
 
+        // Resizable dividers
+        this.setupResizableDivider();
+        this.setupSidebarResizer();
+
         // Range slider updates
         document.getElementById('min-score').addEventListener('input', (e) => {
             document.getElementById('min-score-value').textContent = parseFloat(e.target.value).toFixed(2);
@@ -671,11 +675,13 @@ class QuACVisualizer {
 
     toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
+        const sidebarDivider = document.getElementById('sidebar-divider');
         const mainContent = document.getElementById('main-content');
         const toggleButton = document.getElementById('sidebar-toggle');
         const toggleIcon = document.getElementById('toggle-icon');
         
         sidebar.classList.toggle('collapsed');
+        sidebarDivider.classList.toggle('collapsed');
         mainContent.classList.toggle('expanded');
         toggleButton.classList.toggle('sidebar-hidden');
         
@@ -685,6 +691,99 @@ class QuACVisualizer {
         } else {
             toggleIcon.textContent = '‹';
         }
+    }
+
+    setupResizableDivider() {
+        const divider = document.getElementById('divider');
+        const explanationsPane = document.getElementById('explanations-pane');
+        const imageViewerPane = document.getElementById('image-viewer-pane');
+        let isResizing = false;
+
+        divider.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.classList.add('resizing');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const container = divider.parentElement;
+            const containerRect = container.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+            const mouseX = e.clientX - containerRect.left;
+            
+            // Calculate new width as percentage
+            const newWidth = (mouseX / containerWidth) * 100;
+            
+            // Set minimum and maximum widths (20% to 80%)
+            const minWidth = 20;
+            const maxWidth = 80;
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                explanationsPane.style.width = newWidth + '%';
+                // The image viewer pane will flex-grow to fill remaining space
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.classList.remove('resizing');
+            }
+        });
+    }
+
+    setupSidebarResizer() {
+        const sidebarDivider = document.getElementById('sidebar-divider');
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('main-content');
+        const toggleButton = document.getElementById('sidebar-toggle');
+        let isResizing = false;
+
+        sidebarDivider.addEventListener('mousedown', (e) => {
+            // Don't resize if sidebar is collapsed
+            if (sidebar.classList.contains('collapsed')) return;
+            
+            isResizing = true;
+            document.body.classList.add('resizing');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const mouseX = e.clientX;
+            
+            // Set minimum and maximum sidebar widths
+            const minWidth = 200;
+            const maxWidth = 600;
+            
+            if (mouseX >= minWidth && mouseX <= maxWidth) {
+                // Update CSS custom property
+                document.documentElement.style.setProperty('--sidebar-width', mouseX + 'px');
+                
+                // Update sidebar width
+                sidebar.style.width = mouseX + 'px';
+                
+                // Update divider position
+                sidebarDivider.style.left = mouseX + 'px';
+                
+                // Update toggle button position
+                toggleButton.style.left = (mouseX + 10) + 'px';
+                
+                // Update main content positioning
+                mainContent.style.marginLeft = mouseX + 'px';
+                mainContent.style.width = `calc(100% - ${mouseX}px)`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.classList.remove('resizing');
+            }
+        });
     }
 }
 

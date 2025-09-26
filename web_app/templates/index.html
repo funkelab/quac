@@ -70,6 +70,9 @@
                 </div>
             </div>
 
+    <!-- Sidebar resizer -->
+    <div id="sidebar-divider" class="resizer" style="position: fixed; top: 0; left: 300px; width: 4px; height: 100vh; background: #dee2e6; cursor: col-resize; z-index: 999; border-left: 1px solid #adb5bd; border-right: 1px solid #adb5bd; transition: left 0.3s ease-in-out;"></div>
+
     <!-- Main content area -->
     <div class="container-fluid vh-100" id="main-content">
         <!-- Sidebar toggle button -->
@@ -77,14 +80,14 @@
             <span id="toggle-icon">‹</span>
         </button>
         <div class="row h-100">
-                <div class="row h-100">
+                <div class="d-flex h-100">
                     <!-- Explanation list -->
-                    <div class="col-md-4 d-flex flex-column h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div id="explanations-pane" class="d-flex flex-column h-100" style="width: 33%; min-width: 200px;">
+                        <div class="d-flex justify-content-between align-items-center mb-3" style="padding: 0.5rem;">
                             <h5>Explanations</h5>
                             <span id="explanation-count" class="badge bg-secondary">0</span>
                         </div>
-                        <div class="flex-grow-1 d-flex flex-column" style="min-height: 0;">
+                        <div class="flex-grow-1 d-flex flex-column" style="min-height: 0; padding: 0 0.5rem;">
                             <div id="explanation-list" class="list-group flex-grow-1" style="overflow-y: auto; min-height: 0;">
                                 <!-- Explanations will be populated here -->
                             </div>
@@ -94,8 +97,11 @@
                         </div>
                     </div>
 
+                    <!-- Resizable divider -->
+                    <div id="divider" class="resizer" style="width: 4px; background: #dee2e6; cursor: col-resize; user-select: none; border-left: 1px solid #adb5bd; border-right: 1px solid #adb5bd;"></div>
+
                     <!-- Image viewer -->
-                    <div class="col-md-8 h-100">
+                    <div id="image-viewer-pane" class="h-100 flex-grow-1" style="min-width: 300px; padding: 0.5rem;">
                         <div id="image-viewer" style="display: none;">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 id="viewer-title">Explanation Details</h5>
