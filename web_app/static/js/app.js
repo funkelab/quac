@@ -365,8 +365,6 @@ class QuACVisualizer {
     }
 
     updateExplanationMetadata(explanation) {
-        document.getElementById('viewer-title').textContent = 
-            `${explanation.source_class} → ${explanation.target_class}`;
         document.getElementById('exp-score').textContent = explanation.score.toFixed(4);
         document.getElementById('exp-source-class').textContent = explanation.source_class;
         document.getElementById('exp-target-class').textContent = explanation.target_class;
@@ -423,8 +421,6 @@ class QuACVisualizer {
                 };
                 mainImage.onerror = reject;
             });
-
-            imageInfo.textContent = `${imageType.charAt(0).toUpperCase() + imageType.slice(1)} Image - ${imagePath}`;
             
         } catch (error) {
             console.error('Error loading image:', error);
@@ -509,8 +505,9 @@ class QuACVisualizer {
             this.charts.individual.destroy();
         }
 
-        const xValues = explanation.normalized_mask_sizes;
-        const yValues = explanation.score_changes;
+        // Reverse the arrays so x-axis goes from 0 to 1 instead of 1 to 0
+        const xValues = [...explanation.normalized_mask_sizes].reverse();
+        const yValues = [...explanation.score_changes].reverse();
 
         this.charts.individual = new Chart(ctx, {
             type: 'line',
@@ -528,11 +525,16 @@ class QuACVisualizer {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: true,
-                aspectRatio: 2,
+                maintainAspectRatio: false,
                 scales: {
                     x: {
+                        type: 'linear',
                         display: true,
+                        min: 0,
+                        max: 1,
+                        ticks: {
+                            stepSize: 0.1
+                        },
                         title: {
                             display: true,
                             text: 'Normalized Mask Size'
@@ -553,6 +555,14 @@ class QuACVisualizer {
                     title: {
                         display: true,
                         text: `QuAC Score: ${explanation.score.toFixed(4)}`
+                    }
+                },
+                layout: {
+                    padding: {
+                        top: 10,
+                        right: 20,
+                        bottom: 10,
+                        left: 20
                     }
                 }
             }
