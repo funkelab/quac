@@ -324,12 +324,47 @@ def serve_mask(mask_path: str):
         # Load numpy array and convert to JSON
         mask_data = np.load(full_path)
 
+        # Normalize to channels-last format (height, width, channels)
+        if mask_data.ndim == 3:
+            # If channels-first (channels, height, width), transpose to channels-last
+            if mask_data.shape[0] <= 3 and mask_data.shape[0] < mask_data.shape[1]:
+                mask_data = np.transpose(mask_data, (1, 2, 0))
+            # Squeeze singleton channel dimensions
+            if mask_data.shape[2] == 1:
+                mask_data = mask_data.squeeze(2)
+        elif mask_data.ndim > 3:
+            # Squeeze extra dimensions
+            mask_data = mask_data.squeeze()
+            if (
+                mask_data.ndim == 3
+                and mask_data.shape[0] <= 3
+                and mask_data.shape[0] < mask_data.shape[1]
+            ):
+                mask_data = np.transpose(mask_data, (1, 2, 0))
+
+        # Normalize values to 0-255 range for image display
+        if mask_data.max() > mask_data.min():
+            mask_data = (
+                (mask_data - mask_data.min())
+                / (mask_data.max() - mask_data.min())
+                * 255
+            ).astype(np.uint8)
+        else:
+            mask_data = np.zeros_like(mask_data, dtype=np.uint8)
+
+        # Ensure mask is always 3-channel RGB
+        if mask_data.ndim == 2:
+            # Convert grayscale to RGB by putting mask in red channel, zeros in green/blue
+            height, width = mask_data.shape
+            rgb_mask = np.zeros((height, width, 3), dtype=np.uint8)
+            rgb_mask[:, :, 0] = mask_data  # Red channel gets the mask
+            # Green and blue channels remain 0
+            mask_data = rgb_mask
+
         return jsonify(
             {
                 "mask": mask_data.tolist(),
                 "shape": list(mask_data.shape),
-                "min": float(mask_data.min()),
-                "max": float(mask_data.max()),
             }
         )
 

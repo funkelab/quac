@@ -437,35 +437,48 @@ class QuACVisualizer {
     }
 
     drawMaskOverlay() {
-        if (!this.currentMask) return;
+        if (!this.currentMask) {
+            console.log('No current mask data');
+            return;
+        }
 
         const canvas = document.getElementById('mask-overlay');
         const ctx = canvas.getContext('2d');
         const maskData = this.currentMask.mask;
         
+        console.log('Mask data shape:', this.currentMask.shape);
+        
+        if (!maskData || !Array.isArray(maskData) || !maskData.length) {
+            console.error('Invalid mask data format');
+            return;
+        }
+        
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         const height = maskData.length;
-        const width = maskData[0].length;
+        const width = maskData[0]?.length;
         
-        // Create ImageData for efficient pixel manipulation
+        if (!width) {
+            console.error('Invalid mask dimensions');
+            return;
+        }
+        
+        console.log(`Mask dimensions: ${width}x${height}`);
+        
+        // Create ImageData for the mask (server always returns RGB)
         const imageData = ctx.createImageData(width, height);
         const data = imageData.data;
         
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const maskValue = maskData[y][x];
                 const index = (y * width + x) * 4;
+                const pixel = maskData[y][x];
                 
-                // Higher mask values (closer to 1) = lower opacity overlay (more visible)
-                // Lower mask values (closer to 0) = higher opacity overlay (more hidden)
-                const opacity = (1 - maskValue) * 255;
-                
-                data[index] = 0;     // Red
-                data[index + 1] = 0; // Green
-                data[index + 2] = 0; // Blue
-                data[index + 3] = opacity; // Alpha
+                data[index] = pixel[0];      // Red
+                data[index + 1] = pixel[1];  // Green
+                data[index + 2] = pixel[2];  // Blue
+                data[index + 3] = 77;        // 30% opacity (0.3 * 255 ≈ 77)
             }
         }
         
