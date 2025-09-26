@@ -20,6 +20,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional, Union
+from urllib.parse import unquote
 
 import numpy as np
 from flask import Flask, jsonify, render_template, request, send_file
@@ -279,14 +280,15 @@ def get_quac_curve():
 def serve_image(image_path: str):
     """Serve image files."""
     try:
-        # Use the image path as-is first (for absolute paths)
-        full_path = Path(image_path)
+        # URL decode the image path
+        decoded_path = unquote(image_path)
 
-        # If it's not absolute or doesn't exist, try relative to report base path
-        if not full_path.is_absolute() or not full_path.exists():
-            if report_base_path is None:
-                return jsonify({"error": "No report base path set"}), 400
-            full_path = report_base_path / image_path
+        # Flask's <path:> route strips the leading /, so add it back for absolute paths
+        if not decoded_path.startswith("/"):
+            decoded_path = "/" + decoded_path
+
+        # Use the decoded path as absolute path
+        full_path = Path(decoded_path)
 
         if not full_path.exists():
             return jsonify({"error": f"Image not found: {full_path}"}), 404
@@ -306,13 +308,15 @@ def serve_image(image_path: str):
 def serve_mask(mask_path: str):
     """Serve mask files as JSON array."""
     try:
-        full_path = Path(mask_path)
-        if not full_path.is_absolute():
-            if report_base_path is None:
-                return jsonify({"error": "No report base path set"}), 400
-            full_path = report_base_path / mask_path
-            if not full_path.exists():
-                full_path = Path(mask_path)
+        # URL decode the mask path
+        decoded_path = unquote(mask_path)
+
+        # Flask's <path:> route strips the leading /, so add it back for absolute paths
+        if not decoded_path.startswith("/"):
+            decoded_path = "/" + decoded_path
+
+        # Use the decoded path as absolute path
+        full_path = Path(decoded_path)
 
         if not full_path.exists():
             return jsonify({"error": f"Mask not found: {full_path}"}), 404
