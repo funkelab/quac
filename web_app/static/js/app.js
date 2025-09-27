@@ -19,7 +19,27 @@ class QuACVisualizer {
         this.init();
     }
 
+    setNoExplanationState() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide image viewer
+        imageViewer.style.display = 'none';
+        imageViewer.style.visibility = 'hidden';
+        imageViewer.style.position = 'absolute';
+        imageViewer.style.top = '-9999px';
+        
+        // Show centered no-explanation message
+        noExplanation.style.display = 'flex';
+        noExplanation.style.visibility = 'visible';
+        noExplanation.style.position = 'static';
+        noExplanation.style.top = 'auto';
+    }
+
     async init() {
+        // Ensure proper initial state - no explanation selected
+        this.setNoExplanationState();
+        
         await this.loadReportInfo();
         this.setupEventListeners();
         await this.loadExplanations();
@@ -464,8 +484,18 @@ class QuACVisualizer {
         this.currentMask = null;
 
         // Show viewer and update metadata
-        document.getElementById('no-explanation').style.display = 'none';
-        document.getElementById('image-viewer').style.display = 'block';
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide the no-explanation div
+        noExplanation.style.display = 'none';
+        noExplanation.style.position = 'absolute';
+        noExplanation.style.top = '-9999px';
+        
+        // Show the image viewer
+        imageViewer.style.display = 'flex';
+        imageViewer.style.visibility = 'visible';
+        imageViewer.style.position = 'static';
         
         this.updateExplanationMetadata(explanation);
         
@@ -789,8 +819,8 @@ class QuACVisualizer {
     }
 
     closeViewer() {
-        document.getElementById('image-viewer').style.display = 'none';
-        document.getElementById('no-explanation').style.display = 'block';
+        // Return to no explanation selected state
+        this.setNoExplanationState();
         
         // Clear selection
         document.querySelectorAll('.explanation-item').forEach(item => {
