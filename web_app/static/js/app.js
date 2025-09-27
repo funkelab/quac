@@ -832,6 +832,8 @@ class QuACVisualizer {
     }
 
     downloadFilteredData(type) {
+        console.log('Download button clicked, type:', type);
+        
         const formData = new FormData(document.getElementById('filter-form'));
         const params = new URLSearchParams();
         
@@ -842,13 +844,17 @@ class QuACVisualizer {
         const endpoint = type === 'json' ? 'explanations' : 'images';
         const url = `/api/download/${endpoint}?${params}`;
         
-        // Create temporary link to trigger download
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = '';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        console.log('Download URL:', url);
+        
+        // Try window.open first (works better with SSH tunnels)
+        try {
+            window.open(url, '_blank');
+            console.log('Used window.open for download');
+        } catch (error) {
+            console.log('window.open failed, trying direct navigation:', error);
+            // Fallback: direct navigation
+            window.location.href = url;
+        }
     }
 
     showLoading(show) {
