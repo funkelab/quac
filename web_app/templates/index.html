@@ -35,22 +35,23 @@
                         </div>
 
                         <div class="mb-2">
-                            <label for="min-score" class="form-label small">Min QuAC Score</label>
-                            <input type="range" class="form-range" id="min-score" name="min_score" min="0" max="1" step="0.01" value="0">
-                            <div class="d-flex justify-content-between">
-                                <small>0</small>
-                                <small id="min-score-value">0</small>
-                                <small>1</small>
+                            <label class="form-label small">QuAC Score Range</label>
+                            <div class="dual-range-container" style="position: relative; height: 40px; margin: 10px 0;">
+                                <!-- Background track -->
+                                <div class="dual-track" style="position: absolute; top: 18px; height: 4px; background: #dee2e6; width: 100%; border-radius: 2px;"></div>
+                                <!-- Active range -->
+                                <div class="dual-range" id="dual-range" style="position: absolute; top: 18px; height: 4px; background: var(--primary-color); border-radius: 2px; left: 0%; width: 100%;"></div>
+                                <!-- Min thumb -->
+                                <div class="dual-thumb dual-thumb-min" id="min-thumb" style="position: absolute; top: 10px; left: 0%; width: 20px; height: 20px; background: var(--primary-color); border-radius: 50%; cursor: pointer; margin-left: -10px; z-index: 2;"></div>
+                                <!-- Max thumb -->
+                                <div class="dual-thumb dual-thumb-max" id="max-thumb" style="position: absolute; top: 10px; left: 100%; width: 20px; height: 20px; background: var(--primary-color); border-radius: 50%; cursor: pointer; margin-left: -10px; z-index: 3;"></div>
+                                <!-- Hidden inputs for form submission -->
+                                <input type="hidden" id="min-score" name="min_score" value="0">
+                                <input type="hidden" id="max-score" name="max_score" value="1">
                             </div>
-                        </div>
-
-                        <div class="mb-2">
-                            <label for="max-score" class="form-label small">Max QuAC Score</label>
-                            <input type="range" class="form-range" id="max-score" name="max_score" min="0" max="1" step="0.01" value="1">
-                            <div class="d-flex justify-content-between">
-                                <small>0</small>
-                                <small id="max-score-value">1</small>
-                                <small>1</small>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small>Min: <span id="min-score-value">0.00</span></small>
+                                <small>Max: <span id="max-score-value">1.00</span></small>
                             </div>
                         </div>
 
@@ -147,14 +148,10 @@
                                         <label class="btn btn-outline-primary" for="show-counterfactual">Counterfactual Image</label>
                                     </div>
                                     
-                                    <div class="mt-2">
-                                        <label for="mask-opacity" class="form-label small">Mask Opacity</label>
-                                        <input type="range" class="form-range" id="mask-opacity" min="0" max="100" step="5" value="0">
-                                        <div class="d-flex justify-content-between">
-                                            <small>0%</small>
-                                            <small id="mask-opacity-value">0%</small>
-                                            <small>100%</small>
-                                        </div>
+                                    <div class="mt-2 d-flex align-items-center">
+                                        <label for="mask-opacity" class="form-label small me-2 mb-0">Mask Opacity</label>
+                                        <input type="range" class="form-range flex-grow-1" id="mask-opacity" min="0" max="100" step="5" value="0">
+                                        <span id="mask-opacity-value" style="display: none;">0%</span>
                                     </div>
                                 </div>
                             </div>

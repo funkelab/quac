@@ -433,3 +433,29 @@ canvas {
 .resizing * {
     pointer-events: none;
 }
+
+/* Custom Dual Range Slider Styles */
+.dual-range-container {
+    user-select: none;
+}
+
+.dual-thumb {
+    transition: background-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, transform 0.15s ease-in-out;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dual-thumb:hover {
+    background-color: var(--accent-color) !important;
+    transform: scale(1.1);
+}
+
+.dual-thumb:active {
+    background-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(108, 92, 231, 0.25);
+}
+
+.dual-thumb.dragging {
+    background-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(108, 92, 231, 0.25);
+    transform: scale(1.1);
+}

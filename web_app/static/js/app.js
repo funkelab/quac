@@ -111,14 +111,8 @@ class QuACVisualizer {
         this.setupResizableDivider();
         this.setupSidebarResizer();
 
-        // Range slider updates
-        document.getElementById('min-score').addEventListener('input', (e) => {
-            document.getElementById('min-score-value').textContent = parseFloat(e.target.value).toFixed(2);
-        });
-
-        document.getElementById('max-score').addEventListener('input', (e) => {
-            document.getElementById('max-score-value').textContent = parseFloat(e.target.value).toFixed(2);
-        });
+        // Dual range slider setup
+        this.setupDualRangeSlider();
 
         // Image toggle buttons
         document.getElementById('show-query').addEventListener('change', () => {
@@ -201,6 +195,125 @@ class QuACVisualizer {
         this.showLoading(false);
     }
 
+    setupDualRangeSlider() {
+        const container = document.querySelector('.dual-range-container');
+        const minThumb = document.getElementById('min-thumb');
+        const maxThumb = document.getElementById('max-thumb');
+        const range = document.getElementById('dual-range');
+        const minInput = document.getElementById('min-score');
+        const maxInput = document.getElementById('max-score');
+        const minValue = document.getElementById('min-score-value');
+        const maxValue = document.getElementById('max-score-value');
+        
+        let minVal = 0;
+        let maxVal = 1;
+        let isDragging = false;
+        let activeThumb = null;
+        
+        const updateDisplay = () => {
+            const containerWidth = container.offsetWidth;
+            const minPercent = minVal * 100;
+            const maxPercent = maxVal * 100;
+            
+            // Update thumb positions
+            minThumb.style.left = `${minPercent}%`;
+            maxThumb.style.left = `${maxPercent}%`;
+            
+            // Update range bar
+            range.style.left = `${minPercent}%`;
+            range.style.width = `${maxPercent - minPercent}%`;
+            
+            // Update hidden inputs
+            minInput.value = minVal;
+            maxInput.value = maxVal;
+            
+            // Update display values
+            minValue.textContent = minVal.toFixed(2);
+            maxValue.textContent = maxVal.toFixed(2);
+        };
+        
+        const getValueFromPosition = (clientX) => {
+            const rect = container.getBoundingClientRect();
+            const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            return Math.round(percent * 100) / 100; // Round to 2 decimal places
+        };
+        
+        const startDrag = (thumb, e) => {
+            isDragging = true;
+            activeThumb = thumb;
+            thumb.classList.add('dragging');
+            
+            // Bring active thumb to front
+            if (thumb === minThumb) {
+                minThumb.style.zIndex = '4';
+                maxThumb.style.zIndex = '3';
+            } else {
+                maxThumb.style.zIndex = '4';
+                minThumb.style.zIndex = '3';
+            }
+            
+            e.preventDefault();
+        };
+        
+        const handleDrag = (e) => {
+            if (!isDragging || !activeThumb) return;
+            
+            const newValue = getValueFromPosition(e.clientX);
+            
+            if (activeThumb === minThumb) {
+                minVal = Math.min(newValue, maxVal);
+            } else {
+                maxVal = Math.max(newValue, minVal);
+            }
+            
+            updateDisplay();
+        };
+        
+        const endDrag = () => {
+            if (activeThumb) {
+                activeThumb.classList.remove('dragging');
+            }
+            isDragging = false;
+            activeThumb = null;
+        };
+        
+        // Mouse events
+        minThumb.addEventListener('mousedown', (e) => startDrag(minThumb, e));
+        maxThumb.addEventListener('mousedown', (e) => startDrag(maxThumb, e));
+        
+        document.addEventListener('mousemove', handleDrag);
+        document.addEventListener('mouseup', endDrag);
+        
+        // Touch events for mobile
+        minThumb.addEventListener('touchstart', (e) => startDrag(minThumb, e.touches[0]));
+        maxThumb.addEventListener('touchstart', (e) => startDrag(maxThumb, e.touches[0]));
+        
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches[0]) handleDrag(e.touches[0]);
+        });
+        document.addEventListener('touchend', endDrag);
+        
+        // Click on track to move nearest thumb
+        container.addEventListener('click', (e) => {
+            if (isDragging || e.target.classList.contains('dual-thumb')) return;
+            
+            const clickValue = getValueFromPosition(e.clientX);
+            const distToMin = Math.abs(clickValue - minVal);
+            const distToMax = Math.abs(clickValue - maxVal);
+            
+            if (distToMin < distToMax) {
+                minVal = Math.min(clickValue, maxVal);
+            } else {
+                maxVal = Math.max(clickValue, minVal);
+            }
+            
+            updateDisplay();
+        });
+        
+        // Initialize
+        updateDisplay();
+    }
+
     resetFilters() {
         // Reset form fields to default values
         document.getElementById('source-class').value = '';
@@ -208,9 +321,14 @@ class QuACVisualizer {
         document.getElementById('min-score').value = 0;
         document.getElementById('max-score').value = 1;
         
-        // Update display values
+        // Update display values and visual range
         document.getElementById('min-score-value').textContent = '0.00';
         document.getElementById('max-score-value').textContent = '1.00';
+        
+        // Reset visual range
+        const sliderRange = document.getElementById('slider-range');
+        sliderRange.style.left = '0%';
+        sliderRange.style.width = '100%';
         
         // Apply the reset filters
         this.applyFilters();
