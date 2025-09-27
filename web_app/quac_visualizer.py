@@ -400,16 +400,20 @@ def download_explanations():
         new_report.explanations = explanations
         filtered_report = new_report
 
-    # Create JSON data
+    # Create JSON data with filters added to metadata
+    metadata_with_filters = (
+        dict(filtered_report.metadata) if filtered_report.metadata else {}
+    )
+    metadata_with_filters["filters"] = {
+        "source_class": source_class,
+        "target_class": target_class,
+        "min_score": min_score,
+        "max_score": max_score,
+    }
+
     data = {
         "report_name": filtered_report.name,
-        "metadata": filtered_report.metadata,
-        "filters": {
-            "source_class": source_class,
-            "target_class": target_class,
-            "min_score": min_score,
-            "max_score": max_score,
-        },
+        "metadata": metadata_with_filters,
         "explanations": [
             serialize_explanation(exp) for exp in filtered_report.explanations
         ],
