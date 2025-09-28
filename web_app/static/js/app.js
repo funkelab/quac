@@ -64,11 +64,17 @@ class QuACVisualizer {
             return;
         }
 
-        reportDetails.innerHTML = `
+        let displayHtml = `
             <div><strong>Name:</strong> ${this.reportInfo.name}</div>
             <div><strong>Total Explanations:</strong> ${this.reportInfo.num_explanations}</div>
             <div><strong>Data Score Range:</strong> ${this.reportInfo.score_range.data_min.toFixed(3)} - ${this.reportInfo.score_range.data_max.toFixed(3)}</div>
         `;
+
+        if (this.reportInfo.blinding_enabled) {
+            displayHtml += `<div class="text-warning"><strong>⚠️ Blinding Mode Active</strong> - Class information hidden</div>`;
+        }
+
+        reportDetails.innerHTML = displayHtml;
 
         // Keep filter sliders at theoretical range (0-1), but set initial values to data range
         const minSlider = document.getElementById('min-score');
@@ -93,21 +99,39 @@ class QuACVisualizer {
         const sourceSelect = document.getElementById('source-class');
         const targetSelect = document.getElementById('target-class');
 
-        // Populate source classes
-        this.reportInfo.source_classes.forEach(cls => {
-            const option = document.createElement('option');
-            option.value = cls;
-            option.textContent = cls;
-            sourceSelect.appendChild(option);
-        });
+        if (this.reportInfo.blinding_enabled) {
+            // In blinding mode, disable class filter dropdowns
+            sourceSelect.disabled = true;
+            targetSelect.disabled = true;
+            
+            // Add a placeholder option explaining blinding mode
+            const sourceOption = document.createElement('option');
+            sourceOption.value = '';
+            sourceOption.textContent = 'Hidden (Blinding Mode)';
+            sourceSelect.appendChild(sourceOption);
+            
+            const targetOption = document.createElement('option');
+            targetOption.value = '';
+            targetOption.textContent = 'Hidden (Blinding Mode)';
+            targetSelect.appendChild(targetOption);
+        } else {
+            // Normal mode - populate with actual classes
+            // Populate source classes
+            this.reportInfo.source_classes.forEach(cls => {
+                const option = document.createElement('option');
+                option.value = cls;
+                option.textContent = cls;
+                sourceSelect.appendChild(option);
+            });
 
-        // Populate target classes
-        this.reportInfo.target_classes.forEach(cls => {
-            const option = document.createElement('option');
-            option.value = cls;
-            option.textContent = cls;
-            targetSelect.appendChild(option);
-        });
+            // Populate target classes
+            this.reportInfo.target_classes.forEach(cls => {
+                const option = document.createElement('option');
+                option.value = cls;
+                option.textContent = cls;
+                targetSelect.appendChild(option);
+            });
+        }
     }
 
     setupEventListeners() {
@@ -433,9 +457,14 @@ class QuACVisualizer {
 
         const scoreClass = this.getScoreClass(explanation.score);
         
+        // Hide class information if blinding is enabled
+        const classDisplay = this.reportInfo.blinding_enabled 
+            ? 'Hidden → Hidden' 
+            : `${explanation.source_class} → ${explanation.target_class}`;
+        
         item.innerHTML = `
             <div class="explanation-header">
-                ${explanation.source_class} → ${explanation.target_class}
+                ${classDisplay}
             </div>
             <div class="explanation-details">
                 Method: ${explanation.method || 'N/A'}
@@ -514,8 +543,16 @@ class QuACVisualizer {
 
     updateExplanationMetadata(explanation) {
         document.getElementById('exp-score').textContent = explanation.score.toFixed(4);
-        document.getElementById('exp-source-class').textContent = explanation.source_class;
-        document.getElementById('exp-target-class').textContent = explanation.target_class;
+        
+        // Hide class information if blinding is enabled
+        if (this.reportInfo.blinding_enabled) {
+            document.getElementById('exp-source-class').textContent = 'Hidden';
+            document.getElementById('exp-target-class').textContent = 'Hidden';
+        } else {
+            document.getElementById('exp-source-class').textContent = explanation.source_class;
+            document.getElementById('exp-target-class').textContent = explanation.target_class;
+        }
+        
         document.getElementById('exp-method').textContent = explanation.method || 'N/A';
     }
 

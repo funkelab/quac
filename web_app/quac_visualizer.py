@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import mimetypes
 import zipfile
 from io import BytesIO
@@ -31,9 +32,13 @@ from quac.report import Report
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
 
+# Create module-level logger
+logger = logging.getLogger(__name__)
+
 # Global variable to store the current report
 current_report: Optional[Report] = None
 report_base_path: Optional[Path] = None
+blinding_enabled: bool = False
 
 
 def load_report_from_path(path: Union[str, Path]) -> Report:
@@ -101,8 +106,12 @@ def report_info():
             "name": current_report.name,
             "metadata": current_report.metadata,
             "num_explanations": len(current_report),
-            "source_classes": sorted(list(source_classes)),
-            "target_classes": sorted(list(target_classes)),
+            "source_classes": (
+                sorted(list(source_classes)) if not blinding_enabled else []
+            ),
+            "target_classes": (
+                sorted(list(target_classes)) if not blinding_enabled else []
+            ),
             "score_range": {
                 "min": 0.0,  # QuAC scores theoretically range from 0 to 1
                 "max": 1.0,
@@ -117,6 +126,7 @@ def report_info():
                     else 1
                 ),
             },
+            "blinding_enabled": blinding_enabled,
         }
     )
 
@@ -147,7 +157,7 @@ def get_explanations():
         else int(target_class_str)
     )
 
-    print(
+    logger.debug(
         f"Filter params: source={source_class}, target={target_class}, min_score={min_score}, max_score={max_score}, offset={offset}, limit={limit}"
     )
 
@@ -156,32 +166,36 @@ def get_explanations():
 
     # Apply filters
     if source_class is not None:
-        print(f"Filtering by source_class: {source_class}")
+        logger.debug(f"Filtering by source_class: {source_class}")
         filtered_report = filtered_report.from_source(source_class)
-        print(f"After source filter: {len(filtered_report.explanations)} explanations")
+        logger.debug(
+            f"After source filter: {len(filtered_report.explanations)} explanations"
+        )
 
     if target_class is not None:
-        print(f"Filtering by target_class: {target_class}")
+        logger.debug(f"Filtering by target_class: {target_class}")
         filtered_report = filtered_report.to_target(target_class)
-        print(f"After target filter: {len(filtered_report.explanations)} explanations")
+        logger.debug(
+            f"After target filter: {len(filtered_report.explanations)} explanations"
+        )
 
     if min_score is not None:
-        print(f"Filtering by min_score: {min_score}")
+        logger.debug(f"Filtering by min_score: {min_score}")
         filtered_report = filtered_report.score_threshold(min_score)
-        print(
+        logger.debug(
             f"After min_score filter: {len(filtered_report.explanations)} explanations"
         )
 
     # Apply max score filter (custom logic since Report doesn't have this built-in)
     if max_score is not None:
-        print(f"Filtering by max_score: {max_score}")
+        logger.debug(f"Filtering by max_score: {max_score}")
         explanations = [
             exp for exp in filtered_report.explanations if exp.score <= max_score
         ]
         new_report = Report(name=f"{filtered_report.name}_filtered")
         new_report.explanations = explanations
         filtered_report = new_report
-        print(
+        logger.debug(
             f"After max_score filter: {len(filtered_report.explanations)} explanations"
         )
 
@@ -190,7 +204,7 @@ def get_explanations():
         filtered_report.explanations, key=lambda x: x.score, reverse=True
     )
 
-    print(f"After filtering: {len(explanations)} explanations found")
+    logger.debug(f"After filtering: {len(explanations)} explanations found")
 
     # Apply offset and limit
     if limit is not None:
@@ -518,13 +532,27 @@ def main():
         "--host", type=str, default="127.0.0.1", help="Host to run the server on"
     )
     parser.add_argument("--debug", action="store_true", help="Run in debug mode")
+    parser.add_argument(
+        "--blind",
+        action="store_true",
+        help="Enable blinding mode (hide class information)",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     if not args.report_path and not args.report_dir:
         parser.error("Either --report-path or --report-dir must be provided")
 
-    global current_report, report_base_path
+    global current_report, report_base_path, blinding_enabled
+    blinding_enabled = args.blind
 
     try:
         if args.report_path:
@@ -534,15 +562,16 @@ def main():
             current_report = load_report_from_path(args.report_dir)
             report_base_path = Path(args.report_dir).resolve()
 
-        print(f"Loaded report: {current_report.name}")
-        print(f"Number of explanations: {len(current_report)}")
-        print(f"Report base path: {report_base_path}")
+        logger.info(f"Loaded report: {current_report.name}")
+        logger.info(f"Number of explanations: {len(current_report)}")
+        logger.info(f"Report base path: {report_base_path}")
+        logger.info(f"Blinding mode: {'Enabled' if blinding_enabled else 'Disabled'}")
 
     except Exception as e:
-        print(f"Error loading report: {e}")
+        logger.error(f"Error loading report: {e}")
         return
 
-    print(f"Starting QuAC Visualizer on http://{args.host}:{args.port}")
+    logger.info(f"Starting QuAC Visualizer on http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port, debug=args.debug)
 
 
