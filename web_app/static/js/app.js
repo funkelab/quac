@@ -39,24 +39,6 @@ class ReportInfoPane {
         }
 
         reportDetails.innerHTML = displayHtml;
-
-        // Keep filter sliders at theoretical range (0-1), but set initial values to data range
-        const minSlider = document.getElementById('min-score');
-        const maxSlider = document.getElementById('max-score');
-        
-        // Sliders always allow full 0-1 range
-        minSlider.min = 0;
-        minSlider.max = 1;
-        maxSlider.min = 0;
-        maxSlider.max = 1;
-        
-        // Set initial values to data range for convenience
-        minSlider.value = Math.max(0, this.reportInfo.score_range.data_min);
-        maxSlider.value = Math.min(1, this.reportInfo.score_range.data_max);
-        
-        // Update display values
-        document.getElementById('min-score-value').textContent = minSlider.value;
-        document.getElementById('max-score-value').textContent = maxSlider.value;
     }
 
     async loadMainChart() {
@@ -146,55 +128,10 @@ class ReportInfoPane {
     }
 }
 
-class QuACVisualizer {
+class FilterPane {
     constructor() {
-        this.reportInfoPane = new ReportInfoPane();
-        this.reportInfo = null; // Keep for compatibility with other methods
-        this.currentExplanations = [];
-        this.currentExplanation = null;
-        this.currentMask = null;
-        this.offset = 0;
-        this.limit = 20;
-        this.totalExplanations = 0;
-        this.charts = {};
-        this.sidebarWidth = 300; // Track current sidebar width
-        this.sidebarCollapsed = false;
-        
-        this.init();
+        this.onFilterChangeCallback = null;
     }
-
-    setNoExplanationState() {
-        const imageViewer = document.getElementById('image-viewer');
-        const noExplanation = document.getElementById('no-explanation');
-        
-        // Completely hide image viewer
-        imageViewer.style.display = 'none';
-        imageViewer.style.visibility = 'hidden';
-        imageViewer.style.position = 'absolute';
-        imageViewer.style.top = '-9999px';
-        
-        // Show centered no-explanation message
-        noExplanation.style.display = 'flex';
-        noExplanation.style.visibility = 'visible';
-        noExplanation.style.position = 'static';
-        noExplanation.style.top = 'auto';
-    }
-
-    async init() {
-        // Ensure proper initial state - no explanation selected
-        this.setNoExplanationState();
-        
-        const reportInfo = await this.reportInfoPane.loadReportInfo();
-        if (reportInfo) {
-            this.reportInfo = reportInfo; // Store for other methods to access
-            this.populateFilterOptions(reportInfo);
-        }
-        this.setupEventListeners();
-        await this.loadExplanations();
-        await this.reportInfoPane.loadMainChart();
-    }
-
-
 
     populateFilterOptions(reportInfo) {
         const sourceSelect = document.getElementById('source-class');
@@ -235,17 +172,212 @@ class QuACVisualizer {
         }
     }
 
-    setupEventListeners() {
+    setupDualRangeSlider() {
+        const container = document.querySelector('.dual-range-container');
+        const minThumb = document.getElementById('min-thumb');
+        const maxThumb = document.getElementById('max-thumb');
+        const range = document.getElementById('dual-range');
+        const minInput = document.getElementById('min-score');
+        const maxInput = document.getElementById('max-score');
+        const minValue = document.getElementById('min-score-value');
+        const maxValue = document.getElementById('max-score-value');
+
+        let isDragging = false;
+        let activeThumb = null;
+
+        const updateDisplay = () => {
+            const minVal = parseFloat(minInput.value);
+            const maxVal = parseFloat(maxInput.value);
+            
+            // Ensure min <= max
+            if (minVal > maxVal) {
+                if (activeThumb === minThumb) {
+                    maxInput.value = minVal;
+                } else {
+                    minInput.value = maxVal;
+                }
+            }
+            
+            const finalMin = parseFloat(minInput.value);
+            const finalMax = parseFloat(maxInput.value);
+            
+            // Update visual display
+            minValue.textContent = finalMin.toFixed(3);
+            maxValue.textContent = finalMax.toFixed(3);
+            
+            // Update thumb positions (0-100%)
+            const minPercent = finalMin * 100;
+            const maxPercent = finalMax * 100;
+            
+            minThumb.style.left = `${minPercent}%`;
+            maxThumb.style.left = `${maxPercent}%`;
+            
+            // Update range bar
+            range.style.left = `${minPercent}%`;
+            range.style.width = `${maxPercent - minPercent}%`;
+        };
+
+        const startDrag = (thumb, event) => {
+            isDragging = true;
+            activeThumb = thumb;
+            document.body.style.userSelect = 'none';
+            event.preventDefault();
+        };
+
+        const handleDrag = (event) => {
+            if (!isDragging || !activeThumb) return;
+            
+            const rect = container.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const x = clientX - rect.left;
+            const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
+            const value = percent / 100;
+            
+            if (activeThumb === minThumb) {
+                minInput.value = value.toFixed(3);
+            } else {
+                maxInput.value = value.toFixed(3);
+            }
+            
+            updateDisplay();
+        };
+
+        const endDrag = () => {
+            if (isDragging) {
+                isDragging = false;
+                activeThumb = null;
+                document.body.style.userSelect = '';
+            }
+        };
+
+        // Mouse events
+        minThumb.addEventListener('mousedown', (e) => startDrag(minThumb, e));
+        maxThumb.addEventListener('mousedown', (e) => startDrag(maxThumb, e));
+
+        document.addEventListener('mousemove', handleDrag);
+        document.addEventListener('mouseup', endDrag);
+
+        // Touch events
+        minThumb.addEventListener('touchstart', (e) => startDrag(minThumb, e.touches[0]));
+        maxThumb.addEventListener('touchstart', (e) => startDrag(maxThumb, e.touches[0]));
+
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            handleDrag(e.touches[0]);
+        });
+        document.addEventListener('touchend', endDrag);
+
+        // Initial display update
+        updateDisplay();
+    }
+
+    setupFilterEventListeners(applyFiltersCallback, resetFiltersCallback) {
         // Filter form
         document.getElementById('filter-form').addEventListener('submit', (e) => {
             e.preventDefault();
-            this.applyFilters();
+            applyFiltersCallback();
         });
 
         // Reset filters button
         document.getElementById('reset-filters').addEventListener('click', () => {
-            this.resetFilters();
+            resetFiltersCallback();
         });
+    }
+
+    resetFilters() {
+        document.getElementById('source-class').value = '';
+        document.getElementById('target-class').value = '';
+        
+        // Reset dual range slider to full range
+        const minSlider = document.getElementById('min-score');
+        const maxSlider = document.getElementById('max-score');
+        minSlider.value = 0;
+        maxSlider.value = 1;
+        document.getElementById('min-score-value').textContent = '0.000';
+        document.getElementById('max-score-value').textContent = '1.000';
+        
+        // Update slider visual
+        const minThumb = document.getElementById('min-thumb');
+        const maxThumb = document.getElementById('max-thumb');
+        const range = document.getElementById('dual-range');
+        
+        minThumb.style.left = '0%';
+        maxThumb.style.left = '100%';
+        range.style.left = '0%';
+        range.style.width = '100%';
+    }
+
+    getFilterValues() {
+        const formData = new FormData(document.getElementById('filter-form'));
+        const filters = {};
+        for (let [key, value] of formData.entries()) {
+            if (value) filters[key] = value;
+        }
+        return filters;
+    }
+
+    onFilterChange(callback) {
+        this.onFilterChangeCallback = callback;
+    }
+}
+
+class QuACVisualizer {
+    constructor() {
+        this.reportInfoPane = new ReportInfoPane();
+        this.filterPane = new FilterPane();
+        this.reportInfo = null; // Keep for compatibility with other methods
+        this.currentExplanations = [];
+        this.currentExplanation = null;
+        this.currentMask = null;
+        this.offset = 0;
+        this.limit = 20;
+        this.totalExplanations = 0;
+        this.charts = {};
+        this.sidebarWidth = 300; // Track current sidebar width
+        this.sidebarCollapsed = false;
+        
+        this.init();
+    }
+
+    setNoExplanationState() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide image viewer
+        imageViewer.style.display = 'none';
+        imageViewer.style.visibility = 'hidden';
+        imageViewer.style.position = 'absolute';
+        imageViewer.style.top = '-9999px';
+        
+        // Show centered no-explanation message
+        noExplanation.style.display = 'flex';
+        noExplanation.style.visibility = 'visible';
+        noExplanation.style.position = 'static';
+        noExplanation.style.top = 'auto';
+    }
+
+    async init() {
+        // Ensure proper initial state - no explanation selected
+        this.setNoExplanationState();
+        
+        const reportInfo = await this.reportInfoPane.loadReportInfo();
+        if (reportInfo) {
+            this.reportInfo = reportInfo; // Store for other methods to access
+            this.filterPane.populateFilterOptions(reportInfo);
+        }
+        this.setupEventListeners();
+        await this.loadExplanations();
+        await this.reportInfoPane.loadMainChart();
+    }
+    setupEventListeners() {
+        // Setup filter event listeners through FilterPane
+        this.filterPane.setupFilterEventListeners(
+            () => this.applyFilters(),
+            () => this.resetFilters()
+        );
+
+        // Setup dual range slider
+        this.filterPane.setupDualRangeSlider();
 
         // Collapsed sidebar indicator toggle
         document.getElementById('sidebar-collapsed').addEventListener('click', () => {
@@ -257,7 +389,7 @@ class QuACVisualizer {
         this.setupSidebarResizer();
 
         // Dual range slider setup
-        this.setupDualRangeSlider();
+        this.filterPane.setupDualRangeSlider();
 
         // Image toggle buttons
         document.getElementById('show-query').addEventListener('change', () => {
@@ -364,142 +496,10 @@ class QuACVisualizer {
         }
     }
 
-    setupDualRangeSlider() {
-        const container = document.querySelector('.dual-range-container');
-        const minThumb = document.getElementById('min-thumb');
-        const maxThumb = document.getElementById('max-thumb');
-        const range = document.getElementById('dual-range');
-        const minInput = document.getElementById('min-score');
-        const maxInput = document.getElementById('max-score');
-        const minValue = document.getElementById('min-score-value');
-        const maxValue = document.getElementById('max-score-value');
-        
-        let minVal = 0;
-        let maxVal = 1;
-        let isDragging = false;
-        let activeThumb = null;
-        
-        const updateDisplay = () => {
-            const containerWidth = container.offsetWidth;
-            const minPercent = minVal * 100;
-            const maxPercent = maxVal * 100;
-            
-            // Update thumb positions
-            minThumb.style.left = `${minPercent}%`;
-            maxThumb.style.left = `${maxPercent}%`;
-            
-            // Update range bar
-            range.style.left = `${minPercent}%`;
-            range.style.width = `${maxPercent - minPercent}%`;
-            
-            // Update hidden inputs
-            minInput.value = minVal;
-            maxInput.value = maxVal;
-            
-            // Update display values
-            minValue.textContent = minVal.toFixed(2);
-            maxValue.textContent = maxVal.toFixed(2);
-        };
-        
-        const getValueFromPosition = (clientX) => {
-            const rect = container.getBoundingClientRect();
-            const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            return Math.round(percent * 100) / 100; // Round to 2 decimal places
-        };
-        
-        const startDrag = (thumb, e) => {
-            isDragging = true;
-            activeThumb = thumb;
-            thumb.classList.add('dragging');
-            
-            // Bring active thumb to front
-            if (thumb === minThumb) {
-                minThumb.style.zIndex = '4';
-                maxThumb.style.zIndex = '3';
-            } else {
-                maxThumb.style.zIndex = '4';
-                minThumb.style.zIndex = '3';
-            }
-            
-            e.preventDefault();
-        };
-        
-        const handleDrag = (e) => {
-            if (!isDragging || !activeThumb) return;
-            
-            const newValue = getValueFromPosition(e.clientX);
-            
-            if (activeThumb === minThumb) {
-                minVal = Math.min(newValue, maxVal);
-            } else {
-                maxVal = Math.max(newValue, minVal);
-            }
-            
-            updateDisplay();
-        };
-        
-        const endDrag = () => {
-            if (activeThumb) {
-                activeThumb.classList.remove('dragging');
-            }
-            isDragging = false;
-            activeThumb = null;
-        };
-        
-        // Mouse events
-        minThumb.addEventListener('mousedown', (e) => startDrag(minThumb, e));
-        maxThumb.addEventListener('mousedown', (e) => startDrag(maxThumb, e));
-        
-        document.addEventListener('mousemove', handleDrag);
-        document.addEventListener('mouseup', endDrag);
-        
-        // Touch events for mobile
-        minThumb.addEventListener('touchstart', (e) => startDrag(minThumb, e.touches[0]));
-        maxThumb.addEventListener('touchstart', (e) => startDrag(maxThumb, e.touches[0]));
-        
-        document.addEventListener('touchmove', (e) => {
-            if (e.touches[0]) handleDrag(e.touches[0]);
-        });
-        document.addEventListener('touchend', endDrag);
-        
-        // Click on track to move nearest thumb
-        container.addEventListener('click', (e) => {
-            if (isDragging || e.target.classList.contains('dual-thumb')) return;
-            
-            const clickValue = getValueFromPosition(e.clientX);
-            const distToMin = Math.abs(clickValue - minVal);
-            const distToMax = Math.abs(clickValue - maxVal);
-            
-            if (distToMin < distToMax) {
-                minVal = Math.min(clickValue, maxVal);
-            } else {
-                maxVal = Math.max(clickValue, minVal);
-            }
-            
-            updateDisplay();
-        });
-        
-        // Initialize
-        updateDisplay();
-    }
+
 
     resetFilters() {
-        // Reset form fields to default values
-        document.getElementById('source-class').value = '';
-        document.getElementById('target-class').value = '';
-        document.getElementById('min-score').value = 0;
-        document.getElementById('max-score').value = 1;
-        
-        // Update display values and visual range
-        document.getElementById('min-score-value').textContent = '0.00';
-        document.getElementById('max-score-value').textContent = '1.00';
-        
-        // Reset visual range
-        const sliderRange = document.getElementById('slider-range');
-        sliderRange.style.left = '0%';
-        sliderRange.style.width = '100%';
-        
-        // Apply the reset filters
+        this.filterPane.resetFilters();
         this.applyFilters();
     }
 
