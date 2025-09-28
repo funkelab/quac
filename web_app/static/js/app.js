@@ -489,238 +489,10 @@ class ExplanationListPane {
     }
 }
 
-class QuACVisualizer {
+class ExplanationViewerPane {
     constructor() {
-        this.reportInfoPane = new ReportInfoPane();
-        this.filterPane = new FilterPane();
-        this.explanationListPane = new ExplanationListPane();
-        this.reportInfo = null; // Keep for compatibility with other methods
         this.currentExplanation = null;
         this.currentMask = null;
-        this.charts = {};
-        this.sidebarWidth = 300; // Track current sidebar width
-        this.sidebarCollapsed = false;
-        
-        this.init();
-    }
-
-    setNoExplanationState() {
-        const imageViewer = document.getElementById('image-viewer');
-        const noExplanation = document.getElementById('no-explanation');
-        
-        // Completely hide image viewer
-        imageViewer.style.display = 'none';
-        imageViewer.style.visibility = 'hidden';
-        imageViewer.style.position = 'absolute';
-        imageViewer.style.top = '-9999px';
-        
-        // Show centered no-explanation message
-        noExplanation.style.display = 'flex';
-        noExplanation.style.visibility = 'visible';
-        noExplanation.style.position = 'static';
-        noExplanation.style.top = 'auto';
-    }
-
-    async init() {
-        // Ensure proper initial state - no explanation selected
-        this.setNoExplanationState();
-        
-        const reportInfo = await this.reportInfoPane.loadReportInfo();
-        if (reportInfo) {
-            this.reportInfo = reportInfo; // Store for other methods to access
-            this.filterPane.populateFilterOptions(reportInfo);
-        }
-        
-        // Setup ExplanationListPane callbacks
-        this.explanationListPane.setExplanationSelectCallback((explanation) => {
-            this.handleExplanationSelection(explanation);
-        });
-        
-        this.setupEventListeners();
-        await this.explanationListPane.loadExplanations(this.reportInfo, true);
-        await this.reportInfoPane.loadMainChart();
-    }
-    setupEventListeners() {
-        // Setup filter event listeners through FilterPane
-        this.filterPane.setupFilterEventListeners(
-            () => this.applyFilters(),
-            () => this.resetFilters()
-        );
-
-        // Setup dual range slider
-        this.filterPane.setupDualRangeSlider();
-
-        // Setup explanation list event listeners
-        this.explanationListPane.setupEventListeners(() => {
-            this.explanationListPane.loadMoreExplanations(this.reportInfo);
-        });
-
-        // Collapsed sidebar indicator toggle
-        document.getElementById('sidebar-collapsed').addEventListener('click', () => {
-            this.toggleSidebar();
-        });
-
-        // Resizable dividers
-        this.setupResizableDivider();
-        this.setupSidebarResizer();
-
-        // Image toggle buttons
-        document.getElementById('show-query').addEventListener('change', () => {
-            if (this.currentExplanation) {
-                this.showImage('query');
-            }
-        });
-
-        document.getElementById('show-counterfactual').addEventListener('change', () => {
-            if (this.currentExplanation) {
-                this.showImage('counterfactual');
-            }
-        });
-
-        // Mask opacity slider
-        const maskOpacitySlider = document.getElementById('mask-opacity');
-        const maskOpacityValue = document.getElementById('mask-opacity-value');
-        
-        maskOpacitySlider.addEventListener('input', (e) => {
-            const opacity = parseInt(e.target.value);
-            maskOpacityValue.textContent = `${opacity}%`;
-            this.updateMaskOpacity(opacity);
-        });
-
-        // Close viewer
-        document.getElementById('close-viewer').addEventListener('click', () => {
-            this.closeViewer();
-        });
-
-        // Download buttons
-        document.getElementById('download-json').addEventListener('click', () => {
-            this.downloadFilteredData('json');
-        });
-
-        document.getElementById('download-images').addEventListener('click', () => {
-            this.downloadFilteredData('images');
-        });
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (this.currentExplanation) {
-                switch(e.key) {
-                    case 'q':
-                    case 'Q':
-                        document.getElementById('show-query').checked = true;
-                        this.showImage('query');
-                        break;
-                    case 'c':
-                    case 'C':
-                        document.getElementById('show-counterfactual').checked = true;
-                        this.showImage('counterfactual');
-                        break;
-                    case 'm':
-                    case 'M':
-                        const maskSlider = document.getElementById('mask-opacity');
-                        const currentOpacity = parseInt(maskSlider.value);
-                        const newOpacity = currentOpacity === 0 ? 30 : 0;
-                        maskSlider.value = newOpacity;
-                        document.getElementById('mask-opacity-value').textContent = `${newOpacity}%`;
-                        this.updateMaskOpacity(newOpacity);
-                        break;
-                    case 'Escape':
-                        this.closeViewer();
-                        break;
-                }
-            }
-        });
-    }
-
-    async applyFilters() {
-        this.showLoading(true);
-        await this.explanationListPane.loadExplanations(this.reportInfo, true);
-        await this.updateMainChart();
-        this.showLoading(false);
-    }
-
-    async updateMainChart() {
-        try {
-            const formData = new FormData(document.getElementById('filter-form'));
-            const params = new URLSearchParams();
-            
-            for (let [key, value] of formData.entries()) {
-                if (value) params.append(key, value);
-            }
-
-            const response = await fetch(`/api/curve?${params}`);
-            const data = await response.json();
-            
-            if (data.error) {
-                console.error('Error loading filtered chart:', data.error);
-                return;
-            }
-
-            this.reportInfoPane.renderMainChart(data);
-            
-        } catch (error) {
-            console.error('Error updating main chart:', error);
-        }
-    }
-
-
-
-    resetFilters() {
-        this.filterPane.resetFilters();
-        this.applyFilters();
-    }
-
-
-
-    handleExplanationSelection(explanation) {
-        this.currentExplanation = explanation;
-        this.currentMask = null;
-
-        // Show viewer and update metadata immediately (synchronous)
-        const imageViewer = document.getElementById('image-viewer');
-        const noExplanation = document.getElementById('no-explanation');
-        
-        // Completely hide the no-explanation div
-        noExplanation.style.display = 'none';
-        noExplanation.style.position = 'absolute';
-        noExplanation.style.top = '-9999px';
-        
-        // Show the image viewer
-        imageViewer.style.display = 'flex';
-        imageViewer.style.visibility = 'visible';
-        imageViewer.style.position = 'static';
-        
-        this.updateExplanationMetadata(explanation);
-        
-        // Show initial image (query by default)
-        document.getElementById('show-query').checked = true;
-        
-        // Load mask data and show image asynchronously (non-blocking)
-        if (explanation.mask_path) {
-            this.loadMaskData(explanation.mask_path).then(() => {
-                this.showImage('query');
-            });
-        } else {
-            this.showImage('query');
-        }
-        
-        // Update individual curve
-        this.updateIndividualCurve(explanation);
-    }
-
-    updateExplanationMetadata(explanation) {
-        document.getElementById('exp-score').textContent = explanation.score.toFixed(4);
-        
-        // Hide class information if blinding is enabled
-        if (this.reportInfo.blinding_enabled) {
-            document.getElementById('exp-source-class').textContent = 'Hidden';
-            document.getElementById('exp-target-class').textContent = 'Hidden';
-        } else {
-            document.getElementById('exp-source-class').textContent = explanation.source_class;
-            document.getElementById('exp-target-class').textContent = explanation.target_class;
-        }
-        
-        document.getElementById('exp-method').textContent = explanation.method || 'N/A';
     }
 
     async loadMaskData(maskPath) {
@@ -744,7 +516,6 @@ class QuACVisualizer {
 
         const mainImage = document.getElementById('main-image');
         const maskOverlay = document.getElementById('mask-overlay');
-        const imageInfo = document.getElementById('image-info');
         
         mainImage.classList.add('loading');
 
@@ -819,10 +590,8 @@ class QuACVisualizer {
             console.error('Invalid mask dimensions');
             return;
         }
-        
-        console.log(`Mask dimensions: ${width}x${height}`);
-        
-        // Create ImageData for the mask (server always returns RGB)
+
+        // Create ImageData for the mask (server returns RGB)
         const imageData = ctx.createImageData(width, height);
         const data = imageData.data;
         
@@ -841,9 +610,283 @@ class QuACVisualizer {
             }
         }
         
-        // Draw the mask
         ctx.putImageData(imageData, 0, 0);
     }
+
+    showViewer() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide the no-explanation div
+        noExplanation.style.display = 'none';
+        noExplanation.style.position = 'absolute';
+        noExplanation.style.top = '-9999px';
+        
+        // Show the image viewer
+        imageViewer.style.display = 'flex';
+        imageViewer.style.visibility = 'visible';
+        imageViewer.style.position = 'static';
+    }
+
+    closeViewer() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Hide the image viewer
+        imageViewer.style.display = 'none';
+        imageViewer.style.visibility = 'hidden';
+        imageViewer.style.position = 'absolute';
+        imageViewer.style.top = '-9999px';
+        
+        // Show the no-explanation div
+        noExplanation.style.display = 'flex';
+        noExplanation.style.visibility = 'visible';
+        noExplanation.style.position = 'static';
+        
+        // Clear current explanation
+        this.currentExplanation = null;
+        this.currentMask = null;
+    }
+
+    updateExplanationMetadata(explanation) {
+        document.getElementById('exp-score').textContent = explanation.score.toFixed(4);
+        
+        // Hide class information if blinding is enabled
+        const reportInfo = window.app?.reportInfo; // Access through global app instance
+        if (reportInfo?.blinding_enabled) {
+            document.getElementById('exp-source-class').textContent = 'Hidden';
+            document.getElementById('exp-target-class').textContent = 'Hidden';
+        } else {
+            document.getElementById('exp-source-class').textContent = explanation.source_class;
+            document.getElementById('exp-target-class').textContent = explanation.target_class;
+        }
+        
+        document.getElementById('exp-method').textContent = explanation.method || 'N/A';
+    }
+
+    setCurrentExplanation(explanation) {
+        this.currentExplanation = explanation;
+        this.currentMask = null;
+    }
+
+    setupEventListeners() {
+        // Image toggle buttons
+        document.getElementById('show-query').addEventListener('change', () => {
+            if (this.currentExplanation) {
+                this.showImage('query');
+            }
+        });
+
+        document.getElementById('show-counterfactual').addEventListener('change', () => {
+            if (this.currentExplanation) {
+                this.showImage('counterfactual');
+            }
+        });
+
+        // Mask opacity slider
+        document.getElementById('mask-opacity').addEventListener('input', (e) => {
+            const opacity = parseInt(e.target.value);
+            this.updateMaskOpacity(opacity);
+        });
+
+        // Close viewer button
+        document.getElementById('close-viewer').addEventListener('click', () => {
+            this.closeViewer();
+        });
+    }
+}
+
+class QuACVisualizer {
+    constructor() {
+        this.reportInfoPane = new ReportInfoPane();
+        this.filterPane = new FilterPane();
+        this.explanationListPane = new ExplanationListPane();
+        this.explanationViewerPane = new ExplanationViewerPane();
+        this.reportInfo = null; // Keep for compatibility with other methods
+        this.charts = {};
+        this.sidebarWidth = 300; // Track current sidebar width
+        this.sidebarCollapsed = false;
+        
+        // Make app globally accessible for panes
+        window.app = this;
+        
+        this.init();
+    }
+
+    setNoExplanationState() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide image viewer
+        imageViewer.style.display = 'none';
+        imageViewer.style.visibility = 'hidden';
+        imageViewer.style.position = 'absolute';
+        imageViewer.style.top = '-9999px';
+        
+        // Show centered no-explanation message
+        noExplanation.style.display = 'flex';
+        noExplanation.style.visibility = 'visible';
+        noExplanation.style.position = 'static';
+        noExplanation.style.top = 'auto';
+    }
+
+    async init() {
+        // Ensure proper initial state - no explanation selected
+        this.setNoExplanationState();
+        
+        const reportInfo = await this.reportInfoPane.loadReportInfo();
+        if (reportInfo) {
+            this.reportInfo = reportInfo; // Store for other methods to access
+            this.filterPane.populateFilterOptions(reportInfo);
+        }
+        
+        // Setup ExplanationListPane callbacks
+        this.explanationListPane.setExplanationSelectCallback((explanation) => {
+            this.handleExplanationSelection(explanation);
+        });
+        
+        this.setupEventListeners();
+        await this.explanationListPane.loadExplanations(this.reportInfo, true);
+        await this.reportInfoPane.loadMainChart();
+    }
+    setupEventListeners() {
+        // Setup filter event listeners through FilterPane
+        this.filterPane.setupFilterEventListeners(
+            () => this.applyFilters(),
+            () => this.resetFilters()
+        );
+
+        // Setup dual range slider
+        this.filterPane.setupDualRangeSlider();
+
+        // Setup explanation list event listeners
+        this.explanationListPane.setupEventListeners(() => {
+            this.explanationListPane.loadMoreExplanations(this.reportInfo);
+        });
+
+        // Setup explanation viewer event listeners
+        this.explanationViewerPane.setupEventListeners();
+
+        // Collapsed sidebar indicator toggle
+        document.getElementById('sidebar-collapsed').addEventListener('click', () => {
+            this.toggleSidebar();
+        });
+
+        // Resizable dividers
+        this.setupResizableDivider();
+        this.setupSidebarResizer();
+
+
+
+        // Download buttons
+        document.getElementById('download-json').addEventListener('click', () => {
+            this.downloadFilteredData('json');
+        });
+
+        document.getElementById('download-images').addEventListener('click', () => {
+            this.downloadFilteredData('images');
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (this.explanationViewerPane.currentExplanation) {
+                switch(e.key) {
+                    case 'q':
+                    case 'Q':
+                        document.getElementById('show-query').checked = true;
+                        this.explanationViewerPane.showImage('query');
+                        break;
+                    case 'c':
+                    case 'C':
+                        document.getElementById('show-counterfactual').checked = true;
+                        this.explanationViewerPane.showImage('counterfactual');
+                        break;
+                    case 'm':
+                    case 'M':
+                        const maskSlider = document.getElementById('mask-opacity');
+                        const currentOpacity = parseInt(maskSlider.value);
+                        const newOpacity = currentOpacity === 0 ? 30 : 0;
+                        maskSlider.value = newOpacity;
+                        document.getElementById('mask-opacity-value').textContent = `${newOpacity}%`;
+                        this.explanationViewerPane.updateMaskOpacity(newOpacity);
+                        break;
+                    case 'Escape':
+                        this.explanationViewerPane.closeViewer();
+                        break;
+                }
+            }
+        });
+    }
+
+    async applyFilters() {
+        this.showLoading(true);
+        await this.explanationListPane.loadExplanations(this.reportInfo, true);
+        await this.updateMainChart();
+        this.showLoading(false);
+    }
+
+    async updateMainChart() {
+        try {
+            const formData = new FormData(document.getElementById('filter-form'));
+            const params = new URLSearchParams();
+            
+            for (let [key, value] of formData.entries()) {
+                if (value) params.append(key, value);
+            }
+
+            const response = await fetch(`/api/curve?${params}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error loading filtered chart:', data.error);
+                return;
+            }
+
+            this.reportInfoPane.renderMainChart(data);
+            
+        } catch (error) {
+            console.error('Error updating main chart:', error);
+        }
+    }
+
+
+
+    resetFilters() {
+        this.filterPane.resetFilters();
+        this.applyFilters();
+    }
+
+
+
+    handleExplanationSelection(explanation) {
+        // Set the explanation in the viewer pane
+        this.explanationViewerPane.setCurrentExplanation(explanation);
+        
+        // Show the viewer
+        this.explanationViewerPane.showViewer();
+        
+        // Update metadata
+        this.explanationViewerPane.updateExplanationMetadata(explanation);
+        
+        // Show initial image (query by default)
+        document.getElementById('show-query').checked = true;
+        
+        // Load mask data and show image asynchronously (non-blocking)
+        if (explanation.mask_path) {
+            this.explanationViewerPane.loadMaskData(explanation.mask_path).then(() => {
+                this.explanationViewerPane.showImage('query');
+            });
+        } else {
+            this.explanationViewerPane.showImage('query');
+        }
+        
+        // Update individual curve
+        this.updateIndividualCurve(explanation);
+    }
+
+
+
+
 
     updateIndividualCurve(explanation) {
         if (!explanation.normalized_mask_sizes || !explanation.score_changes) {
@@ -923,18 +966,7 @@ class QuACVisualizer {
 
 
 
-    closeViewer() {
-        // Return to no explanation selected state
-        this.setNoExplanationState();
-        
-        // Clear selection
-        document.querySelectorAll('.explanation-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        
-        this.currentExplanation = null;
-        this.currentMask = null;
-    }
+
 
     downloadFilteredData(type) {
         console.log('Download button clicked, type:', type);
