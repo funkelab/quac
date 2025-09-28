@@ -776,8 +776,6 @@ class QuACVisualizer {
         this.setupResizableDivider();
         this.setupSidebarResizer();
 
-
-
         // Download buttons
         document.getElementById('download-json').addEventListener('click', () => {
             this.downloadFilteredData('json');
@@ -884,10 +882,6 @@ class QuACVisualizer {
         this.updateIndividualCurve(explanation);
     }
 
-
-
-
-
     updateIndividualCurve(explanation) {
         if (!explanation.normalized_mask_sizes || !explanation.score_changes) {
             return;
@@ -963,10 +957,6 @@ class QuACVisualizer {
             }
         });
     }
-
-
-
-
 
     downloadFilteredData(type) {
         console.log('Download button clicked, type:', type);
