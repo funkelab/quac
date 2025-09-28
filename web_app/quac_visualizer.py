@@ -26,7 +26,7 @@ from urllib.parse import unquote
 import numpy as np
 from flask import Flask, jsonify, render_template, request, send_file
 
-from quac.explanation import Explanation, serialize
+from quac.explanation import Explanation, explanation_encoder
 from quac.report import Report
 
 app = Flask(__name__)
@@ -56,35 +56,25 @@ def load_report_from_path(path: Union[str, Path]) -> Report:
 
 def serialize_explanation(explanation: Explanation) -> Dict:
     """Convert an Explanation object to a JSON-serializable dictionary."""
-    return {
-        "id": str(
-            hash(explanation)
-        ),  # Unique identifier as string to avoid JS precision loss
-        "query_path": explanation._query_path,
-        "counterfactual_path": explanation._counterfactual_path,
-        "mask_path": explanation._mask_path,
-        "query_prediction": serialize(explanation.query_prediction),
-        "counterfactual_prediction": serialize(explanation.counterfactual_prediction),
-        "source_class": explanation.source_class,
-        "target_class": explanation.target_class,
-        "score": explanation.score,
-        "normalized_mask_sizes": serialize(explanation._normalized_mask_sizes),
-        "score_changes": serialize(explanation._score_changes),
-        "optimal_threshold": explanation._optimal_threshold,
-        "method": getattr(explanation, "method", None),
-        "annotation": getattr(
-            explanation, "annotation", ""
-        ),  # Include annotation field
-        # Add prediction confidence scores
-        "source_confidence": (
-            max(explanation.query_prediction) if explanation.query_prediction else 0
-        ),
-        "target_confidence": (
-            max(explanation.counterfactual_prediction)
-            if explanation.counterfactual_prediction
-            else 0
-        ),
-    }
+    # Use the standard explanation_encoder from the package
+    data = explanation_encoder(explanation)
+
+    # Add web-app specific fields
+    data["id"] = str(
+        hash(explanation)
+    )  # Unique identifier as string to avoid JS precision loss
+
+    # Add prediction confidence scores for web display
+    data["source_confidence"] = (
+        max(explanation.query_prediction) if explanation.query_prediction else 0
+    )
+    data["target_confidence"] = (
+        max(explanation.counterfactual_prediction)
+        if explanation.counterfactual_prediction
+        else 0
+    )
+
+    return data
 
 
 @app.route("/")
