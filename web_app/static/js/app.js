@@ -3,47 +3,10 @@
  * Handles image toggling, mask overlays, filtering, and API interactions
  */
 
-class QuACVisualizer {
+class ReportInfoPane {
     constructor() {
-        this.currentExplanations = [];
-        this.currentExplanation = null;
-        this.currentMask = null;
-        this.offset = 0;
-        this.limit = 20;
-        this.totalExplanations = 0;
-        this.charts = {};
         this.reportInfo = null;
-        this.sidebarWidth = 300; // Track current sidebar width
-        this.sidebarCollapsed = false;
-        
-        this.init();
-    }
-
-    setNoExplanationState() {
-        const imageViewer = document.getElementById('image-viewer');
-        const noExplanation = document.getElementById('no-explanation');
-        
-        // Completely hide image viewer
-        imageViewer.style.display = 'none';
-        imageViewer.style.visibility = 'hidden';
-        imageViewer.style.position = 'absolute';
-        imageViewer.style.top = '-9999px';
-        
-        // Show centered no-explanation message
-        noExplanation.style.display = 'flex';
-        noExplanation.style.visibility = 'visible';
-        noExplanation.style.position = 'static';
-        noExplanation.style.top = 'auto';
-    }
-
-    async init() {
-        // Ensure proper initial state - no explanation selected
-        this.setNoExplanationState();
-        
-        await this.loadReportInfo();
-        this.setupEventListeners();
-        await this.loadExplanations();
-        this.setupQuACCurve();
+        this.mainChart = null;
     }
 
     async loadReportInfo() {
@@ -51,9 +14,10 @@ class QuACVisualizer {
             const response = await fetch('/api/report/info');
             this.reportInfo = await response.json();
             this.updateReportInfoDisplay();
-            this.populateFilterOptions();
+            return this.reportInfo;
         } catch (error) {
             console.error('Error loading report info:', error);
+            return null;
         }
     }
 
@@ -95,11 +59,148 @@ class QuACVisualizer {
         document.getElementById('max-score-value').textContent = maxSlider.value;
     }
 
-    populateFilterOptions() {
+    async loadMainChart() {
+        try {
+            const response = await fetch('/api/curve');
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error loading main chart:', data.error);
+                return;
+            }
+
+            this.renderMainChart(data);
+        } catch (error) {
+            console.error('Error loading main chart:', error);
+        }
+    }
+
+    renderMainChart(data) {
+        const ctx = document.getElementById('quac-curve').getContext('2d');
+        
+        if (this.mainChart) {
+            this.mainChart.destroy();
+        }
+
+        this.mainChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.x_values,
+                datasets: [
+                    {
+                        label: 'Median',
+                        data: data.median,
+                        borderColor: 'rgb(108, 92, 231)',
+                        backgroundColor: 'rgba(108, 92, 231, 0.1)',
+                        borderWidth: 2,
+                        fill: false
+                    },
+                    {
+                        label: '25th Percentile',
+                        data: data.p25,
+                        borderColor: 'rgba(108, 92, 231, 0.3)',
+                        backgroundColor: 'rgba(108, 92, 231, 0.05)',
+                        borderWidth: 1,
+                        fill: '+1'
+                    },
+                    {
+                        label: '75th Percentile',
+                        data: data.p75,
+                        borderColor: 'rgba(108, 92, 231, 0.3)',
+                        backgroundColor: 'rgba(108, 92, 231, 0.05)',
+                        borderWidth: 1,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Mask Size',
+                            font: { size: 10 }
+                        },
+                        ticks: { font: { size: 8 } }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Score Change',
+                            font: { size: 10 }
+                        },
+                        ticks: { font: { size: 8 } }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { font: { size: 10 } }
+                    }
+                }
+            }
+        });
+    }
+}
+
+class QuACVisualizer {
+    constructor() {
+        this.reportInfoPane = new ReportInfoPane();
+        this.reportInfo = null; // Keep for compatibility with other methods
+        this.currentExplanations = [];
+        this.currentExplanation = null;
+        this.currentMask = null;
+        this.offset = 0;
+        this.limit = 20;
+        this.totalExplanations = 0;
+        this.charts = {};
+        this.sidebarWidth = 300; // Track current sidebar width
+        this.sidebarCollapsed = false;
+        
+        this.init();
+    }
+
+    setNoExplanationState() {
+        const imageViewer = document.getElementById('image-viewer');
+        const noExplanation = document.getElementById('no-explanation');
+        
+        // Completely hide image viewer
+        imageViewer.style.display = 'none';
+        imageViewer.style.visibility = 'hidden';
+        imageViewer.style.position = 'absolute';
+        imageViewer.style.top = '-9999px';
+        
+        // Show centered no-explanation message
+        noExplanation.style.display = 'flex';
+        noExplanation.style.visibility = 'visible';
+        noExplanation.style.position = 'static';
+        noExplanation.style.top = 'auto';
+    }
+
+    async init() {
+        // Ensure proper initial state - no explanation selected
+        this.setNoExplanationState();
+        
+        const reportInfo = await this.reportInfoPane.loadReportInfo();
+        if (reportInfo) {
+            this.reportInfo = reportInfo; // Store for other methods to access
+            this.populateFilterOptions(reportInfo);
+        }
+        this.setupEventListeners();
+        await this.loadExplanations();
+        await this.reportInfoPane.loadMainChart();
+    }
+
+
+
+    populateFilterOptions(reportInfo) {
         const sourceSelect = document.getElementById('source-class');
         const targetSelect = document.getElementById('target-class');
 
-        if (this.reportInfo.blinding_enabled) {
+        if (reportInfo.blinding_enabled) {
             // In blinding mode, disable class filter dropdowns
             sourceSelect.disabled = true;
             targetSelect.disabled = true;
@@ -117,7 +218,7 @@ class QuACVisualizer {
         } else {
             // Normal mode - populate with actual classes
             // Populate source classes
-            this.reportInfo.source_classes.forEach(cls => {
+            reportInfo.source_classes.forEach(cls => {
                 const option = document.createElement('option');
                 option.value = cls;
                 option.textContent = cls;
@@ -125,7 +226,7 @@ class QuACVisualizer {
             });
 
             // Populate target classes
-            this.reportInfo.target_classes.forEach(cls => {
+            reportInfo.target_classes.forEach(cls => {
                 const option = document.createElement('option');
                 option.value = cls;
                 option.textContent = cls;
@@ -235,8 +336,32 @@ class QuACVisualizer {
         this.showLoading(true);
         this.offset = 0;
         await this.loadExplanations();
-        await this.updateQuACCurve();
+        await this.updateMainChart();
         this.showLoading(false);
+    }
+
+    async updateMainChart() {
+        try {
+            const formData = new FormData(document.getElementById('filter-form'));
+            const params = new URLSearchParams();
+            
+            for (let [key, value] of formData.entries()) {
+                if (value) params.append(key, value);
+            }
+
+            const response = await fetch(`/api/curve?${params}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error loading filtered chart:', data.error);
+                return;
+            }
+
+            this.reportInfoPane.renderMainChart(data);
+            
+        } catch (error) {
+            console.error('Error updating main chart:', error);
+        }
     }
 
     setupDualRangeSlider() {
@@ -754,106 +879,7 @@ class QuACVisualizer {
         });
     }
 
-    async setupQuACCurve() {
-        await this.updateQuACCurve();
-    }
 
-    async updateQuACCurve() {
-        try {
-            const formData = new FormData(document.getElementById('filter-form'));
-            const params = new URLSearchParams();
-            
-            for (let [key, value] of formData.entries()) {
-                if (value) params.append(key, value);
-            }
-
-            const response = await fetch(`/api/curve?${params}`);
-            const data = await response.json();
-            
-            if (data.error) {
-                console.error('Error loading curve:', data.error);
-                return;
-            }
-
-            const ctx = document.getElementById('quac-curve').getContext('2d');
-            
-            // Destroy existing chart if it exists
-            if (this.charts.main) {
-                this.charts.main.destroy();
-            }
-
-            this.charts.main = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.x_values,
-                    datasets: [
-                        {
-                            label: 'Median',
-                            data: data.median,
-                            borderColor: 'rgb(108, 92, 231)',
-                            backgroundColor: 'rgba(108, 92, 231, 0.1)',
-                            borderWidth: 2,
-                            fill: false
-                        },
-                        {
-                            label: '25th Percentile',
-                            data: data.p25,
-                            borderColor: 'rgba(108, 92, 231, 0.3)',
-                            backgroundColor: 'rgba(108, 92, 231, 0.05)',
-                            borderWidth: 1,
-                            fill: '+1'
-                        },
-                        {
-                            label: '75th Percentile',
-                            data: data.p75,
-                            borderColor: 'rgba(108, 92, 231, 0.3)',
-                            backgroundColor: 'rgba(108, 92, 231, 0.05)',
-                            borderWidth: 1,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: 'Mask Size',
-                                font: { size: 10 }
-                            },
-                            ticks: { font: { size: 8 } }
-                        },
-                        y: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: 'Score',
-                                font: { size: 10 }
-                            },
-                            ticks: { font: { size: 8 } }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            labels: { font: { size: 8 } }
-                        },
-                        title: {
-                            display: true,
-                            text: `QuAC Curve (n=${data.num_samples})`,
-                            font: { size: 10 }
-                        }
-                    }
-                }
-            });
-            
-        } catch (error) {
-            console.error('Error updating QuAC curve:', error);
-        }
-    }
 
     closeViewer() {
         // Return to no explanation selected state
