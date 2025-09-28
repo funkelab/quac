@@ -156,9 +156,9 @@
                                 </div>
                             </div>
 
-                            <!-- Image display area -->
-                            <div class="row">
-                                <div class="col-md-12">
+                            <!-- Image display area with annotation -->
+                            <div class="row justify-content-center">
+                                <div class="col-md-7">
                                     <div class="position-relative d-flex justify-content-center">
                                         <div id="image-container" style="position: relative; display: inline-block;">
                                             <img id="main-image" src="" alt="Explanation Image" style="max-width: 100%; height: auto; border: 1px solid #ddd;">
@@ -167,6 +167,20 @@
                                     </div>
                                     <div class="text-center mt-2">
                                         <small id="image-info" class="text-muted"></small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="h-100 d-flex flex-column">
+                                        <textarea 
+                                            id="explanation-annotation" 
+                                            class="form-control flex-grow-1" 
+                                            placeholder="Add your notes about this explanation..."
+                                            rows="10"
+                                            style="resize: vertical; min-height: 200px;">
+                                        </textarea>
+                                        <small class="text-muted mt-1">
+                                            <span id="annotation-status" class="text-success" style="display: none;">✓ Saved</span>
+                                        </small>
                                     </div>
                                 </div>
                             </div>

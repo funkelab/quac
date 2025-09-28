@@ -57,7 +57,9 @@ def load_report_from_path(path: Union[str, Path]) -> Report:
 def serialize_explanation(explanation: Explanation) -> Dict:
     """Convert an Explanation object to a JSON-serializable dictionary."""
     return {
-        "id": hash(explanation),  # Unique identifier
+        "id": str(
+            hash(explanation)
+        ),  # Unique identifier as string to avoid JS precision loss
         "query_path": explanation._query_path,
         "counterfactual_path": explanation._counterfactual_path,
         "mask_path": explanation._mask_path,
@@ -70,6 +72,9 @@ def serialize_explanation(explanation: Explanation) -> Dict:
         "score_changes": serialize(explanation._score_changes),
         "optimal_threshold": explanation._optimal_threshold,
         "method": getattr(explanation, "method", None),
+        "annotation": getattr(
+            explanation, "annotation", ""
+        ),  # Include annotation field
         # Add prediction confidence scores
         "source_confidence": (
             max(explanation.query_prediction) if explanation.query_prediction else 0
@@ -242,6 +247,41 @@ def get_explanation_details(explanation_id: int):
         return jsonify({"error": "Explanation not found"}), 404
 
     return jsonify(serialize_explanation(explanation))
+
+
+@app.route("/api/explanation/<exp_id>/annotation", methods=["POST"])
+def save_annotation(exp_id: str):
+    """Save annotation for a specific explanation."""
+    if current_report is None:
+        return jsonify({"error": "No report loaded"}), 400
+
+    try:
+        data = request.get_json()
+        annotation = data.get("annotation", "")
+
+        # Find the explanation by ID
+        explanation = None
+
+        print(f"Looking for explanation with ID: {exp_id}")
+
+        for exp in current_report.explanations:
+            exp_hash = str(hash(exp))
+            print(f"Checking explanation hash: {exp_hash}")
+            if exp_hash == exp_id:
+                explanation = exp
+                break
+
+        if explanation is None:
+            print(f"No explanation found with ID {exp_id}")
+            return jsonify({"error": "Explanation not found"}), 404
+
+        # Update the annotation
+        explanation.annotation = annotation
+
+        return jsonify({"success": True, "message": "Annotation saved"})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to save annotation: {str(e)}"}), 500
 
 
 @app.route("/api/curve")

@@ -643,9 +643,15 @@ class ExplanationViewerPane {
         noExplanation.style.visibility = 'visible';
         noExplanation.style.position = 'static';
         
-        // Clear current explanation
+        // Clear current explanation and annotation
         this.currentExplanation = null;
         this.currentMask = null;
+        
+        // Clear annotation textarea
+        const annotationTextarea = document.getElementById('explanation-annotation');
+        if (annotationTextarea) {
+            annotationTextarea.value = '';
+        }
     }
 
     updateExplanationMetadata(explanation) {
@@ -667,6 +673,86 @@ class ExplanationViewerPane {
     setCurrentExplanation(explanation) {
         this.currentExplanation = explanation;
         this.currentMask = null;
+        this.loadAnnotation();
+    }
+
+    loadAnnotation() {
+        const annotationTextarea = document.getElementById('explanation-annotation');
+        if (this.currentExplanation && annotationTextarea) {
+            annotationTextarea.value = this.currentExplanation.annotation || '';
+        }
+    }
+
+    async saveAnnotation() {
+        if (!this.currentExplanation) return;
+        
+        const annotationTextarea = document.getElementById('explanation-annotation');
+        const annotation = annotationTextarea.value;
+        
+        console.log('Saving annotation for explanation:', this.currentExplanation);
+        console.log('Explanation ID:', this.currentExplanation.id);
+        
+        try {
+            // Save to backend
+            const response = await fetch(`/api/explanation/${this.currentExplanation.id}/annotation`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ annotation: annotation })
+            });
+            
+            if (response.ok) {
+                // Update the in-memory explanation object only if backend save succeeded
+                this.currentExplanation.annotation = annotation;
+                
+                // Show save status
+                this.showAnnotationSaved();
+                
+                console.log(`Annotation saved for explanation ${this.currentExplanation.id}:`, annotation);
+            } else {
+                console.error('Failed to save annotation:', await response.text());
+            }
+        } catch (error) {
+            console.error('Error saving annotation:', error);
+        }
+    }
+
+    showAnnotationSaved() {
+        const status = document.getElementById('annotation-status');
+        if (status) {
+            status.style.display = 'inline';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 2000);
+        }
+    }
+
+    setupAnnotationAutoSave() {
+        const annotationTextarea = document.getElementById('explanation-annotation');
+        if (!annotationTextarea) return;
+
+        let autoSaveTimeout;
+
+        annotationTextarea.addEventListener('input', () => {
+            // Clear previous timeout
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+
+            // Set new timeout for auto-save (2 seconds after typing stops)
+            autoSaveTimeout = setTimeout(() => {
+                this.saveAnnotation();
+            }, 2000);
+        });
+
+        // Also save when user leaves the textarea
+        annotationTextarea.addEventListener('blur', () => {
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+            this.saveAnnotation();
+        });
     }
 
     setupEventListeners() {
@@ -692,6 +778,24 @@ class ExplanationViewerPane {
         // Close viewer button
         document.getElementById('close-viewer').addEventListener('click', () => {
             this.closeViewer();
+        });
+
+        // Setup annotation auto-save
+        this.setupAnnotationAutoSave();
+        
+        // Add keyboard shortcut for annotation (A key)
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'a' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // Only if not typing in another input
+                if (document.activeElement.tagName !== 'INPUT' && 
+                    document.activeElement.tagName !== 'TEXTAREA') {
+                    const annotationTextarea = document.getElementById('explanation-annotation');
+                    if (annotationTextarea && this.currentExplanation) {
+                        annotationTextarea.focus();
+                        e.preventDefault();
+                    }
+                }
+            }
         });
     }
 }
@@ -787,6 +891,17 @@ class QuACVisualizer {
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            // Don't trigger shortcuts when typing in input fields or textareas
+            if (document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'TEXTAREA') {
+                // Escape key should unfocus from textarea/input instead of closing viewer
+                if (e.key === 'Escape') {
+                    document.activeElement.blur();
+                    e.preventDefault();
+                }
+                return;
+            }
+
             if (this.explanationViewerPane.currentExplanation) {
                 switch(e.key) {
                     case 'q':
