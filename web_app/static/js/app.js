@@ -321,17 +321,182 @@ class FilterPane {
     }
 }
 
+class ExplanationListPane {
+    constructor() {
+        this.currentExplanations = [];
+        this.totalExplanations = 0;
+        this.offset = 0;
+        this.limit = 20;
+        this.onExplanationSelectCallback = null;
+    }
+
+    async loadExplanations(reportInfo, resetOffset = false) {
+        try {
+            if (resetOffset) {
+                this.offset = 0;
+            }
+
+            const formData = new FormData(document.getElementById('filter-form'));
+            const params = new URLSearchParams();
+            
+            // Add form parameters with explicit handling
+            const sourceClass = formData.get('source_class');
+            const targetClass = formData.get('target_class');
+            const minScore = formData.get('min_score');
+            const maxScore = formData.get('max_score');
+            
+            // Only add non-empty parameters
+            if (sourceClass && sourceClass !== '') {
+                params.append('source_class', sourceClass);
+            }
+            if (targetClass && targetClass !== '') {
+                params.append('target_class', targetClass);
+            }
+            if (minScore && minScore !== '') {
+                params.append('min_score', minScore);
+            }
+            if (maxScore && maxScore !== '') {
+                params.append('max_score', maxScore);
+            }
+            
+            params.append('offset', this.offset);
+            params.append('limit', this.limit);
+
+            console.log('Loading explanations with params:', params.toString()); // Debug log
+
+            const response = await fetch(`/api/explanations?${params}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error loading explanations:', data.error);
+                return;
+            }
+
+            if (this.offset === 0) {
+                this.currentExplanations = data.explanations;
+            } else {
+                this.currentExplanations.push(...data.explanations);
+            }
+            
+            this.totalExplanations = data.total;
+            this.updateExplanationsList(reportInfo);
+            this.updateLoadMoreButton();
+        } catch (error) {
+            console.error('Error loading explanations:', error);
+        }
+    }
+
+    async loadMoreExplanations(reportInfo) {
+        this.offset += this.limit;
+        await this.loadExplanations(reportInfo, false);
+    }
+
+    updateExplanationsList(reportInfo) {
+        const listContainer = document.getElementById('explanation-list');
+        
+        if (this.offset === 0) {
+            listContainer.innerHTML = '';
+        }
+        
+        this.currentExplanations.slice(this.offset === 0 ? 0 : -this.limit).forEach(exp => {
+            const item = this.createExplanationListItem(exp, reportInfo);
+            listContainer.appendChild(item);
+        });
+
+        document.getElementById('explanation-count').textContent = this.totalExplanations;
+    }
+
+    createExplanationListItem(explanation, reportInfo) {
+        const item = document.createElement('div');
+        item.className = 'list-group-item explanation-item';
+        item.dataset.explanationId = explanation.id;
+
+        const scoreClass = this.getScoreClass(explanation.score);
+        
+        // Hide class information if blinding is enabled
+        const classDisplay = reportInfo.blinding_enabled 
+            ? 'Hidden → Hidden' 
+            : `${explanation.source_class} → ${explanation.target_class}`;
+        
+        item.innerHTML = `
+            <div class="explanation-header">
+                ${classDisplay}
+            </div>
+            <div class="explanation-details">
+                Method: ${explanation.method || 'N/A'}
+            </div>
+            <div class="explanation-score">
+                <span class="score-badge ${scoreClass}">${explanation.score.toFixed(4)}</span>
+                <div class="score-bar mt-1">
+                    <div class="score-fill" style="width: ${(explanation.score * 100)}%"></div>
+                </div>
+            </div>
+        `;
+
+        item.addEventListener('click', () => {
+            this.selectExplanation(explanation);
+        });
+
+        return item;
+    }
+
+    getScoreClass(score) {
+        if (score >= 0.6) return '';
+        if (score >= 0.3) return 'medium-score';
+        return 'low-score';
+    }
+
+    updateLoadMoreButton() {
+        const container = document.getElementById('load-more-container');
+        const button = document.getElementById('load-more');
+        
+        if (this.currentExplanations.length >= this.totalExplanations) {
+            container.style.display = 'none';
+        } else {
+            container.style.display = 'block';
+            button.textContent = `Load More (${this.currentExplanations.length}/${this.totalExplanations})`;
+        }
+    }
+
+    selectExplanation(explanation) {
+        // Update visual selection efficiently
+        const listContainer = document.getElementById('explanation-list');
+        const currentActive = listContainer.querySelector('.explanation-item.active');
+        if (currentActive) {
+            currentActive.classList.remove('active');
+        }
+        
+        const newActive = listContainer.querySelector(`[data-explanation-id="${explanation.id}"]`);
+        if (newActive) {
+            newActive.classList.add('active');
+        }
+
+        // Call the callback to notify the main class
+        if (this.onExplanationSelectCallback) {
+            this.onExplanationSelectCallback(explanation);
+        }
+    }
+
+    setupEventListeners(onLoadMoreCallback) {
+        // Load more button
+        document.getElementById('load-more').addEventListener('click', () => {
+            onLoadMoreCallback();
+        });
+    }
+
+    setExplanationSelectCallback(callback) {
+        this.onExplanationSelectCallback = callback;
+    }
+}
+
 class QuACVisualizer {
     constructor() {
         this.reportInfoPane = new ReportInfoPane();
         this.filterPane = new FilterPane();
+        this.explanationListPane = new ExplanationListPane();
         this.reportInfo = null; // Keep for compatibility with other methods
-        this.currentExplanations = [];
         this.currentExplanation = null;
         this.currentMask = null;
-        this.offset = 0;
-        this.limit = 20;
-        this.totalExplanations = 0;
         this.charts = {};
         this.sidebarWidth = 300; // Track current sidebar width
         this.sidebarCollapsed = false;
@@ -365,8 +530,14 @@ class QuACVisualizer {
             this.reportInfo = reportInfo; // Store for other methods to access
             this.filterPane.populateFilterOptions(reportInfo);
         }
+        
+        // Setup ExplanationListPane callbacks
+        this.explanationListPane.setExplanationSelectCallback((explanation) => {
+            this.handleExplanationSelection(explanation);
+        });
+        
         this.setupEventListeners();
-        await this.loadExplanations();
+        await this.explanationListPane.loadExplanations(this.reportInfo, true);
         await this.reportInfoPane.loadMainChart();
     }
     setupEventListeners() {
@@ -379,6 +550,11 @@ class QuACVisualizer {
         // Setup dual range slider
         this.filterPane.setupDualRangeSlider();
 
+        // Setup explanation list event listeners
+        this.explanationListPane.setupEventListeners(() => {
+            this.explanationListPane.loadMoreExplanations(this.reportInfo);
+        });
+
         // Collapsed sidebar indicator toggle
         document.getElementById('sidebar-collapsed').addEventListener('click', () => {
             this.toggleSidebar();
@@ -387,9 +563,6 @@ class QuACVisualizer {
         // Resizable dividers
         this.setupResizableDivider();
         this.setupSidebarResizer();
-
-        // Dual range slider setup
-        this.filterPane.setupDualRangeSlider();
 
         // Image toggle buttons
         document.getElementById('show-query').addEventListener('change', () => {
@@ -417,11 +590,6 @@ class QuACVisualizer {
         // Close viewer
         document.getElementById('close-viewer').addEventListener('click', () => {
             this.closeViewer();
-        });
-
-        // Load more button
-        document.getElementById('load-more').addEventListener('click', () => {
-            this.loadMoreExplanations();
         });
 
         // Download buttons
@@ -466,8 +634,7 @@ class QuACVisualizer {
 
     async applyFilters() {
         this.showLoading(true);
-        this.offset = 0;
-        await this.loadExplanations();
+        await this.explanationListPane.loadExplanations(this.reportInfo, true);
         await this.updateMainChart();
         this.showLoading(false);
     }
@@ -503,141 +670,13 @@ class QuACVisualizer {
         this.applyFilters();
     }
 
-    async loadExplanations() {
-        try {
-            const formData = new FormData(document.getElementById('filter-form'));
-            const params = new URLSearchParams();
-            
-            // Add form parameters with explicit handling
-            const sourceClass = formData.get('source_class');
-            const targetClass = formData.get('target_class');
-            const minScore = formData.get('min_score');
-            const maxScore = formData.get('max_score');
-            
-            // Only add non-empty parameters
-            if (sourceClass && sourceClass !== '') {
-                params.append('source_class', sourceClass);
-            }
-            if (targetClass && targetClass !== '') {
-                params.append('target_class', targetClass);
-            }
-            if (minScore && minScore !== '') {
-                params.append('min_score', minScore);
-            }
-            if (maxScore && maxScore !== '') {
-                params.append('max_score', maxScore);
-            }
-            
-            params.append('offset', this.offset);
-            params.append('limit', this.limit);
 
-            console.log('Loading explanations with params:', params.toString()); // Debug log
 
-            const response = await fetch(`/api/explanations?${params}`);
-            const data = await response.json();
-            
-            if (data.error) {
-                console.error('Error loading explanations:', data.error);
-                return;
-            }
-
-            if (this.offset === 0) {
-                this.currentExplanations = data.explanations;
-            } else {
-                this.currentExplanations.push(...data.explanations);
-            }
-            
-            this.totalExplanations = data.total;
-            this.updateExplanationsList();
-            this.updateLoadMoreButton();
-        } catch (error) {
-            console.error('Error loading explanations:', error);
-        }
-    }
-
-    async loadMoreExplanations() {
-        this.offset += this.limit;
-        await this.loadExplanations();
-    }
-
-    updateExplanationsList() {
-        const listContainer = document.getElementById('explanation-list');
-        
-        if (this.offset === 0) {
-            listContainer.innerHTML = '';
-        }
-        
-        this.currentExplanations.slice(this.offset === 0 ? 0 : -this.limit).forEach(exp => {
-            const item = this.createExplanationListItem(exp);
-            listContainer.appendChild(item);
-        });
-
-        document.getElementById('explanation-count').textContent = this.totalExplanations;
-    }
-
-    createExplanationListItem(explanation) {
-        const item = document.createElement('div');
-        item.className = 'list-group-item explanation-item';
-        item.dataset.explanationId = explanation.id;
-
-        const scoreClass = this.getScoreClass(explanation.score);
-        
-        // Hide class information if blinding is enabled
-        const classDisplay = this.reportInfo.blinding_enabled 
-            ? 'Hidden → Hidden' 
-            : `${explanation.source_class} → ${explanation.target_class}`;
-        
-        item.innerHTML = `
-            <div class="explanation-header">
-                ${classDisplay}
-            </div>
-            <div class="explanation-details">
-                Method: ${explanation.method || 'N/A'}
-            </div>
-            <div class="explanation-score">
-                <span class="score-badge ${scoreClass}">${explanation.score.toFixed(4)}</span>
-                <div class="score-bar mt-1">
-                    <div class="score-fill" style="width: ${(explanation.score * 100)}%"></div>
-                </div>
-            </div>
-        `;
-
-        item.addEventListener('click', () => {
-            this.selectExplanation(explanation);
-        });
-
-        return item;
-    }
-
-    getScoreClass(score) {
-        if (score >= 0.6) return '';
-        if (score >= 0.3) return 'medium-score';
-        return 'low-score';
-    }
-
-    updateLoadMoreButton() {
-        const container = document.getElementById('load-more-container');
-        const button = document.getElementById('load-more');
-        
-        if (this.currentExplanations.length >= this.totalExplanations) {
-            container.style.display = 'none';
-        } else {
-            container.style.display = 'block';
-            button.textContent = `Load More (${this.currentExplanations.length}/${this.totalExplanations})`;
-        }
-    }
-
-    async selectExplanation(explanation) {
-        // Update visual selection
-        document.querySelectorAll('.explanation-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        document.querySelector(`[data-explanation-id="${explanation.id}"]`).classList.add('active');
-
+    handleExplanationSelection(explanation) {
         this.currentExplanation = explanation;
         this.currentMask = null;
 
-        // Show viewer and update metadata
+        // Show viewer and update metadata immediately (synchronous)
         const imageViewer = document.getElementById('image-viewer');
         const noExplanation = document.getElementById('no-explanation');
         
@@ -653,14 +692,17 @@ class QuACVisualizer {
         
         this.updateExplanationMetadata(explanation);
         
-        // Load mask data
-        if (explanation.mask_path) {
-            await this.loadMaskData(explanation.mask_path);
-        }
-        
         // Show initial image (query by default)
         document.getElementById('show-query').checked = true;
-        await this.showImage('query');
+        
+        // Load mask data and show image asynchronously (non-blocking)
+        if (explanation.mask_path) {
+            this.loadMaskData(explanation.mask_path).then(() => {
+                this.showImage('query');
+            });
+        } else {
+            this.showImage('query');
+        }
         
         // Update individual curve
         this.updateIndividualCurve(explanation);
