@@ -9,8 +9,12 @@ Features:
 - Download functionality for results and images
 
 Usage:
-    uv run web_app/quac_visualizer.py --report-path /path/to/report.json
-    uv run web_app/quac_visualizer.py --report-dir /path/to/reports/directory
+    # Use configuration file (reads report directory from config)
+    uv run web_app/quac_visualizer.py --config config.yaml
+
+    # Use configuration file with report override
+    uv run web_app/quac_visualizer.py --config config.yaml --report /path/to/report.json
+    uv run web_app/quac_visualizer.py --config config.yaml --report /path/to/reports/
 """
 
 import argparse
@@ -18,6 +22,7 @@ import json
 import logging
 import mimetypes
 import zipfile
+import yaml
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -28,6 +33,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 
 from quac.explanation import Explanation, explanation_encoder
 from quac.report import Report
+from quac.config import ExperimentConfig
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
@@ -551,9 +557,11 @@ def download_images():
 
 def main():
     parser = argparse.ArgumentParser(description="QuAC Visualizer")
-    parser.add_argument("--report-path", type=str, help="Path to report JSON file")
     parser.add_argument(
-        "--report-dir", type=str, help="Path to directory containing reports"
+        "--config", "-c", type=str, required=True, help="Path to configuration file"
+    )
+    parser.add_argument(
+        "--report", type=str, help="Override report path (file or directory)"
     )
     parser.add_argument(
         "--port", type=int, default=5000, help="Port to run the server on"
@@ -578,28 +586,30 @@ def main():
         datefmt="%H:%M:%S",
     )
 
-    if not args.report_path and not args.report_dir:
-        parser.error("Either --report-path or --report-dir must be provided")
+    # Load configuration
+    with open(args.config, "r") as file:
+        config_data = yaml.safe_load(file)
+    experiment_config = ExperimentConfig(**config_data)
+    logger.info(f"Loaded configuration from: {args.config}")
+
+    # Set report path from config, then override if provided
+    report_path = str(Path(experiment_config.solver.root_dir) / "reports")
+    if args.report:
+        report_path = args.report
+    logger.info(f"Using report: {report_path}")
 
     global current_report, report_base_path, blinding_enabled
     blinding_enabled = args.blind
 
-    try:
-        if args.report_path:
-            current_report = load_report_from_path(args.report_path)
-            report_base_path = Path(args.report_path).parent.resolve()
-        else:
-            current_report = load_report_from_path(args.report_dir)
-            report_base_path = Path(args.report_dir).resolve()
+    current_report = load_report_from_path(report_path)
+    report_base_path = Path(report_path).resolve()
+    if report_base_path.is_file():
+        report_base_path = report_base_path.parent
 
-        logger.info(f"Loaded report: {current_report.name}")
-        logger.info(f"Number of explanations: {len(current_report)}")
-        logger.info(f"Report base path: {report_base_path}")
-        logger.info(f"Blinding mode: {'Enabled' if blinding_enabled else 'Disabled'}")
-
-    except Exception as e:
-        logger.error(f"Error loading report: {e}")
-        return
+    logger.info(f"Loaded report: {current_report.name}")
+    logger.info(f"Number of explanations: {len(current_report)}")
+    logger.info(f"Report base path: {report_base_path}")
+    logger.info(f"Blinding mode: {'Enabled' if blinding_enabled else 'Disabled'}")
 
     logger.info(f"Starting QuAC Visualizer on http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port, debug=args.debug)
