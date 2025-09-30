@@ -42,6 +42,7 @@ class Explanation:
         score_changes: Optional[Union[list, np.ndarray]] = None,
         optimal_threshold: Optional[float] = None,
         method: Optional[str] = None,
+        annotation: str = "",
     ):
         self._query_path = query_path
         self._counterfactual_path = counterfactual_path
@@ -59,6 +60,7 @@ class Explanation:
         self._score_changes = score_changes
         self._optimal_threshold = optimal_threshold
         self._method = method
+        self.annotation = annotation
 
         # Computed
         self._query: Optional[torch.Tensor] = None
@@ -78,6 +80,7 @@ class Explanation:
                 and self.source_class == value.source_class
                 and self.target_class == value.target_class
                 and self.score == value.score
+                and self.annotation == value.annotation
             )
             # The other, optional, attributes are not checked for equality
         return False
@@ -179,4 +182,5 @@ def explanation_encoder(explanation: Explanation):
             "generated_prediction": serialize(explanation.generated_prediction),
             "optimal_threshold": explanation._optimal_threshold,
             "method": explanation._method,
+            "annotation": explanation.annotation,
         }
