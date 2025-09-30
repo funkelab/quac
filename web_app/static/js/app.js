@@ -500,7 +500,15 @@ class ExplanationViewerPane {
         
         try {
             const response = await fetch(`/api/mask/${this.currentExplanation.id}`);
-            const data = await response.json();
+            const responseText = await response.text();
+            
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (jsonError) {
+                console.error('JSON parse error:', jsonError);
+                return;
+            }
             
             if (data.error) {
                 console.error('Error loading mask:', data.error);
@@ -553,11 +561,14 @@ class ExplanationViewerPane {
     updateMaskOpacity(opacity) {
         const maskOverlay = document.getElementById('mask-overlay');
         
-        if (opacity === 0 || !this.currentMask) {
+        if (!this.currentMask) {
             maskOverlay.style.display = 'none';
         } else {
             maskOverlay.style.display = 'block';
+            // Always draw the spotlight effect first
             this.drawMaskOverlay(opacity);
+            // Then draw the contour on top (independent of opacity)
+            this.drawMaskContour();
         }
     }
 
@@ -570,9 +581,6 @@ class ExplanationViewerPane {
         const canvas = document.getElementById('mask-overlay');
         const ctx = canvas.getContext('2d');
         const maskData = this.currentMask.mask;
-        
-        console.log('Mask data shape:', this.currentMask.shape);
-        console.log('Mask opacity:', opacity + '%');
         
         if (!maskData || !Array.isArray(maskData) || !maskData.length) {
             console.error('Invalid mask data format');
@@ -597,19 +605,82 @@ class ExplanationViewerPane {
         // Convert opacity percentage to alpha value (0-255)
         const alpha = Math.round((opacity / 100) * 255);
         
+        // First pass: create base overlay
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const index = (y * width + x) * 4;
                 const pixel = maskData[y][x];
                 
-                data[index] = pixel[0];      // Red
-                data[index + 1] = pixel[1];  // Green
-                data[index + 2] = pixel[2];  // Blue
-                data[index + 3] = alpha;     // Dynamic opacity
+                // Check if any channel has non-zero value (works for any color mask)
+                const hasMask = pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0;
+                
+                data[index] = 0;             // Black overlay
+                data[index + 1] = 0;         // Black overlay  
+                data[index + 2] = 0;         // Black overlay
+                data[index + 3] = hasMask ? 0 : alpha;  // Alpha only where mask is zero
             }
         }
         
         ctx.putImageData(imageData, 0, 0);
+        
+        // Draw contour separately if enabled
+        this.drawMaskContour();
+    }
+
+    drawMaskContour() {
+        if (!this.currentMask) {
+            return;
+        }
+
+        const showContour = document.getElementById('mask-contour').checked;
+        if (!showContour) {
+            return;
+        }
+
+        const canvas = document.getElementById('mask-overlay');
+        const ctx = canvas.getContext('2d');
+        const maskData = this.currentMask.mask;
+        
+        const height = maskData.length;
+        const width = maskData[0]?.length;
+        
+        // Get current canvas data to modify it
+        const currentImageData = ctx.getImageData(0, 0, width, height);
+        const data = currentImageData.data;
+        
+        for (let y = 2; y < height - 2; y++) {
+            for (let x = 2; x < width - 2; x++) {
+                const pixel = maskData[y][x];
+                const hasMask = pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0;
+                
+                if (!hasMask) {
+                    // Check larger neighborhood for thicker contour (2-pixel radius)
+                    let hasNeighborMask = false;
+                    for (let dy = -2; dy <= 2; dy++) {
+                        for (let dx = -2; dx <= 2; dx++) {
+                            const neighbor = maskData[y + dy][x + dx];
+                            if (neighbor[0] > 0 || neighbor[1] > 0 || neighbor[2] > 0) {
+                                hasNeighborMask = true;
+                                break;
+                            }
+                        }
+                        if (hasNeighborMask) break;
+                    }
+                    
+                    if (hasNeighborMask) {
+                        // Directly set contour pixels in the existing canvas data
+                        const index = (y * width + x) * 4;
+                        data[index] = 255;     // Red
+                        data[index + 1] = 0;   // Green  
+                        data[index + 2] = 255; // Blue (magenta)
+                        data[index + 3] = 200; // Alpha - fixed high opacity
+                    }
+                }
+            }
+        }
+        
+        // Put the modified data back
+        ctx.putImageData(currentImageData, 0, 0);
     }
 
     showViewer() {
@@ -771,6 +842,12 @@ class ExplanationViewerPane {
         // Mask opacity slider
         document.getElementById('mask-opacity').addEventListener('input', (e) => {
             const opacity = parseInt(e.target.value);
+            this.updateMaskOpacity(opacity);
+        });
+
+        // Mask contour checkbox
+        document.getElementById('mask-contour').addEventListener('change', (e) => {
+            const opacity = parseInt(document.getElementById('mask-opacity').value);
             this.updateMaskOpacity(opacity);
         });
 
