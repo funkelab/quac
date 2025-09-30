@@ -33,7 +33,8 @@ from PIL import Image
 
 from quac.explanation import Explanation, explanation_encoder
 from quac.report import Report
-from quac.config import ExperimentConfig
+from quac.config import ExperimentConfig, get_data_config
+from quac.data import create_transform
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max file size
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 current_report: Optional[Report] = None
 report_base_path: Optional[Path] = None
 blinding_enabled: bool = False
+image_transform = None  # Will store the transform for images
 
 
 def load_report_from_path(path: Union[str, Path]) -> Report:
@@ -73,6 +75,10 @@ def find_explanation_by_id(exp_id: str) -> Optional[Explanation]:
 
 def tensor_to_image_response(tensor: torch.Tensor) -> bytes:
     """Convert a CHW tensor to a PNG image response."""
+    # Apply transform if available
+    if image_transform is not None:
+        tensor = image_transform(tensor)
+
     # Convert from CHW to HWC
     if tensor.dim() == 3:
         tensor = tensor.permute(1, 2, 0)
@@ -629,6 +635,18 @@ def main():
         config_data = yaml.safe_load(file)
     experiment_config = ExperimentConfig(**config_data)
     logger.info(f"Loaded configuration from: {args.config}")
+
+    # Create image transform from data config
+    data_config = get_data_config(experiment_config, "test")
+    global image_transform
+    image_transform = create_transform(
+        img_size=data_config.img_size,
+        grayscale=data_config.grayscale,
+        rgb=data_config.rgb,
+    )
+    logger.info(
+        f"Created image transform: img_size={data_config.img_size}, grayscale={data_config.grayscale}, rgb={data_config.rgb}"
+    )
 
     # Set report path from config, then override if provided
     report_path = str(Path(experiment_config.solver.root_dir) / "reports")
