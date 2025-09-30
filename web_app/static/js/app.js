@@ -495,9 +495,11 @@ class ExplanationViewerPane {
         this.currentMask = null;
     }
 
-    async loadMaskData(maskPath) {
+    async loadMaskData() {
+        if (!this.currentExplanation) return;
+        
         try {
-            const response = await fetch(`/api/mask/${encodeURIComponent(maskPath)}`);
+            const response = await fetch(`/api/mask/${this.currentExplanation.id}`);
             const data = await response.json();
             
             if (data.error) {
@@ -519,12 +521,9 @@ class ExplanationViewerPane {
         
         mainImage.classList.add('loading');
 
-        const imagePath = imageType === 'query' ? 
-            this.currentExplanation.query_path : 
-            this.currentExplanation.counterfactual_path;
-
         try {
-            mainImage.src = `/api/image/${encodeURIComponent(imagePath)}`;
+            // Use new ID-based endpoint
+            mainImage.src = `/api/image/${this.currentExplanation.id}/${imageType}`;
             
             await new Promise((resolve, reject) => {
                 mainImage.onload = () => {
@@ -985,13 +984,9 @@ class QuACVisualizer {
         document.getElementById('show-query').checked = true;
         
         // Load mask data and show image asynchronously (non-blocking)
-        if (explanation.mask_path) {
-            this.explanationViewerPane.loadMaskData(explanation.mask_path).then(() => {
-                this.explanationViewerPane.showImage('query');
-            });
-        } else {
+        this.explanationViewerPane.loadMaskData().then(() => {
             this.explanationViewerPane.showImage('query');
-        }
+        });
         
         // Update individual curve
         this.updateIndividualCurve(explanation);

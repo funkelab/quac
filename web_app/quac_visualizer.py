@@ -20,16 +20,16 @@ Usage:
 import argparse
 import json
 import logging
-import mimetypes
 import zipfile
 import yaml
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional, Union
-from urllib.parse import unquote
 
 import numpy as np
+import torch
 from flask import Flask, jsonify, render_template, request, send_file
+from PIL import Image
 
 from quac.explanation import Explanation, explanation_encoder
 from quac.report import Report
@@ -58,6 +58,47 @@ def load_report_from_path(path: Union[str, Path]) -> Report:
         return Report.from_directory(str(path))
     else:
         raise FileNotFoundError(f"Report path not found: {path}")
+
+
+def find_explanation_by_id(exp_id: str) -> Optional[Explanation]:
+    """Find an explanation by its string ID."""
+    if current_report is None:
+        return None
+
+    for exp in current_report.explanations:
+        if str(hash(exp)) == exp_id:
+            return exp
+    return None
+
+
+def tensor_to_image_response(tensor: torch.Tensor) -> bytes:
+    """Convert a CHW tensor to a PNG image response."""
+    # Convert from CHW to HWC
+    if tensor.dim() == 3:
+        tensor = tensor.permute(1, 2, 0)
+
+    # Convert to numpy and ensure values are in [0, 1]
+    img_array = tensor.cpu().numpy()
+
+    # Normalize to [0, 1] if needed
+    if img_array.max() > 1.0 or img_array.min() < 0.0:
+        img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min())
+
+    # Convert to [0, 255] uint8
+    img_array = (img_array * 255).astype(np.uint8)
+
+    # Handle grayscale (single channel)
+    if img_array.shape[2] == 1:
+        img_array = img_array.squeeze(2)
+        pil_image = Image.fromarray(img_array, mode="L")
+    else:
+        pil_image = Image.fromarray(img_array, mode="RGB")
+
+    # Save to bytes buffer
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def serialize_explanation(explanation: Explanation) -> Dict:
@@ -326,53 +367,50 @@ def get_quac_curve():
         return jsonify({"error": f"Could not generate curve: {str(e)}"}), 500
 
 
-@app.route("/api/image/<path:image_path>")
-def serve_image(image_path: str):
-    """Serve image files."""
+@app.route("/api/image/<exp_id>/<image_type>")
+def serve_image(exp_id: str, image_type: str):
+    """Serve image data from explanation object."""
     try:
-        # URL decode the image path
-        decoded_path = unquote(image_path)
+        # Find the explanation
+        explanation = find_explanation_by_id(exp_id)
+        if explanation is None:
+            return jsonify({"error": "Explanation not found"}), 404
 
-        # Flask's <path:> route strips the leading /, so add it back for absolute paths
-        if not decoded_path.startswith("/"):
-            decoded_path = "/" + decoded_path
+        # Get the appropriate tensor
+        if image_type == "query":
+            tensor = explanation.query
+        elif image_type == "counterfactual":
+            tensor = explanation.counterfactual
+        else:
+            return jsonify({"error": f"Invalid image type: {image_type}"}), 400
 
-        # Use the decoded path as absolute path
-        full_path = Path(decoded_path)
+        # Convert tensor to image
+        image_data = tensor_to_image_response(tensor)
 
-        if not full_path.exists():
-            return jsonify({"error": f"Image not found: {full_path}"}), 404
+        # Create response
+        buffer = BytesIO(image_data)
+        buffer.seek(0)
 
-        # Determine MIME type
-        mime_type, _ = mimetypes.guess_type(str(full_path))
-        if mime_type is None:
-            mime_type = "application/octet-stream"
-
-        return send_file(full_path, mimetype=mime_type)
+        return send_file(buffer, mimetype="image/png")
 
     except Exception as e:
         return jsonify({"error": f"Error serving image: {str(e)}"}), 500
 
 
-@app.route("/api/mask/<path:mask_path>")
-def serve_mask(mask_path: str):
-    """Serve mask files as JSON array."""
+@app.route("/api/mask/<exp_id>")
+def serve_mask(exp_id: str):
+    """Serve mask data from explanation object as JSON array."""
     try:
-        # URL decode the mask path
-        decoded_path = unquote(mask_path)
+        # Find the explanation
+        explanation = find_explanation_by_id(exp_id)
+        if explanation is None:
+            return jsonify({"error": "Explanation not found"}), 404
 
-        # Flask's <path:> route strips the leading /, so add it back for absolute paths
-        if not decoded_path.startswith("/"):
-            decoded_path = "/" + decoded_path
+        # Get mask tensor
+        mask_tensor = explanation.mask
 
-        # Use the decoded path as absolute path
-        full_path = Path(decoded_path)
-
-        if not full_path.exists():
-            return jsonify({"error": f"Mask not found: {full_path}"}), 404
-
-        # Load numpy array and convert to JSON
-        mask_data = np.load(full_path)
+        # Convert to numpy
+        mask_data = mask_tensor.cpu().numpy()
 
         # Normalize to channels-last format (height, width, channels)
         if mask_data.ndim == 3:
