@@ -56,11 +56,12 @@ class LabelledDataset(data.Dataset):
         return len(self.targets)
 
 
-class AugmentedDataset(LabelledDataset):
+class AugmentedDataset:
     """Adds an augmented version of the input to the sample."""
 
-    def __init__(self, root, transform=None, augment=None):
-        super().__init__(root, transform, augment)  # Creates self.samples, self.targets
+    def __init__(self, base_dataset, augment=None):
+        super().__init__()
+        self.base_dataset = base_dataset
         if augment is None:
             # Default augmentation: random horizontal flip, random vertical flip
             augment = transforms.Compose(
@@ -72,47 +73,35 @@ class AugmentedDataset(LabelledDataset):
         self.augment = augment
 
     def __getitem__(self, index):
-        fname = self.samples[index]
-        label = self.targets[index]
-        img = read_image(fname)
-        if self.transform is not None:
-            img = self.transform(img)
+        img, label = self.base_dataset[index]
         # Augment the image to create a second image
         img2 = self.augment(img)
         return img, img2, label
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.base_dataset)
 
 
-class ReferenceDataset(LabelledDataset):
+class ReferenceDataset:
     """A dataset that returns a reference image and a target image."""
 
-    def __init__(self, root, transform=None):
-        super().__init__(root, transform)  # Creates self.samples, self.targets
+    def __init__(self, base_dataset):
+        super().__init__()  # Creates self.samples, self.targets
+        self.base_dataset = base_dataset
 
     def select_from_class(self, label, idx):
         """Select a random image from a given class."""
-        is_class = set(np.where(np.array(self.targets) == label)[0])
+        is_class = set(np.where(np.array(self.base_dataset.targets) == label)[0])
         idx2 = random.choice(list(is_class - {idx}))
-        return self.samples[idx2]
+        return self.base_dataset[idx2]
 
     def __getitem__(self, index):
-        # fname, fname2 = self.samples[index]
-        fname = self.samples[index]
-        label = self.targets[index]
-        # Randomly select a second image from the same class
-        fname2 = self.select_from_class(label, index)
-        # Read the images
-        img = read_image(fname)
-        img2 = read_image(fname2)
-        if self.transform is not None:
-            img = self.transform(img)
-            img2 = self.transform(img2)
+        img, label = self.base_dataset[index]
+        img2, _ = self.select_from_class(label, index)
         return img, img2, label
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.base_dataset)
 
 
 def make_balanced_sampler(labels):
@@ -156,10 +145,11 @@ def get_train_loader(
         ]
     )
 
+    base_dataset = LabelledDataset(root, transform)
     if which == "source":
-        dataset = AugmentedDataset(root, transform)
+        dataset = AugmentedDataset(base_dataset)
     elif which == "reference":
-        dataset = ReferenceDataset(root, transform)
+        dataset = ReferenceDataset(base_dataset)
     else:
         raise NotImplementedError
 
