@@ -81,6 +81,10 @@ class AugmentedDataset:
     def __len__(self):
         return len(self.base_dataset)
 
+    @property
+    def targets(self):
+        return self.base_dataset.targets
+
 
 class ReferenceDataset:
     """A dataset that returns a reference image and a target image."""
@@ -103,6 +107,10 @@ class ReferenceDataset:
     def __len__(self):
         return len(self.base_dataset)
 
+    @property
+    def targets(self):
+        return self.base_dataset.targets
+
 
 def make_balanced_sampler(labels):
     class_counts = np.bincount(labels)
@@ -112,13 +120,11 @@ def make_balanced_sampler(labels):
     return WeightedRandomSampler(weights, len(weights))
 
 
-def get_train_loader(
+def get_train_dataset(
     root,
     which="source",
     img_size=256,
-    batch_size=8,
     prob=0.5,
-    num_workers=4,
     grayscale=False,
     rgb=True,
     scale=2,
@@ -140,8 +146,8 @@ def get_train_loader(
         [
             transform,
             rand_crop,
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
+            transforms.RandomHorizontalFlip(prob=prob),
+            transforms.RandomVerticalFlip(prob=prob),
         ]
     )
 
@@ -153,15 +159,7 @@ def get_train_loader(
     else:
         raise NotImplementedError
 
-    sampler = make_balanced_sampler(dataset.targets)
-    return data.DataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        sampler=sampler,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=True,
-    )
+    return dataset
 
 
 def get_eval_loader(
@@ -181,6 +179,7 @@ def get_eval_loader(
     transform = create_transform(img_size, grayscale, rgb, scale, shift)
 
     dataset = DefaultDataset(root, transform=transform)
+
     return data.DataLoader(
         dataset=dataset,
         batch_size=batch_size,
@@ -194,11 +193,38 @@ def get_eval_loader(
 class TrainingData:
     def __init__(
         self,
+        src_dataset,
+        reference_dataset,
+        batch_size=8,
+        num_workers=4,
+    ):
+        sampler_src = make_balanced_sampler(src_dataset.targets)
+        self.src = data.DataLoader(
+            dataset=src_dataset,
+            batch_size=batch_size,
+            sampler=sampler_src,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=True,
+        )
+        sampler_ref = make_balanced_sampler(reference_dataset.targets)
+        self.reference = data.DataLoader(
+            dataset=reference_dataset,
+            batch_size=batch_size,
+            sampler=sampler_ref,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=True,
+        )
+        self.iter = iter(self.src)
+        self.iter_ref = iter(self.reference)
+
+    @classmethod
+    def from_folders(
+        cls,
         source,
         reference=None,
         img_size=128,
-        batch_size=8,
-        num_workers=4,
         grayscale=False,
         rgb=True,
         scale=2,
@@ -206,32 +232,28 @@ class TrainingData:
         rand_crop_prob=0,
     ):
         ref_root = reference or source  # if reference is None, use source as reference
-        self.src = get_train_loader(
+        src_dataset = get_train_dataset(
             root=source,
             which="source",
             img_size=img_size,
-            batch_size=batch_size,
-            num_workers=num_workers,
             grayscale=grayscale,
             rgb=rgb,
             scale=scale,
             shift=shift,
             prob=rand_crop_prob,
         )
-        self.reference = get_train_loader(
+
+        reference_dataset = get_train_dataset(
             root=ref_root,
             which="reference",
             img_size=img_size,
-            batch_size=batch_size,
-            num_workers=num_workers,
             grayscale=grayscale,
             rgb=rgb,
             scale=scale,
             shift=shift,
             prob=rand_crop_prob,
         )
-        self.iter = iter(self.src)
-        self.iter_ref = iter(self.reference)
+        return cls(src_dataset, reference_dataset)
 
     def _fetch_inputs(self):
         try:
@@ -266,7 +288,6 @@ class TrainingData:
 class ValidationData:
     """
     A data loader for validation.
-
     """
 
     def __init__(

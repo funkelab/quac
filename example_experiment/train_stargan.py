@@ -39,7 +39,7 @@ if __name__ == "__main__":
     )
 
     # Defining the datasets for training and validation
-    dataset = TrainingData(**experiment.data.model_dump())
+    dataset = TrainingData.from_folders(**experiment.data.model_dump())
     val_dataset = ValidationData(**experiment.validation_data.model_dump())
 
     # Defining the models
