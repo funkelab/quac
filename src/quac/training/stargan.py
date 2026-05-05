@@ -174,6 +174,7 @@ class Generator(nn.Module):
 
         # down/up-sampling blocks
         repeat_num = int(np.log2(img_size)) - 4
+        dim_out = dim_in
         for _ in range(repeat_num):
             dim_out = min(dim_in * 2, max_conv_dim)
             self.encode.append(ResBlk(dim_in, dim_out, normalize=True, downsample=True))
