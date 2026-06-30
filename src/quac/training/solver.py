@@ -17,6 +17,7 @@ from pathlib import Path
 from quac.training.checkpoint import CheckpointIO
 from quac.training.classification import ClassifierWrapper
 from quac.training.data_loader import TrainingData
+from quac.training.stargan import reparameterize
 import shutil
 import torch
 import torch.nn as nn
@@ -493,6 +494,134 @@ class Solver(nn.Module):
             self.run.log(translation_rate_values, step=iteration)
 
 
+class PretrainSolver(Solver):
+    """VAE-GAN pretraining of the StarGAN generator + style encoder.
+
+    Reuses ``Solver`` for the optimizers, checkpointing, EMA wiring and device
+    handling. The mapping network is left untrained here -- with a single domain
+    and an N(0, I) style prior it is redundant, and it is (re)introduced fresh at
+    domain-transfer fine-tune time. Expects a variational generator and style
+    encoder (``build_model(..., variational=True)``).
+    """
+
+    def train(  # type: ignore[override]
+        self,
+        loader: TrainingData,
+        resume_iter: int = 0,
+        total_iters: int = 100000,
+        log_every: int = 100,
+        save_every: int = 10000,
+        lambda_reg: float = 1.0,
+        lambda_recon: float = 1.0,
+        beta_c: float = 1.0,
+        beta_s: float = 1.0,
+        lambda_ds: float = 1.0,
+        ds_iter: int = 100000,
+        kl_anneal_iters: int = 0,
+    ):
+        start = datetime.datetime.now()
+
+        if resume_iter > 0:
+            self._load_checkpoint(resume_iter)
+
+        print("Start pretraining...")
+        for i in range(resume_iter, total_iters):
+            inputs = next(loader)
+            x_real = inputs["x_src"].to(self.device)
+            y = inputs["y_src"].to(self.device)
+
+            # Linearly anneal the KL weights in, and linearly decay the
+            # diversity weight to 0 (as in StarGAN v2's ds schedule).
+            kl_scale = 1.0 if kl_anneal_iters <= 0 else min(1.0, (i + 1) / kl_anneal_iters)
+            cur_beta_c = beta_c * kl_scale
+            cur_beta_s = beta_s * kl_scale
+            cur_lambda_ds = lambda_ds * max(0.0, 1.0 - i / ds_iter) if ds_iter > 0 else lambda_ds
+
+            # train the discriminator
+            d_loss, d_losses = compute_pretrain_d_loss(
+                self.nets, x_real, y, lambda_reg=lambda_reg
+            )
+            self._reset_grad()
+            d_loss.backward()
+            self.optims["discriminator"].step()
+
+            # train the generator (decoder + content encoder) and style encoder
+            g_loss, g_losses, x_fake, x_rec = compute_pretrain_g_loss(
+                self.nets,
+                x_real,
+                y,
+                lambda_recon=lambda_recon,
+                beta_c=cur_beta_c,
+                beta_s=cur_beta_s,
+                lambda_ds=cur_lambda_ds,
+            )
+            self._reset_grad()
+            g_loss.backward()
+            self.optims["generator"].step()
+            self.optims["style_encoder"].step()
+
+            # moving average of the trained nets (mapping network is unused here)
+            moving_average(self.nets.generator, self.nets_ema.generator, beta=0.999)
+            moving_average(
+                self.nets.style_encoder, self.nets_ema.style_encoder, beta=0.999
+            )
+
+            if (i + 1) % save_every == 0:
+                self._save_checkpoint(step=i + 1)
+
+            if (i + 1) % log_every == 0:
+                elapsed = datetime.datetime.now() - start
+                # Sample from the priors through the EMA generator.
+                with torch.no_grad():
+                    gen_ema = _module(self.nets_ema.generator)
+                    style_dim = _module(self.nets_ema.style_encoder).style_dim
+                    c = torch.randn(
+                        x_real.size(0), *gen_ema.content_shape, device=self.device
+                    )
+                    s = torch.randn(x_real.size(0), style_dim, device=self.device)
+                    ema_fake = gen_ema.decode_latent(c, s)
+                self._log_pretrain(
+                    d_losses,
+                    g_losses,
+                    {
+                        "x_real": x_real,
+                        "x_rec": x_rec,
+                        "x_fake": x_fake,
+                        "ema_fake": ema_fake,
+                    },
+                    extra={
+                        "beta_c": cur_beta_c,
+                        "beta_s": cur_beta_s,
+                        "lambda_ds": cur_lambda_ds,
+                    },
+                    step=i + 1,
+                    total_iters=total_iters,
+                    elapsed_time=elapsed,
+                )
+
+    def _log_pretrain(
+        self, d_losses, g_losses, images, extra, step, total_iters, elapsed_time
+    ):
+        all_losses = {}
+        for key, value in d_losses.items():
+            all_losses["D/" + key] = value
+        for key, value in g_losses.items():
+            all_losses["G/" + key] = value
+        for key, value in extra.items():
+            all_losses["params/" + key] = value
+
+        if self.run:
+            self.run.log(all_losses, step=step)
+            for name, img in images.items():
+                self.run.log_images({name: img}, step=step)
+
+        print(f"[{elapsed_time}]: {step}/{total_iters}", flush=True)
+        print(
+            "\t".join(f"{key}: {value:.4f}" for key, value in all_losses.items()),
+            flush=True,
+        )
+
+
 def compute_d_loss(nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, lambda_reg=1.0):
     assert (z_trg is None) != (x_ref is None)
     # with real images
@@ -578,6 +707,116 @@ def compute_g_loss(
         ),
         x_fake,
     )
+
+
+def _module(net):
+    """Unwrap a (possibly DataParallel) net to call its custom methods.
+
+    DataParallel only dispatches ``forward``; methods like ``encode_latent`` /
+    ``decode_latent`` / ``encode_style`` must be called on the inner module.
+    """
+    return net.module if isinstance(net, nn.DataParallel) else net
+
+
+def kl_divergence(mu, logvar):
+    """KL(q(z|x) || N(0, I)), summed over latent dims and averaged over batch.
+
+    Works for both the spatial content code (B, C, H, W) and the style vector
+    (B, style_dim). The content code has many dimensions, so its KL is large in
+    magnitude -- expect to use a small beta and/or annealing.
+    """
+    return -0.5 * torch.mean(
+        torch.sum(
+            1 + logvar - mu.pow(2) - logvar.exp(),
+            dim=list(range(1, mu.dim())),
+        )
+    )
+
+
+def compute_pretrain_d_loss(nets, x_real, y, lambda_reg=1.0):
+    """Discriminator loss: real images vs. images generated from the priors."""
+    gen = _module(nets.generator)
+    style_dim = _module(nets.style_encoder).style_dim
+
+    # with real images
+    x_real.requires_grad_()
+    out = nets.discriminator(x_real, y)
+    loss_real = adv_loss(out, 1)
+    loss_reg = r1_reg(out, x_real)
+
+    # with images decoded from prior samples c ~ N(0, I), s ~ N(0, I)
+    with torch.no_grad():
+        c = torch.randn(x_real.size(0), *gen.content_shape, device=x_real.device)
+        s = torch.randn(x_real.size(0), style_dim, device=x_real.device)
+        x_fake = gen.decode_latent(c, s)
+    out = nets.discriminator(x_fake, y)
+    loss_fake = adv_loss(out, 0)
+
+    loss = loss_real + loss_fake + lambda_reg * loss_reg
+    return loss, dict(real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item())
+
+
+def compute_pretrain_g_loss(
+    nets,
+    x_real,
+    y,
+    lambda_recon=1.0,
+    beta_c=1.0,
+    beta_s=1.0,
+    lambda_ds=1.0,
+):
+    """VAE-GAN generator/encoder loss.
+
+    Two paths share the decoder:
+    - autoencoding: encode x to posteriors over content `c` and style `s`,
+      sample, decode, and match x (reconstruction) while pulling both
+      posteriors toward N(0, I) (the two KL terms);
+    - generation: decode content and style drawn from the N(0, I) priors, judged
+      by the discriminator (adversarial), with a style-diversity term that forces
+      the decoder to actually use `s`.
+    """
+    gen = _module(nets.generator)
+    enc = _module(nets.style_encoder)
+    device = x_real.device
+    batch_size = x_real.size(0)
+
+    # --- autoencoding path: reconstruction + KL ---
+    mu_c, logvar_c = gen.encode_latent(x_real)
+    c = reparameterize(mu_c, logvar_c)
+    mu_s, logvar_s = enc.encode_style(x_real, y)
+    s = reparameterize(mu_s, logvar_s)
+    x_rec = gen.decode_latent(c, s)
+    loss_recon = torch.mean(torch.abs(x_rec - x_real))
+    loss_kl_c = kl_divergence(mu_c, logvar_c)
+    loss_kl_s = kl_divergence(mu_s, logvar_s)
+
+    # --- generation path: adversarial + style diversity ---
+    c_prior = torch.randn(batch_size, *gen.content_shape, device=device)
+    s_prior = torch.randn(batch_size, enc.style_dim, device=device)
+    x_fake = gen.decode_latent(c_prior, s_prior)
+    out = nets.discriminator(x_fake, y)
+    loss_adv = adv_loss(out, 1)
+
+    # diversity: same content, a different style should give a different image.
+    s_prior2 = torch.randn(batch_size, enc.style_dim, device=device)
+    x_fake2 = gen.decode_latent(c_prior, s_prior2).detach()
+    loss_ds = torch.mean(torch.abs(x_fake - x_fake2))
+
+    loss = (
+        loss_adv
+        + lambda_recon * loss_recon
+        + beta_c * loss_kl_c
+        + beta_s * loss_kl_s
+        - lambda_ds * loss_ds
+    )
+    losses = dict(
+        adv=loss_adv.item(),
+        recon=loss_recon.item(),
+        kl_c=loss_kl_c.item(),
+        kl_s=loss_kl_s.item(),
+        ds=loss_ds.item(),
+    )
+    return loss, losses, x_fake, x_rec
 
 
 def moving_average(model, model_test, beta=0.999):
