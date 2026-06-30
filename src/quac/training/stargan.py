@@ -10,6 +10,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import copy
 import math
+import warnings
 
 import numpy as np
 import torch
@@ -206,6 +207,19 @@ class Generator(nn.Module):
             bottleneck_hw //= 2
         self.content_shape = (dim_out, bottleneck_hw, bottleneck_hw)
 
+        # The decoder upsamples the bottleneck back up by 2**repeat_num. When
+        # img_size is not cleanly divisible (e.g. 178), that lands short of
+        # img_size and `decode_latent` resizes the output to compensate — a small
+        # boundary distortion. Warn once so an odd config value is visible.
+        if bottleneck_hw * (2**repeat_num) != img_size:
+            warnings.warn(
+                f"img_size={img_size} is not divisible by 2**{repeat_num}; the "
+                f"generator decodes to {bottleneck_hw * (2**repeat_num)} and "
+                f"resizes to {img_size}. Use a cleanly divisible size to avoid "
+                "the implicit resize.",
+                stacklevel=2,
+            )
+
         # Variational heads: map the bottleneck feature map to the mean and
         # log-variance of q(c | x). Only built when variational, so the
         # non-variational state_dict is unchanged.
@@ -227,11 +241,21 @@ class Generator(nn.Module):
         return h
 
     def decode_latent(self, c, s):
-        """Decode a content code `c` and style `s` into an image."""
+        """Decode a content code `c` and style `s` into an image.
+
+        The output is resized to `img_size` when the bottleneck does not upsample
+        back to it exactly (non-divisible img_size); a no-op for clean sizes.
+        """
         x = c
         for block in self.decode:
             x = block(x, s)
-        return self.final_activation(self.to_rgb(x))
+        x = self.to_rgb(x)
+        if x.shape[-2:] != (self.img_size, self.img_size):
+            x = F.interpolate(
+                x, size=(self.img_size, self.img_size),
+                mode="bilinear", align_corners=False,
+            )
+        return self.final_activation(x)
 
     def forward(self, x, s):
         if self.variational:
@@ -417,6 +441,10 @@ class Discriminator(nn.Module):
             blocks += [ResBlk(dim_in, dim_out, downsample=True)]
             dim_in = dim_out
 
+        # Force the feature map to 4x4 so the 4x4 conv collapses it to 1x1 for
+        # any img_size. At power-of-2 sizes the map is already 4x4 (identity);
+        # at e.g. 160 (5x5) or 178 (5x5) this makes the domain indexing correct.
+        blocks += [nn.AdaptiveAvgPool2d(4)]
         blocks += [nn.LeakyReLU(0.2)]
         blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
         blocks += [nn.LeakyReLU(0.2)]

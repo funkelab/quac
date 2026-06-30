@@ -5,6 +5,9 @@ from quac.training.stargan import (
     reparameterize,
 )
 from quac.config import ModelConfig
+import warnings
+
+import pytest
 import torch
 import os
 
@@ -97,3 +100,40 @@ def test_build_model_variational_flag():
     nets, _ = build_model(**args.model_dump())
     assert nets.generator.module.variational is True
     assert nets.style_encoder.module.variational is True
+
+
+def test_generator_warns_and_resizes_on_non_divisible_size():
+    # 178 is not divisible by 2**3, so the decoder lands at 176 and resizes to
+    # 178 -- the generator warns about the implicit resize.
+    with pytest.warns(UserWarning, match="not divisible"):
+        gen = Generator(img_size=178, style_dim=64, input_dim=1, variational=True)
+    s = torch.randn(2, 64)
+    out = gen.decode_latent(torch.randn(2, *gen.content_shape), s)
+    assert out.shape == (2, 1, 178, 178)
+
+
+def test_generator_no_warning_on_clean_sizes():
+    # Clean sizes (power-of-2 128, and 160 = 8*20) decode to img_size exactly,
+    # so no resize and no warning.
+    for img_size in (128, 160):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            gen = Generator(img_size=img_size, style_dim=64, input_dim=1,
+                            variational=True)
+        out = gen.decode_latent(torch.randn(2, *gen.content_shape),
+                                torch.randn(2, 64))
+        assert out.shape == (2, 1, img_size, img_size)
+
+
+def test_discriminator_collapses_any_size():
+    # The discriminator must reduce to one score per sample regardless of size;
+    # 160 (5x5 before the collapse) previously mis-indexed the domain.
+    for img_size in (128, 160):
+        nets, _ = build_model(img_size=img_size, num_domains=3, input_dim=1)
+        x = torch.randn(2, 1, img_size, img_size)
+        y = torch.randint(0, 3, (2,))
+        # main() collapses spatial to 1x1 -> (B, num_domains, 1, 1)
+        feat = nets.discriminator.module.main(x)
+        assert feat.shape[-2:] == (1, 1)
+        # forward picks one score per sample
+        assert nets.discriminator(x, y).shape == (2,)
