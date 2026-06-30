@@ -99,27 +99,21 @@ class Solver(nn.Module):
                 weight_decay=weight_decay,
             )
 
-            self.ckptios = [
-                CheckpointIO(
-                    ospj(checkpoint_dir, "{:06d}_nets.ckpt"),
-                    data_parallel=True,
-                    **self.nets,
-                ),
-                CheckpointIO(
-                    ospj(checkpoint_dir, "{:06d}_nets_ema.ckpt"),
-                    data_parallel=True,
-                    **self.nets_ema,
-                ),
-                CheckpointIO(ospj(checkpoint_dir, "{:06d}_optims.ckpt"), **self.optims),
-            ]
-        else:
-            self.ckptios = [
-                CheckpointIO(
-                    ospj(checkpoint_dir, "{:06d}_nets_ema.ckpt"),
-                    data_parallel=True,
-                    **self.nets_ema,
-                )
-            ]
+        # Checkpoint the live nets, the EMA nets, and the optimizers so a run
+        # can be resumed exactly (the discriminator only lives in `nets`).
+        self.ckptios = [
+            CheckpointIO(
+                ospj(checkpoint_dir, "{:06d}_nets.ckpt"),
+                data_parallel=True,
+                **self.nets,
+            ),
+            CheckpointIO(
+                ospj(checkpoint_dir, "{:06d}_nets_ema.ckpt"),
+                data_parallel=True,
+                **self.nets_ema,
+            ),
+            CheckpointIO(ospj(checkpoint_dir, "{:06d}_optims.ckpt"), **self.optims),
+        ]
 
         self.to(self.device)
         # TODO The EMA doesn't need to be in named_children()

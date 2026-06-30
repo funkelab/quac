@@ -21,7 +21,7 @@ class DummyLoader:
         }
 
 
-def test_solver_runs(tmp_path):
+def _build_solver(tmp_path):
     nets, nets_ema = build_model(
         img_size=64,
         style_dim=64,
@@ -29,7 +29,7 @@ def test_solver_runs(tmp_path):
         num_domains=2,
         input_dim=1,
     )
-    solver = Solver(
+    return Solver(
         nets,
         nets_ema,
         f_lr=1e-4,
@@ -40,17 +40,27 @@ def test_solver_runs(tmp_path):
         root_dir=str(tmp_path),
         run=None,
     )
+
+
+def test_solver_runs_and_resumes(tmp_path):
     x = torch.randn(2, 1, 64, 64)
     y_src = torch.zeros(2, dtype=torch.long)
     y_ref = torch.ones(2, dtype=torch.long)
     loader = DummyLoader(x, y_src, y_ref)
+
     # Two iterations, checkpoint at the end; no eval (val_loader is None).
-    solver.train(
-        loader,
-        total_iters=2,
-        log_every=1,
-        save_every=2,
-        eval_every=1000,
+    _build_solver(tmp_path).train(
+        loader, total_iters=2, log_every=1, save_every=2, eval_every=1000
     )
-    # A checkpoint was written at the final step (Solver saves the EMA nets).
-    assert list((tmp_path / "checkpoints").glob("*_nets_ema.ckpt"))
+    ckpts = tmp_path / "checkpoints"
+    # The full live nets, EMA nets and optimizers are all saved (needed to resume).
+    assert list(ckpts.glob("000002_nets.ckpt"))
+    assert list(ckpts.glob("000002_nets_ema.ckpt"))
+    assert list(ckpts.glob("000002_optims.ckpt"))
+
+    # A fresh solver resumes from step 2 and runs to step 4.
+    _build_solver(tmp_path).train(
+        loader, resume_iter=2, total_iters=4, log_every=1, save_every=2, eval_every=1000
+    )
+    assert list(ckpts.glob("000004_nets.ckpt"))
+    assert list(ckpts.glob("000004_optims.ckpt"))
