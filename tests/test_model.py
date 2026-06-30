@@ -1,4 +1,9 @@
-from quac.training.stargan import build_model, Generator
+from quac.training.stargan import (
+    build_model,
+    Generator,
+    StyleEncoder,
+    reparameterize,
+)
 from quac.config import ModelConfig
 import torch
 import os
@@ -49,7 +54,7 @@ def test_variational_generator():
     assert mu.shape == logvar.shape == (4, *gen.content_shape)
 
     # reparameterize matches the posterior shape.
-    c = gen.reparameterize(mu, logvar)
+    c = reparameterize(mu, logvar)
     assert c.shape == mu.shape
 
     # generation path: decode a content code drawn from the prior.
@@ -58,8 +63,37 @@ def test_variational_generator():
     assert img.shape == x.shape
 
 
+def test_non_variational_style_encoder_unchanged():
+    # Default style encoder is deterministic: encode_style returns a vector and
+    # forward(x, y) returns a style of shape (batch, style_dim).
+    enc = StyleEncoder(img_size=64, style_dim=64, num_domains=5, input_dim=1)
+    assert enc.variational is False
+    x = torch.randn(4, 1, 64, 64)
+    y = torch.randint(0, 5, (4,))
+    assert enc(x, y).shape == (4, 64)
+    s = enc.encode_style(x, y)
+    assert torch.is_tensor(s) and s.shape == (4, 64)
+
+
+def test_variational_style_encoder():
+    # Variational style encoder exposes a per-domain (mu, logvar) posterior and
+    # samples a style vector from it on forward.
+    enc = StyleEncoder(img_size=64, style_dim=64, num_domains=5, input_dim=1,
+                       variational=True)
+    x = torch.randn(4, 1, 64, 64)
+    y = torch.randint(0, 5, (4,))
+
+    mu, logvar = enc.encode_style(x, y)
+    assert mu.shape == logvar.shape == (4, 64)
+
+    s = enc(x, y)
+    assert s.shape == (4, 64)
+
+
 def test_build_model_variational_flag():
-    # The variational flag flows from config through build_model to the net.
+    # The variational flag flows from config through build_model to both the
+    # generator and the style encoder.
     args = ModelConfig(variational=True, input_dim=1, img_size=64)
     nets, _ = build_model(**args.model_dump())
     assert nets.generator.module.variational is True
+    assert nets.style_encoder.module.variational is True

@@ -17,6 +17,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def reparameterize(mu, logvar):
+    """Sample `mu + sigma * eps`, eps ~ N(0, I) (VAE reparameterization trick)."""
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mu + eps * std
+
+
 class ResBlk(nn.Module):
     """
     Residual Block.
@@ -219,13 +226,6 @@ class Generator(nn.Module):
             return self.mu(h), self.logvar(h)
         return h
 
-    @staticmethod
-    def reparameterize(mu, logvar):
-        """Sample `c = mu + sigma * eps`, eps ~ N(0, I) (VAE reparam trick)."""
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
     def decode_latent(self, c, s):
         """Decode a content code `c` and style `s` into an image."""
         x = c
@@ -236,7 +236,7 @@ class Generator(nn.Module):
     def forward(self, x, s):
         if self.variational:
             mu, logvar = self.encode_latent(x)
-            c = self.reparameterize(mu, logvar)
+            c = reparameterize(mu, logvar)
         else:
             c = self.encode_latent(x)
         return self.decode_latent(c, s)
@@ -281,10 +281,18 @@ class MappingNetwork(nn.Module):
 
 class StyleEncoder(nn.Module):
     def __init__(
-        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+        self,
+        img_size=256,
+        style_dim=64,
+        num_domains=2,
+        max_conv_dim=512,
+        input_dim=3,
+        variational=False,
     ):
         super().__init__()
         dim_in = 2**14 // img_size
+        self.style_dim = style_dim
+        self.variational = variational
 
         self.nearest_power = None
         if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
@@ -305,11 +313,20 @@ class StyleEncoder(nn.Module):
         blocks += [nn.LeakyReLU(0.2)]
         self.shared = nn.Sequential(*blocks)
 
+        # Variational heads emit (mu, logvar) per domain by doubling the width;
+        # non-variational heads keep their original `style_dim` output so the
+        # deterministic state_dict is unchanged.
+        out_dim = style_dim * 2 if variational else style_dim
         self.unshared = nn.ModuleList()
         for _ in range(num_domains):
-            self.unshared += [nn.Linear(dim_out, style_dim)]
+            self.unshared += [nn.Linear(dim_out, out_dim)]
 
-    def forward(self, x, y):
+    def encode_style(self, x, y):
+        """Encode the style for domain `y`.
+
+        Returns `(mu, logvar)` of the posterior `q(s | x, y)` when variational,
+        otherwise the deterministic style vector `s`.
+        """
         if self.nearest_power is not None:
             # Required for img_size=224 in the retina case
             # Resize input image to nearest power of 2
@@ -319,18 +336,35 @@ class StyleEncoder(nn.Module):
         out = []
         for layer in self.unshared:
             out += [layer(h)]
-        out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
+        out = torch.stack(out, dim=1)  # (batch, num_domains, out_dim)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
-        s = out[idx, y]  # (batch, style_dim)
-        return s
+        out = out[idx, y]  # (batch, out_dim)
+        if self.variational:
+            mu, logvar = torch.chunk(out, 2, dim=1)
+            return mu, logvar
+        return out
+
+    def forward(self, x, y):
+        if self.variational:
+            mu, logvar = self.encode_style(x, y)
+            return reparameterize(mu, logvar)
+        return self.encode_style(x, y)
 
 
 class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
     def __init__(
-        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+        self,
+        img_size=256,
+        style_dim=64,
+        num_domains=2,
+        max_conv_dim=512,
+        input_dim=3,
+        variational=False,
     ):
         super().__init__()
         dim_in = 2**14 // img_size
+        self.style_dim = style_dim
+        self.variational = variational
 
         self.nearest_power = None
         if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
@@ -351,18 +385,23 @@ class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
         blocks += [nn.LeakyReLU(0.2)]
         self.shared = nn.Sequential(*blocks)
 
-        # Making this shared again, to try to learn new things from data
-        self.output = nn.Linear(dim_out, style_dim)
+        # Making this shared again, to try to learn new things from data.
+        # Variational mode doubles the output to emit (mu, logvar).
+        out_dim = style_dim * 2 if variational else style_dim
+        self.output = nn.Linear(dim_out, out_dim)
 
-    def forward(self, x, y):
+    def encode_style(self, x, y):
         if self.nearest_power is not None:
             # Required for img_size=224 in the retina case
             # Resize input image to nearest power of 2
             x = F.interpolate(x, size=2**self.nearest_power, mode="bilinear")
         h = self.shared(x)
         h = h.view(h.size(0), -1)
-        s = self.output(h)
-        return s
+        out = self.output(h)
+        if self.variational:
+            mu, logvar = torch.chunk(out, 2, dim=1)
+            return mu, logvar
+        return out
 
 
 class Discriminator(nn.Module):
@@ -425,6 +464,7 @@ def build_model(
                 style_dim,
                 num_domains,
                 input_dim=input_dim,
+                variational=variational,
             ),
             device_ids=gpu_ids,
         )
@@ -435,6 +475,7 @@ def build_model(
                 style_dim,
                 num_domains,
                 input_dim=input_dim,
+                variational=variational,
             ),
             device_ids=gpu_ids,
         )
