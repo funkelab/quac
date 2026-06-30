@@ -11,6 +11,7 @@ class ModelConfig(BaseModel):
     num_domains: int = 5
     input_dim: int = 3
     final_activation: str = "tanh"
+    variational: bool = False
 
 
 class DataConfig(BaseModel):

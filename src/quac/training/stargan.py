@@ -153,10 +153,12 @@ class Generator(nn.Module):
         max_conv_dim=512,
         input_dim=1,
         final_activation=None,
+        variational=False,
     ):
         super().__init__()
         dim_in = 2**14 // img_size
         self.img_size = img_size
+        self.variational = variational
         self.from_rgb = nn.Conv2d(input_dim, dim_in, 3, 1, 1)
         self.encode = nn.ModuleList()
         self.decode = nn.ModuleList()
@@ -188,14 +190,56 @@ class Generator(nn.Module):
             self.encode.append(ResBlk(dim_out, dim_out, normalize=True))
             self.decode.insert(0, AdainResBlk(dim_out, dim_out, style_dim))
 
-    def forward(self, x, s):
-        x = self.from_rgb(x)
-        # cache = {}
+        # Shape of the content code `c` at the bottleneck: (dim_out, h, h).
+        # Each downsampling block halves the spatial size (floored), so a
+        # power-of-2 img_size lands at 16x16. Stored so callers can sample
+        # `c ~ N(0, I)` of the right shape for variational generation.
+        bottleneck_hw = img_size
+        for _ in range(repeat_num):
+            bottleneck_hw //= 2
+        self.content_shape = (dim_out, bottleneck_hw, bottleneck_hw)
+
+        # Variational heads: map the bottleneck feature map to the mean and
+        # log-variance of q(c | x). Only built when variational, so the
+        # non-variational state_dict is unchanged.
+        if variational:
+            self.mu = nn.Conv2d(dim_out, dim_out, 1, 1, 0)
+            self.logvar = nn.Conv2d(dim_out, dim_out, 1, 1, 0)
+
+    def encode_latent(self, x):
+        """Encode an image into the bottleneck content code.
+
+        Returns the feature map `h` when non-variational, or the
+        `(mu, logvar)` of the posterior `q(c | x)` when variational.
+        """
+        h = self.from_rgb(x)
         for block in self.encode:
-            x = block(x)
+            h = block(h)
+        if self.variational:
+            return self.mu(h), self.logvar(h)
+        return h
+
+    @staticmethod
+    def reparameterize(mu, logvar):
+        """Sample `c = mu + sigma * eps`, eps ~ N(0, I) (VAE reparam trick)."""
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode_latent(self, c, s):
+        """Decode a content code `c` and style `s` into an image."""
+        x = c
         for block in self.decode:
             x = block(x, s)
         return self.final_activation(self.to_rgb(x))
+
+    def forward(self, x, s):
+        if self.variational:
+            mu, logvar = self.encode_latent(x)
+            c = self.reparameterize(mu, logvar)
+        else:
+            c = self.encode_latent(x)
+        return self.decode_latent(c, s)
 
 
 class MappingNetwork(nn.Module):
@@ -356,11 +400,16 @@ def build_model(
     num_domains=4,
     single_output_style_encoder=False,
     final_activation=None,
+    variational=False,
     gpu_ids=[0],
 ):
     generator = nn.DataParallel(
         Generator(
-            img_size, style_dim, input_dim=input_dim, final_activation=final_activation
+            img_size,
+            style_dim,
+            input_dim=input_dim,
+            final_activation=final_activation,
+            variational=variational,
         ),
         device_ids=gpu_ids,
     )
