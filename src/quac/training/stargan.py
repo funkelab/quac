@@ -504,3 +504,94 @@ def build_model(
         }
     )
     return nets, nets_ema
+
+
+def _unwrap(net):
+    """Return the underlying module, peeling off DataParallel if present."""
+    return net.module if isinstance(net, nn.DataParallel) else net
+
+
+@torch.no_grad()
+def _broadcast_heads(src_heads, dst_heads):
+    """Tile per-domain heads: `dst` head i is initialised from `src` head i % S.
+
+    With a single source domain (S=1) every target head starts from the same
+    pretrained weights; they then diverge during fine-tuning.
+    """
+    n_src = len(src_heads)
+    for i, dst_head in enumerate(dst_heads):
+        dst_head.load_state_dict(src_heads[i % n_src].state_dict())
+
+
+@torch.no_grad()
+def expand_style_encoder(src, dst):
+    """Copy a trained style encoder into one with (possibly) more domains."""
+    dst.shared.load_state_dict(src.shared.state_dict())
+    if hasattr(src, "unshared") and hasattr(dst, "unshared"):
+        _broadcast_heads(src.unshared, dst.unshared)
+    else:
+        # SingleOutputStyleEncoder has one shared head, no per-domain dimension.
+        dst.output.load_state_dict(src.output.state_dict())
+
+
+@torch.no_grad()
+def expand_mapping_network(src, dst):
+    """Copy a trained mapping network into one with (possibly) more domains."""
+    dst.shared.load_state_dict(src.shared.state_dict())
+    _broadcast_heads(src.unshared, dst.unshared)
+
+
+@torch.no_grad()
+def expand_discriminator(src, dst):
+    """Copy a trained discriminator into one with (possibly) more domains.
+
+    Everything but the final 1x1 conv (whose output channels index the domain)
+    has matching shape and is copied directly; that conv is tiled along its
+    output dimension.
+    """
+    *src_body, src_head = list(src.main)
+    *dst_body, dst_head = list(dst.main)
+    for src_layer, dst_layer in zip(src_body, dst_body):
+        dst_layer.load_state_dict(src_layer.state_dict())
+    n_src = src_head.weight.size(0)
+    for i in range(dst_head.weight.size(0)):
+        dst_head.weight[i].copy_(src_head.weight[i % n_src])
+        if dst_head.bias is not None:
+            dst_head.bias[i].copy_(src_head.bias[i % n_src])
+
+
+@torch.no_grad()
+def transfer_to_more_domains(
+    src_nets,
+    dst_nets,
+    transfer=("generator", "style_encoder", "discriminator"),
+):
+    """Initialise the `num_domains=N` `dst_nets` from a trained `src_nets`.
+
+    `src_nets` typically comes from single-domain VAE-GAN pretraining (S=1).
+    Domain-agnostic nets (the generator) are copied wholesale; per-domain heads
+    are tiled across the new domains. The mapping network is excluded by default
+    (introduced fresh at fine-tune time); pass it in `transfer` to broadcast it
+    too. `dst_nets` must be built with the same `variational` setting as the
+    source so the architectures match.
+
+    `src_nets`/`dst_nets` are dict-like (e.g. the ModuleDict from
+    ``build_model``); the generator/style encoder may be taken from the EMA nets
+    and the discriminator from the live nets.
+    """
+    if "generator" in transfer:
+        _unwrap(dst_nets["generator"]).load_state_dict(
+            _unwrap(src_nets["generator"]).state_dict()
+        )
+    if "style_encoder" in transfer:
+        expand_style_encoder(
+            _unwrap(src_nets["style_encoder"]), _unwrap(dst_nets["style_encoder"])
+        )
+    if "mapping_network" in transfer:
+        expand_mapping_network(
+            _unwrap(src_nets["mapping_network"]), _unwrap(dst_nets["mapping_network"])
+        )
+    if "discriminator" in transfer:
+        expand_discriminator(
+            _unwrap(src_nets["discriminator"]), _unwrap(dst_nets["discriminator"])
+        )
