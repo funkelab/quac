@@ -2,6 +2,7 @@ from numbers import Number
 import numpy as np
 from typing import Union, Optional
 import torch
+from torchvision.utils import make_grid
 
 try:
     import wandb
@@ -62,7 +63,7 @@ class WandBLogger:
         self, data: dict[str, Union[torch.Tensor, np.ndarray]], step: int = 0
     ):
         for key, value in data.items():
-            self.run.log({key: wandb.Image(value)}, step=step)
+            self.run.log({key: wandb.Image(make_grid(value))}, step=step)
 
 
 class TensorboardLogger:
