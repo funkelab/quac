@@ -1,7 +1,9 @@
-from quac.training.stargan import build_model
-from quac.config import ModelConfig
-import torch
 import os
+
+import torch
+
+from quac.config import ModelConfig
+from quac.training.stargan import build_model
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 

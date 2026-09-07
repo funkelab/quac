@@ -1,10 +1,12 @@
 import json
+from pathlib import Path
+
+import pytest
+import torch
+
+from quac.data import SampleWithAttribution
 from quac.explanation import Explanation
 from quac.report import Report
-from quac.data import SampleWithAttribution
-import torch
-from pathlib import Path
-import pytest
 
 
 @pytest.fixture
@@ -78,8 +80,8 @@ def test_report(inputs, predictions, result, tmpdir):
 
     tmpdir = Path(tmpdir)
     report.store(tmpdir)
-    assert (tmpdir / f"{report.name}.json").exists(), "The files in {} are: {}".format(
-        tmpdir, list(tmpdir.iterdir())
+    assert (tmpdir / f"{report.name}.json").exists(), (
+        f"The files in {tmpdir} are: {list(tmpdir.iterdir())}"
     )
     # Load the report back
     loaded_report = Report()

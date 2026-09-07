@@ -1,10 +1,12 @@
 import json
+import logging
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from quac.explanation import Explanation, explanation_encoder
 from scipy.interpolate import interp1d
-import logging
+
+from quac.explanation import Explanation, explanation_encoder
 
 
 def merge_reports(reports, **kwargs):

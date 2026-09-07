@@ -1,6 +1,7 @@
-from quac.training.classification import ClassifierWrapper
-import torch
 import pytest
+import torch
+
+from quac.training.classification import ClassifierWrapper
 
 
 class DummyModel(torch.nn.Module):

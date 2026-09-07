@@ -1,13 +1,14 @@
+import warnings
 from argparse import ArgumentParser
 from pathlib import Path
-from quac.config import ExperimentConfig
-from quac.generate import load_classifier, load_stargan, get_counterfactual
-from quac.data import write_image, create_transform, DefaultDataset
-from tqdm import tqdm
-import torch
-import warnings
-import yaml
 
+import torch
+import yaml
+from tqdm import tqdm
+
+from quac.config import ExperimentConfig
+from quac.data import DefaultDataset, create_transform, write_image
+from quac.generate import get_counterfactual, load_classifier, load_stargan
 
 # Computed setup
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

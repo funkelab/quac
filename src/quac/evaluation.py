@@ -1,17 +1,19 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
+import torch
+from torch.nn import functional as F
+from torchvision.datasets import ImageFolder
+from tqdm import tqdm
+
 from quac.data import (
-    PairedImageDataset,
     ConvertedDataset,
+    PairedImageDataset,
     PairedWithAttribution,
     write_image,
 )
 from quac.report import Report
-from torchvision.datasets import ImageFolder
-from torch.nn import functional as F
-import torch
-from tqdm import tqdm
 
 
 def image_to_tensor(image, device=None):
@@ -110,7 +112,7 @@ class UnblurredProcessor(Processor):
 
 
 def optimal_threshold_index(mask_sizes, mask_scores):
-    """
+    r"""
     Find the index of the optimal threshold.
     The optimal threshold has a minimal mask size, and maximizes the score change.
     We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.

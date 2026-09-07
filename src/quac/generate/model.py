@@ -1,14 +1,16 @@
 """Reduces the model into just want is needed for inference."""
 
 from os.path import join as ospj
+
+import torch
+
+from quac.training.checkpoint import CheckpointIO
 from quac.training.stargan import (
     Generator,
     MappingNetwork,
-    StyleEncoder,
     SingleOutputStyleEncoder,
+    StyleEncoder,
 )
-from quac.training.checkpoint import CheckpointIO
-import torch
 
 
 class InferenceModel(torch.nn.Module):
@@ -20,7 +22,6 @@ class InferenceModel(torch.nn.Module):
     # TODO add checkpoint loading to this class
     def __init__(self) -> None:
         super().__init__()
-        pass
 
 
 class LatentInferenceModel(InferenceModel):
