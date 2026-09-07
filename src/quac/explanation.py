@@ -1,9 +1,10 @@
-import numpy as np
-from typing import Optional, Union
-import torch
 from pathlib import Path
-from quac.data import read_image
+
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from quac.data import read_image
 
 
 def serialize(obj):
@@ -29,19 +30,19 @@ class Explanation:
         query_path: str,
         counterfactual_path: str,
         mask_path: str,
-        query_prediction: Union[list, np.ndarray],
-        counterfactual_prediction: Union[list, np.ndarray],
+        query_prediction: list | np.ndarray,
+        counterfactual_prediction: list | np.ndarray,
         source_class: int,
         target_class: int,
-        score: Optional[float] = None,
+        score: float | None = None,
         # Optional
-        attribution_path: Optional[str] = None,
-        generated_path: Optional[str] = None,
-        generated_prediction: Optional[Union[list, np.ndarray]] = None,
-        normalized_mask_sizes: Optional[Union[list, np.ndarray]] = None,
-        score_changes: Optional[Union[list, np.ndarray]] = None,
-        optimal_threshold: Optional[float] = None,
-        method: Optional[str] = None,
+        attribution_path: str | None = None,
+        generated_path: str | None = None,
+        generated_prediction: list | np.ndarray | None = None,
+        normalized_mask_sizes: list | np.ndarray | None = None,
+        score_changes: list | np.ndarray | None = None,
+        optimal_threshold: float | None = None,
+        method: str | None = None,
     ):
         self._query_path = query_path
         self._counterfactual_path = counterfactual_path
@@ -61,9 +62,9 @@ class Explanation:
         self._method = method
 
         # Computed
-        self._query: Optional[torch.Tensor] = None
-        self._counterfactual: Optional[torch.Tensor] = None
-        self._mask: Optional[torch.Tensor] = None
+        self._query: torch.Tensor | None = None
+        self._counterfactual: torch.Tensor | None = None
+        self._mask: torch.Tensor | None = None
 
     def __eq__(self, value):
         if isinstance(value, Explanation):

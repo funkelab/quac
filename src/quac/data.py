@@ -1,17 +1,19 @@
-from dataclasses import dataclass
-import imageio
-from itertools import chain
-import numpy as np
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
+from typing import cast
+
+import imageio
+import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torchvision.datasets.folder import (
-    is_image_file,
-    has_file_allowed_extension,
-)
 from torchvision import transforms
-from typing import Optional, Callable, List, Tuple, Dict, Union, cast
+from torchvision.datasets.folder import (
+    has_file_allowed_extension,
+    is_image_file,
+)
 
 
 class RGB:
@@ -84,7 +86,7 @@ def read_image(path: str) -> torch.Tensor:
     return image
 
 
-def write_image(image: torch.Tensor, path: Union[str | Path]) -> None:
+def write_image(image: torch.Tensor, path: str | Path) -> None:
     """Writes an image to a file path.
 
     Parameters
@@ -144,9 +146,9 @@ def find_classes(directory):
 
 def check_requirements(
     directory: str,
-    class_to_idx: Optional[Dict[str, int]] = None,
-    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
-    is_valid_file: Optional[Callable[[str], bool]] = None,
+    class_to_idx: dict[str, int] | None = None,
+    extensions: str | tuple[str, ...] | None = None,
+    is_valid_file: Callable[[str], bool] | None = None,
 ) -> Callable:
     if class_to_idx is None:
         _, class_to_idx = find_classes(directory)
@@ -196,11 +198,11 @@ def listdir(dname):
 
 def make_converted_dataset(
     counterfactual_directory: str,
-    class_to_idx: Optional[Dict[str, int]] = None,
-    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
-    is_valid_file: Optional[Callable[[str], bool]] = None,
+    class_to_idx: dict[str, int] | None = None,
+    extensions: str | tuple[str, ...] | None = None,
+    is_valid_file: Callable[[str], bool] | None = None,
     allow_empty: bool = False,
-) -> List[Tuple[str, int, int]]:
+) -> list[tuple[str, int, int]]:
     """Generates a list of samples of a form (path_to_sample, source_class, target_class)
     for data organized in a counterfactual style directory.
 
@@ -276,11 +278,11 @@ def make_converted_dataset(
 def make_paired_dataset(
     directory: str,
     paired_directory: str,
-    class_to_idx: Optional[Dict[str, int]],
-    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
-    is_valid_file: Optional[Callable[[str], bool]] = None,
+    class_to_idx: dict[str, int] | None,
+    extensions: str | tuple[str, ...] | None = None,
+    is_valid_file: Callable[[str], bool] | None = None,
     allow_empty: bool = False,
-) -> List[Tuple[str, str, int, int]]:
+) -> list[tuple[str, str, int, int]]:
     """Generates a list of samples of a form (path_to_sample, target_path, class_index, target_class_index).
 
     See :class:`DatasetFolder` for details.
@@ -346,11 +348,11 @@ def make_paired_attribution_dataset(
     directory: str,
     paired_directory: str,
     attribution_directory: str,
-    class_to_idx: Optional[Dict[str, int]] = None,
-    extensions: Optional[Union[str, Tuple[str, ...]]] = None,
-    is_valid_file: Optional[Callable[[str], bool]] = None,
+    class_to_idx: dict[str, int] | None = None,
+    extensions: str | tuple[str, ...] | None = None,
+    is_valid_file: Callable[[str], bool] | None = None,
     allow_empty: bool = False,
-) -> List[Tuple[str, str, str, int, int]]:
+) -> list[tuple[str, str, str, int, int]]:
     """Generates a list of samples of a form (path_to_sample, path_to_cf, path_to_attr, source_class, target_class).
 
     See :class:`DatasetFolder` for details.
@@ -435,8 +437,8 @@ def make_paired_attribution_dataset(
 class Sample:
     image: torch.Tensor
     source_class_index: int
-    path: Optional[Path] = None
-    source_class: Optional[str] = None
+    path: Path | None = None
+    source_class: str | None = None
 
 
 # TODO remove?
@@ -445,10 +447,10 @@ class ConvertedSample:
     generated: torch.Tensor
     target_class_index: int
     source_class_index: int
-    path: Optional[Path] = None
-    generated_path: Optional[Path] = None
-    source_class: Optional[str] = None
-    target_class: Optional[str] = None
+    path: Path | None = None
+    generated_path: Path | None = None
+    source_class: str | None = None
+    target_class: str | None = None
 
 
 @dataclass
@@ -457,10 +459,10 @@ class PairedSample:
     generated: torch.Tensor
     source_class_index: int
     target_class_index: int
-    path: Optional[Path] = None
-    generated_path: Optional[Path] = None
-    source_class: Optional[str] = None
-    target_class: Optional[str] = None
+    path: Path | None = None
+    generated_path: Path | None = None
+    source_class: str | None = None
+    target_class: str | None = None
 
 
 @dataclass
@@ -470,11 +472,11 @@ class SampleWithAttribution:
     generated: torch.Tensor
     source_class_index: int
     target_class_index: int
-    path: Optional[Path] = None
-    generated_path: Optional[Path] = None
-    source_class: Optional[str] = None
-    target_class: Optional[str] = None
-    attribution_path: Optional[Path] = None
+    path: Path | None = None
+    generated_path: Path | None = None
+    source_class: str | None = None
+    target_class: str | None = None
+    attribution_path: Path | None = None
 
 
 class DefaultDataset(Dataset):

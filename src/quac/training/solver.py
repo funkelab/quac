@@ -10,20 +10,21 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import json
-import numpy as np
 import os
+import shutil
 from os.path import join as ospj
 from pathlib import Path
-from quac.training.checkpoint import CheckpointIO
-from quac.training.classification import ClassifierWrapper
-from quac.training.data_loader import TrainingData
-import shutil
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 from torchvision import transforms
 from tqdm import tqdm
 
+from quac.training.checkpoint import CheckpointIO
+from quac.training.classification import ClassifierWrapper
+from quac.training.data_loader import TrainingData
 
 transform = transforms.Compose(
     [
@@ -111,14 +112,13 @@ class Solver(nn.Module):
                 ),
                 CheckpointIO(ospj(checkpoint_dir, "{:06d}_optims.ckpt"), **self.optims),
             ]
-        else:
-            self.ckptios = [
-                CheckpointIO(
-                    ospj(checkpoint_dir, "{:06d}_nets_ema.ckpt"),
-                    data_parallel=True,
-                    **self.nets_ema,
-                )
-            ]
+        self.ckptios = [
+            CheckpointIO(
+                ospj(checkpoint_dir, "{:06d}_nets_ema.ckpt"),
+                data_parallel=True,
+                **self.nets_ema,
+            )
+        ]
 
         self.to(self.device)
         # TODO The EMA doesn't need to be in named_children()
@@ -456,9 +456,7 @@ class Solver(nn.Module):
                     -1, num_outs_per_domain, predictions.shape[-1]
                 )
                 predictions = predictions.argmax(axis=-1)
-                #
                 at_least_one = np.any(predictions == trg_idx, axis=1)
-                #
                 conversion_rate = np.mean(at_least_one)
                 translation_rate = np.mean(predictions == trg_idx)
 
@@ -472,10 +470,10 @@ class Solver(nn.Module):
 
         # Add average conversion rate and translation rate
         conversion_rate_values[f"conversion_rate_{mode}/average"] = np.mean(
-            [conversion_rate_values[key] for key in conversion_rate_values.keys()]
+            [conversion_rate_values[key] for key in conversion_rate_values]
         )
         translation_rate_values[f"translation_rate_{mode}/average"] = np.mean(
-            [translation_rate_values[key] for key in translation_rate_values.keys()]
+            [translation_rate_values[key] for key in translation_rate_values]
         )
 
         # report conversion rate values

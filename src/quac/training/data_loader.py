@@ -9,16 +9,15 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import logging
-from pathlib import Path
 import random
+from pathlib import Path
 
 import numpy as np
-
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 
-from quac.data import read_image, listdir, DefaultDataset, create_transform
+from quac.data import DefaultDataset, create_transform, listdir, read_image
 
 
 class LabelledDataset(data.Dataset):

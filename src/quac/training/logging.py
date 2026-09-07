@@ -1,6 +1,6 @@
 from numbers import Number
+
 import numpy as np
-from typing import Union, Optional
 import torch
 
 try:
@@ -43,7 +43,7 @@ class WandBLogger:
         notes: str,
         tags: list,
         resume: bool = False,
-        id: Optional[str] = None,
+        id: str | None = None,
     ):
         self.run = wandb.init(
             project=project,
@@ -58,9 +58,7 @@ class WandBLogger:
     def log(self, data: dict[str, Number], step: int = 0):
         self.run.log(data, step=step)
 
-    def log_images(
-        self, data: dict[str, Union[torch.Tensor, np.ndarray]], step: int = 0
-    ):
+    def log_images(self, data: dict[str, torch.Tensor | np.ndarray], step: int = 0):
         for key, value in data.items():
             self.run.log({key: wandb.Image(value)}, step=step)
 
@@ -72,7 +70,7 @@ class TensorboardLogger:
         log_dir: str,
         comment: str,
         hparams: dict,
-        purge_step: Union[int, None] = None,
+        purge_step: int | None = None,
     ):
         self.writer = SummaryWriter(log_dir, comment=comment, purge_step=purge_step)
         self.writer.add_hparams(hparams, {})
@@ -81,8 +79,6 @@ class TensorboardLogger:
         for key, value in data.items():
             self.writer.add_scalar(key, value, step)
 
-    def log_images(
-        self, data: dict[str, Union[torch.Tensor, np.ndarray]], step: int = 0
-    ):
+    def log_images(self, data: dict[str, torch.Tensor | np.ndarray], step: int = 0):
         for key, value in data.items():
             self.writer.add_images(key, value, step)

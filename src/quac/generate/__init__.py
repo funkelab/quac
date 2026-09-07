@@ -1,11 +1,13 @@
 """Utilities for generating counterfactual images."""
 
-from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
-
 import logging
-from quac.training.classification import ClassifierWrapper
+from typing import Optional, Union
+
 import torch
-from typing import Union, Optional
+
+from quac.training.classification import ClassifierWrapper
+
+from .model import InferenceModel, LatentInferenceModel, ReferenceInferenceModel
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ def load_stargan(
     checkpoint_iter: int = 100000,
     kind="latent",
     single_output_encoder: bool = False,
-    final_activation: Union[str, None] = None,
+    final_activation: str | None = None,
 ) -> InferenceModel:
     """
     Load an inference version of the StarGANv2 model from a checkpoint.
@@ -110,11 +112,11 @@ def get_counterfactual(  # type: ignore
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far: Optional[torch.Tensor] = None,
-    best_cf_so_far: Optional[torch.Tensor] = None,
-    best_cf_path_so_far: Optional[str] = None,
+    best_pred_so_far: torch.Tensor | None = None,
+    best_cf_so_far: torch.Tensor | None = None,
+    best_cf_path_so_far: str | None = None,
     error_if_not_found=False,
-) -> tuple[Optional[torch.Tensor], Optional[str], Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor | None, str | None, torch.Tensor | None]:
     """
     Tries to find a counterfactual for the given sample, given the target.
     It creates a batch, and returns one of the samples if it is classified correctly.

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, model_validator
-import quac.attribution
-from typing import Optional, Union, Literal
 import warnings
+from typing import Literal
+
+from pydantic import BaseModel, model_validator
+
+import quac.attribution
 
 
 class ModelConfig(BaseModel):
@@ -20,10 +22,10 @@ class DataConfig(BaseModel):
     num_workers: int = 4
     grayscale: bool = False
     rgb: bool = True  # default based on model default
-    reference: Optional[str] = None
-    scale: Optional[float] = 2
-    shift: Optional[float] = -1
-    rand_crop_prob: Optional[float] = 0
+    reference: str | None = None
+    scale: float | None = 2
+    shift: float | None = -1
+    rand_crop_prob: float | None = 0
 
     @model_validator(mode="before")
     @classmethod
@@ -60,8 +62,8 @@ class RunConfig(BaseModel):
 class ValConfig(BaseModel):
     classifier_checkpoint: str
     num_outs_per_domain: int = 10
-    scale: Optional[float] = 1.0
-    shift: Optional[float] = 0.0
+    scale: float | None = 1.0
+    shift: float | None = 0.0
     img_size: int = 128
     val_batch_size: int = 16
 
@@ -114,7 +116,7 @@ class AttributionConfig(BaseModel):
 class ExperimentConfig(BaseModel):
     # Metadata for keeping track of experiments
     log_type: Literal["wandb", "tensorboard"] = "wandb"
-    log: Union[WandBLogConfig, TensorboardLogConfig] = WandBLogConfig()
+    log: WandBLogConfig | TensorboardLogConfig = WandBLogConfig()
     # Some input required
     data: DataConfig
     solver: SolverConfig
@@ -126,7 +128,7 @@ class ExperimentConfig(BaseModel):
     loss: LossConfig = LossConfig()
     attribution: AttributionConfig = AttributionConfig()
     # Optional
-    test_data: Optional[DataConfig] = None
+    test_data: DataConfig | None = None
 
 
 def get_data_config(experiment, dataset="test"):

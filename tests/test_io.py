@@ -1,8 +1,9 @@
-from quac.data import read_image, write_image
-from quac.training.stargan import build_model
+import pytest
 import tifffile
 import torch
-import pytest
+
+from quac.data import read_image, write_image
+from quac.training.stargan import build_model
 
 
 class TestNonSquareImages:
@@ -21,7 +22,6 @@ class TestNonSquareImages:
     @pytest.mark.skip(reason="non-square images not yet supported")
     def test_augmentation(self):
         """Check that non-square images are augmented correctly."""
-        pass
 
     @pytest.mark.xfail(reason="Model does not yet accept square images.")
     def test_model(self):

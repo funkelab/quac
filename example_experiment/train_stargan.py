@@ -1,12 +1,14 @@
 # Training the StarGAN
 from argparse import ArgumentParser
-from quac.config import ExperimentConfig
-from quac.training.data_loader import TrainingData, ValidationData
-from quac.training.stargan import build_model
-from quac.training.solver import Solver
-from quac.training.logging import Logger
+
 import torch
 import yaml
+
+from quac.config import ExperimentConfig
+from quac.training.data_loader import TrainingData, ValidationData
+from quac.training.logging import Logger
+from quac.training.solver import Solver
+from quac.training.stargan import build_model
 
 torch.backends.cudnn.benchmark = True
 

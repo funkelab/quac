@@ -1,7 +1,8 @@
-import pytest
-from quac.evaluation import Evaluator
-from funlib.learn.torch.models import Vgg2D
 import numpy as np
+import pytest
+from funlib.learn.torch.models import Vgg2D
+
+from quac.evaluation import Evaluator
 
 
 @pytest.mark.skip("Skip test until we have usable data in CI/CD")

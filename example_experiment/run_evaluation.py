@@ -1,10 +1,12 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from quac.evaluation import Processor, Evaluator
-from quac.generate import load_classifier
+
+import yaml
+
 from quac.config import ExperimentConfig, get_data_config
 from quac.data import create_transform
-import yaml
+from quac.evaluation import Evaluator, Processor
+from quac.generate import load_classifier
 
 
 def parse_args():

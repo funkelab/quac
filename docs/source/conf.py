@@ -7,9 +7,9 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 from datetime import datetime
 
+import tomli
 
 import quac
-import tomli
 
 with open("../../pyproject.toml", "rb") as fh:
     project = tomli.load(fh)["project"]
