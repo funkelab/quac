@@ -40,12 +40,14 @@ jobs:
 
       # `uv pip compile --no-build` finds the lowest versions that have wheels for
       # *this* python, so we don't need per-python lower bounds in pyproject.toml
-      # (uv sync/lock can't do this, since they resolve for all python versions)
+      # (uv sync/lock can't do this, since they resolve for all python versions).
+      # The test group is omitted from compile, since --no-build would prevent
+      # building git deps (funlib.learn.torch)
       - name: Install Dependencies (lowest-direct)
         if: matrix.resolution == 'lowest-direct'
         run: |
           uv venv
-          uv pip compile pyproject.toml --group test --group cpu \
+          uv pip compile pyproject.toml --group cpu \
             --resolution lowest-direct --no-build -o lowest.txt
           uv pip install -e . --group test --group cpu -c lowest.txt
 

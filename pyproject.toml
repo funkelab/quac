@@ -103,8 +103,6 @@ default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
-[tool.pixi.tasks]
-
 # https://docs.astral.sh/ruff
 [tool.ruff]
 line-length = 88
