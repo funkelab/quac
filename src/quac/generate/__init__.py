@@ -1,7 +1,6 @@
 """Utilities for generating counterfactual images."""
 
 import logging
-from typing import Optional, Union
 
 import torch
 
@@ -24,7 +23,8 @@ def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
     """
     Load a classifier from a torchscript checkpoint.
 
-    This also creates a wrapper around the classifier, which applies a scale and shift to the input.
+    This also creates a wrapper around the classifier, which applies a scale and shift
+    to the input.
 
     Parameters
     ----------
@@ -73,7 +73,8 @@ def load_stargan(
         num_domains: the number of domains
         checkpoint_iter: the iteration of the checkpoint to load
         kind: the kind of style to use, either "latent" or "reference"
-        single_output_encoder: whether to use a single output encoder, only used if kind is "reference"
+        single_output_encoder: whether to use a single output encoder, only used if kind
+            is "reference"
 
     Returns:
         the loaded inference model
@@ -130,13 +131,15 @@ def get_counterfactual(  # type: ignore
         x: the sample to find a counterfactual for
         target: the target class
         kind: the kind of style to use, either "latent" or "reference"
-        dataset_ref: the dataset of reference images to use, required if kind is "reference"
+        dataset_ref: the dataset of reference images to use, required if kind is
+            "reference"
         batch_size: the number of counterfactuals to generate
         device: the device to use
         max_tries: the maximum number of tries to find a counterfactual
-        error_if_not_found: whether to raise an error if no counterfactual is found, if set to False, the best counterfactual found so far is returned
-        return_path: whether to return the path of the reference used to create best counterfactual found so far,
-            only used if kind is "reference"
+        error_if_not_found: whether to raise an error if no counterfactual is found, if
+            set to False, the best counterfactual found so far is returned
+        return_path: whether to return the path of the reference used to create best
+            counterfactual found so far, only used if kind is "reference"
 
     Returns:
         a counterfactual
@@ -157,7 +160,8 @@ def get_counterfactual(  # type: ignore
             logger.warning(
                 f"Not enough reference images, reducing max_tries to {max_tries}."
             )
-        # Get a batch of reference images, starting from batch_size * max_tries, of size batch_size
+        # Get a batch of reference images, starting from batch_size * max_tries, of size
+        # batch_size
         ref_batch_tuples, ref_paths = zip(
             *[
                 dataset_ref[i]

@@ -82,14 +82,17 @@ def get_data_config(experiment, dataset="test"):
 
 
 def get_target_index(source_directory, target_class):
-    # Figure out which "domain" the target class is, by how the directories are structured
+    # Figure out which "domain" the target class is, by how the directories are
+    # structured
     source_directory = Path(source_directory)
     subdirs = [d for d in source_directory.iterdir() if d.is_dir()]
     subdirs = sorted(subdirs)
     try:
         target_index = subdirs.index(source_directory / target_class)
-    except ValueError:
-        raise ValueError(f"Target class {target_class} not found in {source_directory}")
+    except ValueError as e:
+        raise ValueError(
+            f"Target class {target_class} not found in {source_directory}"
+        ) from e
     return target_index
 
 

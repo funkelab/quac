@@ -298,11 +298,13 @@ class ValidationData:
         source_directory : str
             The directory containing the source images.
         ref_directory : str
-            The directory containing the reference images, defaults to source_directory if None.
+            The directory containing the reference images, defaults to source_directory
+            if None.
         mode : str
             The mode of the data loader, either "latent" or "reference".
             If "latent", the data loader will only load the source images.
-            If "reference", the data loader will load both the source and reference images.
+            If "reference", the data loader will load both the source and reference
+            images.
         image_size : int
             The size of the images; images of a different size will be resized.
         batch_size : int

@@ -127,5 +127,6 @@ if __name__ == "__main__":
 
         # Run QuAC evaluation on your attribution and store a report
         report = evaluator.quantify(processor=Processor())
-        # The report will be stored based on the processor's name, which is "default" by default
+        # The report will be stored based on the processor's name, which is "default" by
+        # default
         report.store(report_directory / name)

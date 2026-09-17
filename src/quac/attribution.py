@@ -26,7 +26,8 @@ def residual(real_img, fake_img):
 def random(real_img, fake_img):
     """Random attribution method.
 
-    This method randomly assigns attribution to each pixel in the image, then applies a Gaussian filter for smoothing.
+    This method randomly assigns attribution to each pixel in the image, then applies a
+    Gaussian filter for smoothing.
     """
     rand = np.abs(np.random.randn(*np.shape(real_img)))
     rand = np.abs(scipy.ndimage.gaussian_filter(rand, 4))
@@ -48,7 +49,8 @@ class BaseAttribution:
         """Scale the attribution to be between 0 and 1.
 
         Note that this also takes the absolute value of the attribution.
-        Generally in this framework, we only care about the absolute value of the attribution,
+        Generally in this framework, we only care about the absolute value of the
+        attribution,
         because if "negative changes" need to be made, this should be inherent in
         the generated image.
         """
@@ -143,7 +145,8 @@ class DInGrad(BaseAttribution):
         self.saliency = attr.Saliency(self.classifier)
 
     def _attribute(self, real_img, generated_img, real_class, target_class):
-        # FIXME in the original DAPI code, the real and generated were switched. See below.
+        # FIXME in the original DAPI code, the real and generated were switched. See
+        # below.
         # grads_fake = self.saliency.attribute(generated_img,
         #                                 target=target_class)
         # ingrad_diff_0 = grads_fake * (real_img - generated_img)

@@ -36,7 +36,12 @@ class ResBlk(nn.Module):
     """
 
     def __init__(
-        self, dim_in, dim_out, actv=nn.LeakyReLU(0.2), normalize=False, downsample=False
+        self,
+        dim_in,
+        dim_out,
+        actv=nn.LeakyReLU(0.2),  # noqa: B008
+        normalize=False,
+        downsample=False,
     ):
         super().__init__()
         self.actv = actv
@@ -104,7 +109,7 @@ class AdainResBlk(nn.Module):
         dim_in: int,
         dim_out: int,
         style_dim: int = 64,
-        actv: nn.Module = nn.LeakyReLU(0.2),
+        actv: nn.Module = nn.LeakyReLU(0.2),  # noqa: B008
         upsample: bool = False,
     ):
         super().__init__()

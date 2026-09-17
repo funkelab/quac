@@ -44,7 +44,7 @@ def print_network(network, name):
     for p in network.parameters():
         num_params += p.numel()
     # print(network)
-    print("Number of parameters of %s: %i" % (name, num_params))
+    print(f"Number of parameters of {name}: {num_params}")
 
 
 def he_init(module):
@@ -83,7 +83,8 @@ class Solver(nn.Module):
 
         checkpoint_dir = str(self.checkpoint_dir)
 
-        # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
+        # below setattrs are to make networks be children of Solver, e.g., for
+        # self.to(self.device)
         for name, module in self.nets.items():
             print_network(module, name)
             setattr(self, name, module)
@@ -395,7 +396,7 @@ class Solver(nn.Module):
         iter_ref = None
 
         domains = val_loader.available_targets
-        print("Number of domains: %d" % len(domains))
+        print(f"Number of domains: {len(domains)}")
 
         conversion_rate_values = {}
         translation_rate_values = {}
@@ -433,7 +434,8 @@ class Solver(nn.Module):
                         else:
                             try:
                                 # TODO don't need to re-do this every time, just use
-                                # the same set of reference images for the whole dataset!
+                                # the same set of reference images for the whole
+                                # dataset!
                                 x_ref, _ = next(iter_ref)
                                 x_ref = x_ref.to(device)
                             except (TypeError, StopIteration):  # iter_ref is None
@@ -445,8 +447,9 @@ class Solver(nn.Module):
                                 x_ref = x_ref[:N]
                             elif x_ref.size(0) < N:
                                 raise ValueError(
-                                    "Not enough reference images."
-                                    "Make sure that the batch size of the validation loader is bigger than `num_outs_per_domain`."
+                                    "Not enough reference images. Make sure that "
+                                    "the batch size of the validation loader is "
+                                    "bigger than `num_outs_per_domain`."
                                 )
                             s_trg = self.nets_ema.style_encoder(x_ref, y_trg)
 
@@ -485,12 +488,12 @@ class Solver(nn.Module):
 
         # report conversion rate values
         filename = os.path.join(
-            eval_dir, "conversion_rate_%.5i_%s.json" % (iteration, mode)
+            eval_dir, f"conversion_rate_{iteration:05d}_{mode}.json"
         )
         save_json(conversion_rate_values, filename)
         # report translation rate values
         filename = os.path.join(
-            eval_dir, "translation_rate_%.5i_%s.json" % (iteration, mode)
+            eval_dir, f"translation_rate_{iteration:05d}_{mode}.json"
         )
         save_json(translation_rate_values, filename)
         if self.run is not None:
