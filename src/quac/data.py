@@ -5,7 +5,7 @@ from itertools import chain
 from pathlib import Path
 from typing import cast
 
-import imageio
+import imageio.v2 as imageio
 import numpy as np
 import torch
 from torch.utils.data import Dataset
