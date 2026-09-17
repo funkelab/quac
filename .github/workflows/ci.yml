@@ -15,6 +15,9 @@ jobs:
   test:
     name: py${{ matrix.python-version }} (${{ matrix.resolution }})
     runs-on: ubuntu-latest
+    env:
+      # we install deps explicitly below; don't let `uv run` re-sync
+      UV_NO_SYNC: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -48,9 +51,7 @@ jobs:
 
       - name: 🧹 Lint
         if: matrix.python-version == '3.13' && matrix.resolution == 'highest'
-        run: uv run --no-sync prek run -a
-        env:
-          UV_NO_SYNC: "1" # prevent mypy hook from re-syncing without cpu group
+        run: uv run prek run -a
 
       - name: 🧪 Run Tests
-        run: uv run --no-sync pytest -v
+        run: uv run pytest -v
