@@ -1,14 +1,16 @@
 """Holds all of the discriminative attribution methods that are accepted by QuAC."""
 
-from captum import attr
 import logging
+from collections.abc import Callable
+from pathlib import Path
+
 import numpy as np
 import scipy
-from pathlib import Path
-from quac.data import PairedImageDataset
-from tqdm import tqdm
 import torch
-from typing import Callable
+from captum import attr
+from tqdm import tqdm
+
+from quac.data import PairedImageDataset
 
 
 def residual(real_img, fake_img):

@@ -1,10 +1,12 @@
 import json
+from pathlib import Path
+
+import pytest
+import torch
+
+from quac.data import SampleWithAttribution
 from quac.explanation import Explanation
 from quac.report import Report
-from quac.data import SampleWithAttribution
-import torch
-from pathlib import Path
-import pytest
 
 
 @pytest.fixture
@@ -63,7 +65,7 @@ def make_report(source_classes, target_classes, scores):
             target_class=j,
             score=k,
         )
-        for i, j, k in zip(source_classes, target_classes, scores)
+        for i, j, k in zip(source_classes, target_classes, scores, strict=False)
     ]
     return report
 
@@ -78,8 +80,8 @@ def test_report(inputs, predictions, result, tmpdir):
 
     tmpdir = Path(tmpdir)
     report.store(tmpdir)
-    assert (tmpdir / f"{report.name}.json").exists(), "The files in {} are: {}".format(
-        tmpdir, list(tmpdir.iterdir())
+    assert (tmpdir / f"{report.name}.json").exists(), (
+        f"The files in {tmpdir} are: {list(tmpdir.iterdir())}"
     )
     # Load the report back
     loaded_report = Report()
@@ -118,21 +120,21 @@ def test_report_filtering():
     filtered_report = report.from_source(0)
     # check
     assert all(
-        [explanation.source_class == 0 for explanation in filtered_report.explanations]
+        explanation.source_class == 0 for explanation in filtered_report.explanations
     ), "Filtering by source class failed"
 
     # filter by target class
     filtered_report = report.to_target(1)
     # check
     assert all(
-        [explanation.target_class == 1 for explanation in filtered_report.explanations]
+        explanation.target_class == 1 for explanation in filtered_report.explanations
     ), "Filtering by target class failed"
 
     # threshold scores
     filtered_report = report.score_threshold(0.3)
     # check
     assert all(
-        [explanation.score >= 0.3 for explanation in filtered_report.explanations]
+        explanation.score >= 0.3 for explanation in filtered_report.explanations
     ), "Filtering by score threshold failed"
 
     # top n

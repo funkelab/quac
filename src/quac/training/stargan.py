@@ -355,8 +355,10 @@ def build_model(
     num_domains=4,
     single_output_style_encoder=False,
     final_activation=None,
-    gpu_ids=[0],
+    gpu_ids=None,
 ):
+    if gpu_ids is None:
+        gpu_ids = [0]
     generator = nn.DataParallel(
         Generator(
             img_size, style_dim, input_dim=input_dim, final_activation=final_activation

@@ -9,16 +9,15 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import logging
-from pathlib import Path
 import random
+from pathlib import Path
 
 import numpy as np
-
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 
-from quac.data import read_image, listdir, DefaultDataset, create_transform
+from quac.data import DefaultDataset, create_transform, listdir, read_image
 
 
 class LabelledDataset(data.Dataset):
@@ -137,7 +136,7 @@ def get_train_loader(
     rand_crop_prob=0,
 ):
     logging.info(
-        "Preparing DataLoader to fetch %s images during the training phase..." % which
+        f"Preparing DataLoader to fetch {which} images during the training phase..."
     )
     # Basic image loading, resizing, and normalization
     transform = create_transform(img_size, grayscale, rgb, scale, shift)
@@ -262,14 +261,14 @@ class TrainingData:
     def __next__(self):
         x, x2, y = self._fetch_inputs()
         x_ref, x_ref2, y_ref = self._fetch_refs()
-        inputs = dict(
-            x_src=x,
-            y_src=y,
-            x_src2=x2,
-            y_ref=y_ref,
-            x_ref=x_ref,
-            x_ref2=x_ref2,
-        )
+        inputs = {
+            "x_src": x,
+            "y_src": y,
+            "x_src2": x2,
+            "y_ref": y_ref,
+            "x_ref": x_ref,
+            "x_ref2": x_ref2,
+        }
         return inputs
 
 

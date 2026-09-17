@@ -1,8 +1,9 @@
-from quac.data import read_image, write_image
-from quac.training.stargan import build_model
+import pytest
 import tifffile
 import torch
-import pytest
+
+from quac.data import read_image, write_image
+from quac.training.stargan import build_model
 
 
 class TestNonSquareImages:

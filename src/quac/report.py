@@ -1,10 +1,12 @@
 import json
+import logging
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from quac.explanation import Explanation, explanation_encoder
 from scipy.interpolate import interp1d
-import logging
+
+from quac.explanation import Explanation, explanation_encoder
 
 
 def merge_reports(reports, **kwargs):
@@ -14,7 +16,7 @@ def merge_reports(reports, **kwargs):
     It also sorts the samples by QuAC score.
     """
     # Make sure that each report has the same number of samples
-    num_samples = len(reports[list(reports.keys())[0]])
+    num_samples = len(reports[next(iter(reports.keys()))])
     for name, report in reports.items():
         if len(report) != num_samples:
             raise ValueError(
@@ -53,7 +55,9 @@ class Report:
     ```
     """
 
-    def __init__(self, name=None, metadata={}):
+    def __init__(self, name=None, metadata=None):
+        if metadata is None:
+            metadata = {}
         if name is None:
             self.name = "report"
         else:
@@ -128,7 +132,7 @@ class Report:
 
     def load(self, filename):
         """Load report from disk"""
-        with open(filename, "r") as fd:
+        with open(filename) as fd:
             data = json.load(fd)
             self.metadata = data.get("metadata", {})
             self.name = data.get("name", "default_report")
@@ -145,7 +149,9 @@ class Report:
         score_changes = [
             explanation._score_changes for explanation in self.explanations
         ]
-        for normalized_mask, score_change in zip(normalized_mask_sizes, score_changes):
+        for normalized_mask, score_change in zip(
+            normalized_mask_sizes, score_changes, strict=False
+        ):
             interp_score_values = self.interpolate_score_values(
                 normalized_mask, score_change
             )
@@ -167,7 +173,7 @@ class Report:
                 Axis on which to plot. Defaults to None in which case a new figure is created.
         """
         if ax is None:
-            fig, ax = plt.subplots()
+            _fig, ax = plt.subplots()
 
         mean, p25, p75 = self.get_curve()
 

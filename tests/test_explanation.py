@@ -1,11 +1,12 @@
-import pytest
 import json
-from typing import List
+
+import pytest
+
 from quac.explanation import Explanation, explanation_encoder
 
 
 class DummyReport:
-    def __init__(self, explanations: List[Explanation]):
+    def __init__(self, explanations: list[Explanation]):
         self.results = explanations
 
     def store(self, json_file):
@@ -15,7 +16,7 @@ class DummyReport:
     @classmethod
     def load(cls, json_file):
         """Load the report from a JSON file."""
-        with open(json_file, "r") as file:
+        with open(json_file) as file:
             results = json.load(file)
             # Convert the loaded data back to DummyExplanation objects
             results = [Explanation(**result) for result in results]
