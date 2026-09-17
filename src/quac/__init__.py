@@ -2,4 +2,9 @@
 .. include ../../README.md
 """
 
-__version__ = "0.2.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("quac")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "uninstalled"

@@ -1,59 +1,97 @@
+# https://peps.python.org/pep-0517/
 [build-system]
-build-backend = "setuptools.build_meta"
-requires = ["setuptools", "wheel"]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+
+# https://peps.python.org/pep-0621/
 [project]
 name = "quac"
+dynamic = ["version"]
 description = "Quantitative Attribution with Counterfactuals"
 readme = "README.md"
 requires-python = ">=3.10"
-classifiers = ["Programming Language :: Python :: 3"]
-keywords = []
-license = { text = "BSD 3-Clause License" }
+license = { text = "BSD-3-Clause" }
 authors = [
-  { name = "Diane Adjavon", email = "adjavond@hhmi.org" },
-  { name = "Jan Funke", email = "funkej@hhmi.org" },
+    { name = "Diane Adjavon", email = "adjavond@hhmi.org" },
+    { name = "Jan Funke", email = "funkej@hhmi.org" },
 ]
-dynamic = ["version"]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
-  "captum",
-  "numpy>=2.0",
-  "torch==2.4.0",
-  "torchvision",
-  "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
-  "opencv-python",
-  "pydantic",
-  "scipy",
-  "scikit-learn",
-  "imageio>=2.37.0,<3",
-  "scikit-image>=0.24.0,<0.25",
-  "pandas>=2.2.3,<3",
-  "pyyaml"
+    "captum>=0.7",
+    "imageio>=2.37",
+    "matplotlib>=3.9",
+    "numpy>=2.0",
+    "opencv-python>=4.10.0.84",
+    "pydantic>=2.8.2",
+    "pyyaml>=6.0.2",
+    "scipy>=1.13.1",
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "tqdm>=4.66",
 ]
 
-[project.optional-dependencies]
-dev = ['pytest', 'black', 'mypy', 'pdoc', 'pre-commit']
+[dependency-groups]
+test = [
+    "funlib.learn.torch @ git+https://github.com/funkelab/funlib.learn.torch",
+    "pytest>=8.3",
+    "tifffile>=2024.8.30",
+]
+# `uv sync --group cpu` uses CPU-only torch wheels (see tool.uv.sources)
+cpu = ["torch>=2.4", "torchvision>=0.19"]
+# PyPI torch wheels (CUDA on linux).  Only exists so uv can fork on `cpu`.
+gpu = ["torch>=2.4", "torchvision>=0.19"]
+dev = [
+    { include-group = "test" },
+    "ipython>=8.18",
+    "mypy>=1.18",
+    "prek>=0.5",
+    "ruff>=0.14",
+]
 docs = [
-  "ipykernel",
-  "jupyter_sphinx",
-  "sphinx_autodoc_typehints",
-  "sphinx_rtd_theme",
-  "furo",
-  "sphinx_togglebutton",
-  "sphinxcontrib_jquery",
-  "sphinxcontrib-email",
-  "sphinx>6",
-  "tomli",
-  "myst-parser",
-  "sphinx-copybutton",
-  "sphinx-design",
+    "furo>=2024.8.6",
+    "ipykernel>=6.29",
+    "jupyter-sphinx>=0.5",
+    "myst-parser>=4.0",
+    "sphinx>=8.0",
+    "sphinx-autodoc-typehints>=2.3",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6",
+    "sphinx-rtd-theme>=3.0",
+    "sphinx-togglebutton>=0.3.2",
+    "sphinxcontrib-email>=0.3.6",
+    "sphinxcontrib-jquery>=4.1",
+    "tomli>=2.0",
 ]
 
 [project.urls]
 homepage = "https://funkelab.github.io/quac/"
 repository = "https://github.com/funkelab/quac"
 
-[tool.pixi.project]
+[tool.uv]
+conflicts = [[{ group = "cpu" }, { group = "gpu" }]]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", group = "cpu" }]
+torchvision = [{ index = "pytorch-cpu", group = "cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pixi.workspace]
 channels = ["nvidia/label/cuda-11.8.0", "nvidia", "conda-forge", "pytorch"]
 platforms = ["linux-64"]
 
@@ -66,3 +104,62 @@ dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.tasks]
+
+# https://docs.astral.sh/ruff
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src"]
+fix = true
+unsafe-fixes = true
+
+# https://docs.astral.sh/ruff/rules
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E",    # style errors
+    "W",    # style warnings
+    "F",    # flakes
+    "D417", # Missing argument descriptions in Docstrings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "A001", # flake8-builtins
+    "RUF",  # ruff-specific rules
+    "TC",   # flake8-type-checking
+    "TID",  # flake8-tidy-imports
+]
+ignore = [
+    "D401", # First line should be in imperative mood (remove to opt in)
+    "D417", # TODO: many public functions have incomplete parameter docs
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+"docs/**/*.py" = ["D", "A"]
+
+# https://docs.astral.sh/ruff/formatter/
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = false # default is false
+
+# https://mypy.readthedocs.io/en/stable/config_file.html
+[tool.mypy]
+files = "src/quac"
+ignore_missing_imports = true
+allow_redefinition = true
+show_error_codes = true
+pretty = true
+
+# https://docs.pytest.org/
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+[tool.typos.default.extend-words]
+arange = "arange" # e.g. `numpy.arange`

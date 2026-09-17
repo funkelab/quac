@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: [v*]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }} (${{ matrix.resolution }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        resolution: ["highest", "lowest-direct"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      # cpu group pulls CPU-only torch wheels (much smaller than CUDA)
+      - name: Install Dependencies
+        if: matrix.resolution == 'highest'
+        run: uv sync --group cpu
+
+      # `uv pip compile --no-build` finds the lowest versions that have wheels for
+      # *this* python, so we don't need per-python lower bounds in pyproject.toml
+      # (uv sync/lock can't do this, since they resolve for all python versions)
+      - name: Install Dependencies (lowest-direct)
+        if: matrix.resolution == 'lowest-direct'
+        run: |
+          uv venv
+          uv pip compile pyproject.toml --group test --group cpu \
+            --resolution lowest-direct --no-build -o lowest.txt
+          uv pip install -e . --group test --group cpu -c lowest.txt
+
+      - name: 🧹 Lint
+        if: matrix.python-version == '3.13' && matrix.resolution == 'highest'
+        run: uv run --no-sync prek run -a
+        env:
+          UV_NO_SYNC: "1" # prevent mypy hook from re-syncing without cpu group
+
+      - name: 🧪 Run Tests
+        run: uv run --no-sync pytest -v
