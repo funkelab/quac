@@ -11,3 +11,7 @@ docs/_build
 
 # MacOS files
 .DS_Store
+
+# uv
+.venv
+uv.lock

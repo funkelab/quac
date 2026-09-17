@@ -1,10 +1,12 @@
 import json
+import logging
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from quac.explanation import Explanation, explanation_encoder
 from scipy.interpolate import interp1d
-import logging
+
+from quac.explanation import Explanation, explanation_encoder
 
 
 def merge_reports(reports, **kwargs):
@@ -14,11 +16,13 @@ def merge_reports(reports, **kwargs):
     It also sorts the samples by QuAC score.
     """
     # Make sure that each report has the same number of samples
-    num_samples = len(reports[list(reports.keys())[0]])
-    for name, report in reports.items():
+    num_samples = len(reports[next(iter(reports.keys()))])
+    # FIXME: `name` leaks out of this loop and is used below (always the last name)
+    for name, report in reports.items():  # noqa: B007
         if len(report) != num_samples:
             raise ValueError(
-                f"Reports have different number of samples: {len(report)} vs {num_samples}"
+                "Reports have different number of samples: "
+                f"{len(report)} vs {num_samples}"
             )
 
     final_report = Report(**kwargs)
@@ -38,10 +42,12 @@ def merge_reports(reports, **kwargs):
 class Report:
     """This class stores the results of the evaluation.
 
-    The report combines a set of Explanation objects, and can be used to store and load them from disk.
+    The report combines a set of Explanation objects, and can be used to store and load
+    them from disk.
     It also has several filtering methods, to help interact with the results.
 
-    For example, given the output of the QuAC evaluation, stored in a directory, we can do the following:
+    For example, given the output of the QuAC evaluation, stored in a directory, we can
+    do the following:
     ```
     report = Report.from_directory("eval_directory", name="final_report")
 
@@ -53,7 +59,9 @@ class Report:
     ```
     """
 
-    def __init__(self, name=None, metadata={}):
+    def __init__(self, name=None, metadata=None):
+        if metadata is None:
+            metadata = {}
         if name is None:
             self.name = "report"
         else:
@@ -128,7 +136,7 @@ class Report:
 
     def load(self, filename):
         """Load report from disk"""
-        with open(filename, "r") as fd:
+        with open(filename) as fd:
             data = json.load(fd)
             self.metadata = data.get("metadata", {})
             self.name = data.get("name", "default_report")
@@ -145,7 +153,9 @@ class Report:
         score_changes = [
             explanation._score_changes for explanation in self.explanations
         ]
-        for normalized_mask, score_change in zip(normalized_mask_sizes, score_changes):
+        for normalized_mask, score_change in zip(
+            normalized_mask_sizes, score_changes, strict=False
+        ):
             interp_score_values = self.interpolate_score_values(
                 normalized_mask, score_change
             )
@@ -164,10 +174,11 @@ class Report:
         Parameters
         ----------
         ax: plt.axis
-                Axis on which to plot. Defaults to None in which case a new figure is created.
+                Axis on which to plot. Defaults to None in which case a new figure is
+                created.
         """
         if ax is None:
-            fig, ax = plt.subplots()
+            _fig, ax = plt.subplots()
 
         mean, p25, p75 = self.get_curve()
 
@@ -181,8 +192,10 @@ class Report:
         """
         Create a Report containing only the explanations with the given source class.
 
-        This filters explanations based on both the original and the *predicted* source class.
-        That is, if an explanation has a source of class 0, but the model predicted it as class 1, it will not be included.
+        This filters explanations based on both the original and the *predicted* source
+        class.
+        That is, if an explanation has a source of class 0, but the model predicted it
+        as class 1, it will not be included.
         """
         filtered_report = Report(name=name)
         filtered_report.explanations = [
@@ -195,10 +208,13 @@ class Report:
 
     def to_target(self, target_class, name=None) -> "Report":
         """
-        Create a filtered Report containing only the explanations with the given target class.
+        Create a filtered Report containing only the explanations with the given target
+        class.
 
-        This filters explanations based on both the original and the *predicted* target class.
-        That is, if an explanation has a target of class 0, but the model predicted it as class 1, it will not be included.
+        This filters explanations based on both the original and the *predicted* target
+        class.
+        That is, if an explanation has a target of class 0, but the model predicted it
+        as class 1, it will not be included.
         """
         filtered_report = Report(name=name)
         filtered_report.explanations = [
@@ -211,7 +227,8 @@ class Report:
 
     def score_threshold(self, threshold, name=None) -> "Report":
         """
-        Create a filtered Report containing only the explanations with a QuAC score above the given threshold.
+        Create a filtered Report containing only the explanations with a QuAC score
+        above the given threshold.
         """
         filtered_report = Report(name=name)
         filtered_report.explanations = [
@@ -234,9 +251,11 @@ class Report:
     @classmethod
     def from_directory(cls, eval_directory, **kwargs) -> "Report":
         """
-        Find and load all reports in a given directory, merging them into a single report.
+        Find and load all reports in a given directory, merging them into a single
+        report.
         The best attribution method for each sample is chosen based on the QuAC score.
-        The final report selects only the best results for each sample and sorts them by QuAC score.
+        The final report selects only the best results for each sample and sorts them by
+        QuAC score.
 
         Parameters
         ----------
@@ -252,7 +271,8 @@ class Report:
                     report.json
             ```
 
-        kwargs: additional arguments to be passed to the Report constructor, specifying the name and metadata.
+        kwargs: additional arguments to be passed to the Report constructor, specifying
+            the name and metadata.
 
         Returns
         -------
@@ -272,7 +292,8 @@ class Report:
         # Check if there are any reports
         if len(reports) == 0:
             raise ValueError(
-                f"No reports found in {eval_directory}. Please check the directory structure."
+                f"No reports found in {eval_directory}. "
+                "Please check the directory structure."
             )
         return merge_reports(reports, **kwargs)
 
@@ -286,7 +307,8 @@ class Report:
         input : str
             The part of the input path to be replaced. E.g. "/home/user/data/".
         output : str
-            The desired new path, to replace the input path. E.g. "/home/new_user/new_data/".
+            The desired new path, to replace the input path. E.g.
+            "/home/new_user/new_data/".
         """
         for explanation in self.explanations:
             explanation.reroot(input, output)

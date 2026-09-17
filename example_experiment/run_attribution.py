@@ -1,11 +1,13 @@
 from argparse import ArgumentParser
+
 import torch
-import quac.attribution
-from quac.config import ExperimentConfig, get_data_config
-from quac.generate import load_classifier
-from quac.attribution import AttributionIO
-from quac.data import create_transform
 import yaml
+
+import quac.attribution
+from quac.attribution import AttributionIO
+from quac.config import ExperimentConfig, get_data_config
+from quac.data import create_transform
+from quac.generate import load_classifier
 
 
 def parse_args():
@@ -30,8 +32,8 @@ def parse_args():
         type=str,
         default=None,
         help="""
-        Output directory for the generated attributions. 
-        Defaults to an `attributions` folder in the experiment root directory, 
+        Output directory for the generated attributions.
+        Defaults to an `attributions` folder in the experiment root directory,
         based on the config file.""",
     )
     parser.add_argument(
@@ -52,7 +54,7 @@ def parse_args():
         choices=["latent", "reference"],
         default="latent",
         help="""
-        Kind of image generation that was done. Used to find the generated images. 
+        Kind of image generation that was done. Used to find the generated images.
         """,
     )
     return parser.parse_args()
@@ -61,7 +63,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open(args.config, "r") as file:
+    with open(args.config) as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 

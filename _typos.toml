@@ -1,7 +1,0 @@
-[files]
-# https://github.com/crate-ci/typos/issues/868
-extend-exclude = [
-]
-
-[default.extend-words]
-"arange" = "arange"  # e.g. `numpy.arange`

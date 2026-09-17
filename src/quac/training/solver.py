@@ -10,20 +10,21 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import json
-import numpy as np
 import os
+import shutil
 from os.path import join as ospj
 from pathlib import Path
-from quac.training.checkpoint import CheckpointIO
-from quac.training.classification import ClassifierWrapper
-from quac.training.data_loader import TrainingData
-import shutil
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from tqdm import tqdm
 
+from quac.training.checkpoint import CheckpointIO
+from quac.training.classification import ClassifierWrapper
+from quac.training.data_loader import TrainingData
 
 transform = transforms.Compose(
     [
@@ -43,7 +44,7 @@ def print_network(network, name):
     for p in network.parameters():
         num_params += p.numel()
     # print(network)
-    print("Number of parameters of %s: %i" % (name, num_params))
+    print(f"Number of parameters of {name}: {num_params}")
 
 
 def he_init(module):
@@ -82,14 +83,15 @@ class Solver(nn.Module):
 
         checkpoint_dir = str(self.checkpoint_dir)
 
-        # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
+        # below setattrs are to make networks be children of Solver, e.g., for
+        # self.to(self.device)
         for name, module in self.nets.items():
             print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
             setattr(self, name + "_ema", module)
 
-        self.optims = dict()
+        self.optims = {}
         for name, net in self.nets.items():
             self.optims[name] = torch.optim.Adam(
                 params=net.parameters(),
@@ -124,7 +126,7 @@ class Solver(nn.Module):
         # TODO The EMA doesn't need to be in named_children()
         for name, network in self.named_children():
             if "ema" not in name:
-                print("Initializing %s..." % name)
+                print(f"Initializing {name}...")
                 network.apply(he_init)
 
     def _save_checkpoint(self, step):
@@ -303,17 +305,18 @@ class Solver(nn.Module):
         total_iters,
         elapsed_time,
     ):
-        all_losses = dict()
+        all_losses = {}
         for loss, prefix in zip(
             [d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref],
             ["D/latent_", "D/ref_", "G/latent_", "G/ref_"],
+            strict=False,
         ):
             for key, value in loss.items():
                 all_losses[prefix + key] = value
         # log all losses to wandb or print them
         if self.run:
             self.run.log(all_losses, step=step)
-            for name, img, label in zip(
+            for name, img, _label in zip(
                 [
                     "x_real",
                     "x_ref",
@@ -331,6 +334,7 @@ class Solver(nn.Module):
                     ema_fake_x_reference,
                 ],
                 [y_source, y_target, y_target, y_target, y_target, y_target],
+                strict=False,
             ):
                 # TODO put captions back in somehow
                 self.run.log_images({name: img}, step=step)
@@ -392,7 +396,7 @@ class Solver(nn.Module):
         iter_ref = None
 
         domains = val_loader.available_targets
-        print("Number of domains: %d" % len(domains))
+        print(f"Number of domains: {len(domains)}")
 
         conversion_rate_values = {}
         translation_rate_values = {}
@@ -403,8 +407,8 @@ class Solver(nn.Module):
             if mode == "reference":
                 loader_ref = val_loader.loader_ref
 
-            for src_idx, src_domain in enumerate(src_domains):
-                task = "%s/%s" % (src_domain, trg_domain)
+            for _src_idx, src_domain in enumerate(src_domains):
+                task = f"{src_domain}/{trg_domain}"
                 # Creating the path
                 path_fake = os.path.join(eval_dir, task)
                 shutil.rmtree(path_fake, ignore_errors=True)
@@ -414,21 +418,24 @@ class Solver(nn.Module):
                 val_loader.set_source(src_domain)
                 loader_src = val_loader.loader_src
 
-                for i, (x_src, _) in enumerate(tqdm(loader_src, total=len(loader_src))):
+                for _i, (x_src, _) in enumerate(
+                    tqdm(loader_src, total=len(loader_src))
+                ):
                     N = x_src.size(0)
                     x_src = x_src.to(device)
                     y_trg = torch.tensor([trg_idx] * N).to(device)
 
                     predictions = []
                     # generate num_outs_per_domain outputs from the same input
-                    for j in range(num_outs_per_domain):
+                    for _j in range(num_outs_per_domain):
                         if mode == "latent":
                             z_trg = torch.randn(N, self.latent_dim).to(device)
                             s_trg = self.nets_ema.mapping_network(z_trg, y_trg)
                         else:
                             try:
                                 # TODO don't need to re-do this every time, just use
-                                # the same set of reference images for the whole dataset!
+                                # the same set of reference images for the whole
+                                # dataset!
                                 x_ref, _ = next(iter_ref)
                                 x_ref = x_ref.to(device)
                             except (TypeError, StopIteration):  # iter_ref is None
@@ -440,8 +447,9 @@ class Solver(nn.Module):
                                 x_ref = x_ref[:N]
                             elif x_ref.size(0) < N:
                                 raise ValueError(
-                                    "Not enough reference images."
-                                    "Make sure that the batch size of the validation loader is bigger than `num_outs_per_domain`."
+                                    "Not enough reference images. Make sure that "
+                                    "the batch size of the validation loader is "
+                                    "bigger than `num_outs_per_domain`."
                                 )
                             s_trg = self.nets_ema.style_encoder(x_ref, y_trg)
 
@@ -480,12 +488,12 @@ class Solver(nn.Module):
 
         # report conversion rate values
         filename = os.path.join(
-            eval_dir, "conversion_rate_%.5i_%s.json" % (iteration, mode)
+            eval_dir, f"conversion_rate_{iteration:05d}_{mode}.json"
         )
         save_json(conversion_rate_values, filename)
         # report translation rate values
         filename = os.path.join(
-            eval_dir, "translation_rate_%.5i_%s.json" % (iteration, mode)
+            eval_dir, f"translation_rate_{iteration:05d}_{mode}.json"
         )
         save_json(translation_rate_values, filename)
         if self.run is not None:
@@ -513,7 +521,11 @@ def compute_d_loss(nets, x_real, y_org, y_trg, z_trg=None, x_ref=None, lambda_re
     loss_fake = adv_loss(out, 0)
 
     loss = loss_real + loss_fake + lambda_reg * loss_reg
-    return loss, dict(real=loss_real.item(), fake=loss_fake.item(), reg=loss_reg.item())
+    return loss, {
+        "real": loss_real.item(),
+        "fake": loss_fake.item(),
+        "reg": loss_reg.item(),
+    }
 
 
 def compute_g_loss(
@@ -571,17 +583,19 @@ def compute_g_loss(
     loss = loss_adv + lambda_sty * loss_sty + lambda_cyc * loss_cyc
     return (
         loss,
-        dict(
-            adv=loss_adv.item(),
-            sty=loss_sty.item(),
-            cyc=loss_cyc.item(),
-        ),
+        {
+            "adv": loss_adv.item(),
+            "sty": loss_sty.item(),
+            "cyc": loss_cyc.item(),
+        },
         x_fake,
     )
 
 
 def moving_average(model, model_test, beta=0.999):
-    for param, param_test in zip(model.parameters(), model_test.parameters()):
+    for param, param_test in zip(
+        model.parameters(), model_test.parameters(), strict=False
+    ):
         param_test.data = torch.lerp(param.data, param_test.data, beta)
 
 

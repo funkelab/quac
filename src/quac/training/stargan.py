@@ -36,7 +36,12 @@ class ResBlk(nn.Module):
     """
 
     def __init__(
-        self, dim_in, dim_out, actv=nn.LeakyReLU(0.2), normalize=False, downsample=False
+        self,
+        dim_in,
+        dim_out,
+        actv=nn.LeakyReLU(0.2),  # noqa: B008
+        normalize=False,
+        downsample=False,
     ):
         super().__init__()
         self.actv = actv
@@ -104,7 +109,7 @@ class AdainResBlk(nn.Module):
         dim_in: int,
         dim_out: int,
         style_dim: int = 64,
-        actv: nn.Module = nn.LeakyReLU(0.2),
+        actv: nn.Module = nn.LeakyReLU(0.2),  # noqa: B008
         upsample: bool = False,
     ):
         super().__init__()
@@ -355,8 +360,10 @@ def build_model(
     num_domains=4,
     single_output_style_encoder=False,
     final_activation=None,
-    gpu_ids=[0],
+    gpu_ids=None,
 ):
+    if gpu_ids is None:
+        gpu_ids = [0]
     generator = nn.DataParallel(
         Generator(
             img_size, style_dim, input_dim=input_dim, final_activation=final_activation

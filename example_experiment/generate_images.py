@@ -1,13 +1,14 @@
+import warnings
 from argparse import ArgumentParser
 from pathlib import Path
-from quac.config import ExperimentConfig
-from quac.generate import load_classifier, load_stargan, get_counterfactual
-from quac.data import write_image, create_transform, DefaultDataset
-from tqdm import tqdm
-import torch
-import warnings
-import yaml
 
+import torch
+import yaml
+from tqdm import tqdm
+
+from quac.config import ExperimentConfig
+from quac.data import DefaultDataset, create_transform, write_image
+from quac.generate import get_counterfactual, load_classifier, load_stargan
 
 # Computed setup
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -46,7 +47,7 @@ def parse_args():
         type=str,
         default="test",
         help="""
-        Which dataset to use. 
+        Which dataset to use.
         If not provided, we will check if test exists, else use validation.
         Options are ["train", "validation", "test"]
         """,
@@ -76,26 +77,29 @@ def get_data_config(experiment, dataset="test"):
     elif dataset == "test":
         if experiment.test_data:
             return experiment.test_data
-        warnings.warn("No test data found, using validation data.")
+        warnings.warn("No test data found, using validation data.", stacklevel=2)
     return experiment.validation_data
 
 
 def get_target_index(source_directory, target_class):
-    # Figure out which "domain" the target class is, by how the directories are structured
+    # Figure out which "domain" the target class is, by how the directories are
+    # structured
     source_directory = Path(source_directory)
     subdirs = [d for d in source_directory.iterdir() if d.is_dir()]
     subdirs = sorted(subdirs)
     try:
         target_index = subdirs.index(source_directory / target_class)
-    except ValueError:
-        raise ValueError(f"Target class {target_class} not found in {source_directory}")
+    except ValueError as e:
+        raise ValueError(
+            f"Target class {target_class} not found in {source_directory}"
+        ) from e
     return target_index
 
 
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open(args.config, "r") as file:
+    with open(args.config) as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 

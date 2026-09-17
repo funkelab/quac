@@ -1,9 +1,10 @@
-import numpy as np
-from typing import Optional, Union
-import torch
 from pathlib import Path
-from quac.data import read_image
+
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from quac.data import read_image
 
 
 def serialize(obj):
@@ -29,19 +30,19 @@ class Explanation:
         query_path: str,
         counterfactual_path: str,
         mask_path: str,
-        query_prediction: Union[list, np.ndarray],
-        counterfactual_prediction: Union[list, np.ndarray],
+        query_prediction: list | np.ndarray,
+        counterfactual_prediction: list | np.ndarray,
         source_class: int,
         target_class: int,
-        score: Optional[float] = None,
+        score: float | None = None,
         # Optional
-        attribution_path: Optional[str] = None,
-        generated_path: Optional[str] = None,
-        generated_prediction: Optional[Union[list, np.ndarray]] = None,
-        normalized_mask_sizes: Optional[Union[list, np.ndarray]] = None,
-        score_changes: Optional[Union[list, np.ndarray]] = None,
-        optimal_threshold: Optional[float] = None,
-        method: Optional[str] = None,
+        attribution_path: str | None = None,
+        generated_path: str | None = None,
+        generated_prediction: list | np.ndarray | None = None,
+        normalized_mask_sizes: list | np.ndarray | None = None,
+        score_changes: list | np.ndarray | None = None,
+        optimal_threshold: float | None = None,
+        method: str | None = None,
     ):
         self._query_path = query_path
         self._counterfactual_path = counterfactual_path
@@ -61,9 +62,9 @@ class Explanation:
         self._method = method
 
         # Computed
-        self._query: Optional[torch.Tensor] = None
-        self._counterfactual: Optional[torch.Tensor] = None
-        self._mask: Optional[torch.Tensor] = None
+        self._query: torch.Tensor | None = None
+        self._counterfactual: torch.Tensor | None = None
+        self._mask: torch.Tensor | None = None
 
     def __eq__(self, value):
         if isinstance(value, Explanation):
@@ -97,7 +98,12 @@ class Explanation:
         )
 
     def __repr__(self):
-        return f"Explanation(query_path={self._query_path}, counterfactual_path={self._counterfactual_path}, mask_path={self._mask_path}, source_class={self.source_class}, target_class={self.target_class})"
+        return (
+            f"Explanation(query_path={self._query_path}, "
+            f"counterfactual_path={self._counterfactual_path}, "
+            f"mask_path={self._mask_path}, source_class={self.source_class}, "
+            f"target_class={self.target_class})"
+        )
 
     @property
     def query(self) -> torch.Tensor:
@@ -133,17 +139,22 @@ class Explanation:
 
     def reroot(self, input: str, output: str):
         """
-        Change the directory of the explanation files, in case they are moved to a new location.
-        This is done with a simple string replacement, and the same replacement is done for every path in the explanation.
-        As such, it is only possible to change the directory of all paths at once -- we cannot change the internal organization of the files.
-        To change the internal organization of the files, we need to manually modify the paths.
+        Change the directory of the explanation files, in case they are moved to a new
+        location.
+        This is done with a simple string replacement, and the same replacement is done
+        for every path in the explanation.
+        As such, it is only possible to change the directory of all paths at once -- we
+        cannot change the internal organization of the files.
+        To change the internal organization of the files, we need to manually modify the
+        paths.
 
         Parameters
         ----------
         input : str
             The part of the input path to be replaced. E.g. "/home/user/data/".
         output : str
-            The desired new path, to replace the input path. E.g. "/home/new_user/new_data/".
+            The desired new path, to replace the input path. E.g.
+            "/home/new_user/new_data/".
         """
         self._query_path = self._query_path.replace(input, output)
         self._counterfactual_path = self._counterfactual_path.replace(input, output)
@@ -157,7 +168,8 @@ class Explanation:
 def explanation_encoder(explanation: Explanation):
     """Custom JSON encoder for the Explanation class.
 
-    Stores full dict representation of the Explanation object, so that it can be re-loaded exactly as is later.
+    Stores full dict representation of the Explanation object, so that it can be
+    re-loaded exactly as is later.
     """
     if isinstance(explanation, Explanation):
         return {

@@ -2,25 +2,44 @@ ci:
   autoupdate_schedule: monthly
   autofix_commit_msg: "style(pre-commit.ci): auto fixes [...]"
   autoupdate_commit_msg: "ci(pre-commit.ci): autoupdate"
-
-default_install_hook_types: [pre-commit, commit-msg]
+  skip: [mypy]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
-      - id: check-docstring-first
       - id: check-yaml
       - id: check-added-large-files
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.8
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: "0.26"
     hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-    
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.30.2
+      - id: validate-pyproject
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/adhtruong/mirrors-typos
+    rev: v1.50.2
     hooks:
       - id: typos
+        args: [--force-exclude] # omitting --write-changes
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types_or: [python, pyi]
+        exclude: "^(docs|tests|example_experiment)/"
+        require_serial: true
+        pass_filenames: false

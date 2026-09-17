@@ -1,10 +1,12 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from quac.evaluation import Processor, Evaluator
-from quac.generate import load_classifier
+
+import yaml
+
 from quac.config import ExperimentConfig, get_data_config
 from quac.data import create_transform
-import yaml
+from quac.evaluation import Evaluator, Processor
+from quac.generate import load_classifier
 
 
 def parse_args():
@@ -30,7 +32,7 @@ def parse_args():
         default=None,
         help="""
         Input directory for the generated images (conversions).
-        Defaults to a `generated_images` folder in the experiment root directory, 
+        Defaults to a `generated_images` folder in the experiment root directory,
         based on the config file.""",
     )
     parser.add_argument(
@@ -40,7 +42,7 @@ def parse_args():
         default=None,
         help="""
         Input directory for the attributions.
-        Defaults to an `attributions` folder in the experiment root directory, 
+        Defaults to an `attributions` folder in the experiment root directory,
         based on the config file.""",
     )
     parser.add_argument(
@@ -71,7 +73,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     # Load the configuration
-    with open(args.config, "r") as file:
+    with open(args.config) as file:
         config = yaml.safe_load(file)
     experiment = ExperimentConfig(**config)
 
@@ -125,5 +127,6 @@ if __name__ == "__main__":
 
         # Run QuAC evaluation on your attribution and store a report
         report = evaluator.quantify(processor=Processor())
-        # The report will be stored based on the processor's name, which is "default" by default
+        # The report will be stored based on the processor's name, which is "default" by
+        # default
         report.store(report_directory / name)

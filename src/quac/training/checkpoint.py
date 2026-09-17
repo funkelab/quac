@@ -9,10 +9,11 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import os
+
 import torch
 
 
-class CheckpointIO(object):
+class CheckpointIO:
     def __init__(self, fname_template, data_parallel=False, **kwargs):
         os.makedirs(os.path.dirname(fname_template), exist_ok=True)
         self.fname_template = fname_template
@@ -24,7 +25,7 @@ class CheckpointIO(object):
 
     def save(self, step):
         fname = self.fname_template.format(step)
-        print("Saving checkpoint into %s..." % fname)
+        print(f"Saving checkpoint into {fname}...")
         outdict = {}
         for name, module in self.module_dict.items():
             if self.data_parallel:
@@ -37,7 +38,7 @@ class CheckpointIO(object):
     def load(self, step):
         fname = self.fname_template.format(step)
         assert os.path.exists(fname), fname + " does not exist!"
-        print("Loading checkpoint from %s..." % fname)
+        print(f"Loading checkpoint from {fname}...")
         if torch.cuda.is_available():
             module_dict = torch.load(fname)
         else:

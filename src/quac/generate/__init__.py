@@ -1,11 +1,15 @@
 """Utilities for generating counterfactual images."""
 
-from .model import LatentInferenceModel, ReferenceInferenceModel, InferenceModel
-
 import logging
-from quac.training.classification import ClassifierWrapper
+
 import torch
-from typing import Union, Optional
+
+from quac.generate.model import (
+    InferenceModel,
+    LatentInferenceModel,
+    ReferenceInferenceModel,
+)
+from quac.training.classification import ClassifierWrapper
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -19,7 +23,8 @@ def load_classifier(checkpoint, scale=1.0, shift=0.0, eval=True, device=None):
     """
     Load a classifier from a torchscript checkpoint.
 
-    This also creates a wrapper around the classifier, which applies a scale and shift to the input.
+    This also creates a wrapper around the classifier, which applies a scale and shift
+    to the input.
 
     Parameters
     ----------
@@ -54,7 +59,7 @@ def load_stargan(
     checkpoint_iter: int = 100000,
     kind="latent",
     single_output_encoder: bool = False,
-    final_activation: Union[str, None] = None,
+    final_activation: str | None = None,
 ) -> InferenceModel:
     """
     Load an inference version of the StarGANv2 model from a checkpoint.
@@ -68,7 +73,8 @@ def load_stargan(
         num_domains: the number of domains
         checkpoint_iter: the iteration of the checkpoint to load
         kind: the kind of style to use, either "latent" or "reference"
-        single_output_encoder: whether to use a single output encoder, only used if kind is "reference"
+        single_output_encoder: whether to use a single output encoder, only used if kind
+            is "reference"
 
     Returns:
         the loaded inference model
@@ -110,11 +116,11 @@ def get_counterfactual(  # type: ignore
     batch_size=10,
     device=None,
     max_tries=100,
-    best_pred_so_far: Optional[torch.Tensor] = None,
-    best_cf_so_far: Optional[torch.Tensor] = None,
-    best_cf_path_so_far: Optional[str] = None,
+    best_pred_so_far: torch.Tensor | None = None,
+    best_cf_so_far: torch.Tensor | None = None,
+    best_cf_path_so_far: str | None = None,
     error_if_not_found=False,
-) -> tuple[Optional[torch.Tensor], Optional[str], Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor | None, str | None, torch.Tensor | None]:
     """
     Tries to find a counterfactual for the given sample, given the target.
     It creates a batch, and returns one of the samples if it is classified correctly.
@@ -125,13 +131,15 @@ def get_counterfactual(  # type: ignore
         x: the sample to find a counterfactual for
         target: the target class
         kind: the kind of style to use, either "latent" or "reference"
-        dataset_ref: the dataset of reference images to use, required if kind is "reference"
+        dataset_ref: the dataset of reference images to use, required if kind is
+            "reference"
         batch_size: the number of counterfactuals to generate
         device: the device to use
         max_tries: the maximum number of tries to find a counterfactual
-        error_if_not_found: whether to raise an error if no counterfactual is found, if set to False, the best counterfactual found so far is returned
-        return_path: whether to return the path of the reference used to create best counterfactual found so far,
-            only used if kind is "reference"
+        error_if_not_found: whether to raise an error if no counterfactual is found, if
+            set to False, the best counterfactual found so far is returned
+        return_path: whether to return the path of the reference used to create best
+            counterfactual found so far, only used if kind is "reference"
 
     Returns:
         a counterfactual
@@ -152,12 +160,14 @@ def get_counterfactual(  # type: ignore
             logger.warning(
                 f"Not enough reference images, reducing max_tries to {max_tries}."
             )
-        # Get a batch of reference images, starting from batch_size * max_tries, of size batch_size
+        # Get a batch of reference images, starting from batch_size * max_tries, of size
+        # batch_size
         ref_batch_tuples, ref_paths = zip(
             *[
                 dataset_ref[i]
                 for i in range(batch_size * (max_tries - 1), batch_size * max_tries)
-            ]
+            ],
+            strict=False,
         )
         ref_batch = torch.stack(ref_batch_tuples)
         # Generate batch_size counterfactuals

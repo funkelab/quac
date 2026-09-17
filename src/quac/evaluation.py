@@ -1,17 +1,19 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
+import torch
+from torch.nn import functional as F
+from torchvision.datasets import ImageFolder
+from tqdm import tqdm
+
 from quac.data import (
-    PairedImageDataset,
     ConvertedDataset,
+    PairedImageDataset,
     PairedWithAttribution,
     write_image,
 )
 from quac.report import Report
-from torchvision.datasets import ImageFolder
-from torch.nn import functional as F
-import torch
-from tqdm import tqdm
 
 
 def image_to_tensor(image, device=None):
@@ -110,10 +112,11 @@ class UnblurredProcessor(Processor):
 
 
 def optimal_threshold_index(mask_sizes, mask_scores):
-    """
+    r"""
     Find the index of the optimal threshold.
     The optimal threshold has a minimal mask size, and maximizes the score change.
-    We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.
+    We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score
+    change.
     """
     mask_scores = np.array(mask_scores)
     mask_sizes = np.array(mask_sizes)
@@ -137,7 +140,8 @@ class BaseEvaluator:
     ):
         """Initializes the evaluator.
 
-        It requires three different datasets: the source dataset, the counterfactual dataset and the attribution dataset.
+        It requires three different datasets: the source dataset, the counterfactual
+        dataset and the attribution dataset.
         All of them must return objects in the forms of the dataclasses in `quac.data`.
 
 
@@ -146,19 +150,25 @@ class BaseEvaluator:
         classifier:
             The classifier to be used for the evaluation.
         source_dataset:
-            The source dataset must returns a `quac.data.Sample` object in its `__getitem__` method.
+            The source dataset must returns a `quac.data.Sample` object in its
+            `__getitem__` method.
         paired_dataset:
-            The paired dataset must returns a `quac.data.PairedSample` object in its `__getitem__` method.
+            The paired dataset must returns a `quac.data.PairedSample` object in its
+            `__getitem__` method.
         attribution_dataset:
-            The attribution dataset must returns a `quac.data.SampleWithAttribution` object in its `__getitem__` method.
+            The attribution dataset must returns a `quac.data.SampleWithAttribution`
+            object in its `__getitem__` method.
         num_thresholds: int, optional
             The number of thresholds to be used for the evaluation. Defaults to 200.
         device: torch.device, optional
-            The device to be used for the evaluation. If None, it will use the GPU if available, else CPU.
+            The device to be used for the evaluation. If None, it will use the GPU if
+            available, else CPU.
         mask_directory: str, optional
-            A directory where the masks will be saved on-the-fly. If None, they will not be saved.
+            A directory where the masks will be saved on-the-fly. If None, they will not
+            be saved.
         counterfactual_directory: str, optional
-            A directory where the counterfactuals will be saved on-the-fly. If None, they will not be saved.
+            A directory where the counterfactuals will be saved on-the-fly. If None,
+            they will not be saved.
         """
         self.device = device
         if device is None:
@@ -273,8 +283,10 @@ class BaseEvaluator:
         attribution: the attribution map
         predictions: the predictions of the classifier
         processor: the attribution processing function (to get mask)
-        vmin: the minimal possible value of the attribution, to be used for thresholding. Defaults to -1
-        vmax: the maximal possible value of the attribution, to be used for thresholding. Defaults to 1.
+        vmin: the minimal possible value of the attribution, to be used for
+            thresholding. Defaults to -1
+        vmax: the maximal possible value of the attribution, to be used for
+            thresholding. Defaults to 1.
         """
         # copy parts of "fake" into "real", see how much the classification of
         # "real" changes into "fake_class"
@@ -329,7 +341,8 @@ class Evaluator(BaseEvaluator):
     """This class evaluates the quality of an attribution using the QuAC method.
 
     Raises:
-        FileNotFoundError: If the source, counterfactual or attribution directories do not exist.
+        FileNotFoundError: If the source, counterfactual or attribution directories do
+            not exist.
     """
 
     def __init__(

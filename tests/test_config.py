@@ -1,5 +1,6 @@
-from quac.config import DataConfig
 import pytest
+
+from quac.config import DataConfig
 
 
 @pytest.fixture

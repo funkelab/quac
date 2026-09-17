@@ -1,14 +1,16 @@
-from quac.training.stargan import build_model
-from quac.config import ModelConfig
-import torch
 import os
+
+import torch
+
+from quac.config import ModelConfig
+from quac.training.stargan import build_model
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def test_model():
     args = ModelConfig()
-    nets, nets_ema = build_model(**args.model_dump())
+    nets, _nets_ema = build_model(**args.model_dump())
     example_input = torch.randn(4, 3, 128, 128)
     example_class = torch.randint(0, 5, (4,))
     example_latent = torch.randn(4, 16)

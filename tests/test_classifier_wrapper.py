@@ -1,11 +1,13 @@
-from quac.training.classification import ClassifierWrapper
-import torch
 import pytest
+import torch
+
+from quac.training.classification import ClassifierWrapper
 
 
 class DummyModel(torch.nn.Module):
     """
-    Dummy model that expects a certain data range, and returns a boolean indicating if the data is in range.
+    Dummy model that expects a certain data range, and returns a boolean indicating if
+    the data is in range.
     """
 
     def __init__(self, min, max):
