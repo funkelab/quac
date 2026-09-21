@@ -280,13 +280,16 @@ class Report:
             A dictionary mapping method names to their respective reports.
         """
         reports = {}
+        eval_directory = Path(eval_directory)
         # Search for all json files in the directory or any subdirectory
-        for json_file in Path(eval_directory).rglob("*.json"):
-            name = str(json_file.parent)
-            report = Report(name=name)
+        for json_file in sorted(eval_directory.rglob("*.json")):
+            # The name stored in the file is not unique (e.g. every method is stored as
+            # "default_report"), so reports are keyed by where they were found.
+            key = json_file.relative_to(eval_directory).with_suffix("").as_posix()
+            report = Report()
             try:
                 report.load(json_file)
-                reports[report.name] = report
+                reports[key] = report
             except KeyError:
                 logging.warning(f"Could not load {json_file}, not a valid report.")
         # Check if there are any reports

@@ -147,3 +147,13 @@ def test_report_filtering():
 
     # Check that the original report is unchanged
     assert len(report.explanations) == 6, "Original report was modified"
+
+
+def test_from_directory_merges_every_method(tmp_path):
+    """Reports of different methods share a file name, and must all be considered."""
+    make_report([0, 0], [1, 1], [0.9, 0.1]).store(tmp_path / "method_a")
+    make_report([0, 0], [1, 1], [0.2, 0.8]).store(tmp_path / "method_b")
+
+    merged = Report.from_directory(tmp_path)
+    # the best score for each of the two samples, whichever method it came from
+    assert [explanation.score for explanation in merged.explanations] == [0.9, 0.8]
