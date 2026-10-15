@@ -8,7 +8,6 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
-import copy
 import math
 
 import numpy as np
@@ -153,9 +152,10 @@ class Generator(nn.Module):
         max_conv_dim=512,
         input_dim=1,
         final_activation=None,
+        base_channels=None,
     ):
         super().__init__()
-        dim_in = 2**14 // img_size
+        dim_in = base_channels or 2**14 // img_size
         self.img_size = img_size
         self.from_rgb = nn.Conv2d(input_dim, dim_in, 3, 1, 1)
         self.encode = nn.ModuleList()
@@ -182,6 +182,7 @@ class Generator(nn.Module):
             )  # stack-like
             dim_in = dim_out
 
+        dim_out = dim_in
         # bottleneck blocks
         for _ in range(2):
             self.encode.append(ResBlk(dim_out, dim_out, normalize=True))
@@ -198,14 +199,14 @@ class Generator(nn.Module):
 
 
 class MappingNetwork(nn.Module):
-    def __init__(self, latent_dim=16, style_dim=64, num_domains=2):
+    def __init__(self, latent_dim=16, style_dim=64, num_domains=2, hidden_dim=512):
         super().__init__()
         self.latent_dim = latent_dim
         layers = []
-        layers += [nn.Linear(latent_dim, 512)]
+        layers += [nn.Linear(latent_dim, hidden_dim)]
         layers += [nn.ReLU()]
         for _ in range(3):
-            layers += [nn.Linear(512, 512)]
+            layers += [nn.Linear(hidden_dim, hidden_dim)]
             layers += [nn.ReLU()]
         self.shared = nn.Sequential(*layers)
 
@@ -213,13 +214,13 @@ class MappingNetwork(nn.Module):
         for _ in range(num_domains):
             self.unshared += [
                 nn.Sequential(
-                    nn.Linear(512, 512),
+                    nn.Linear(hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Linear(512, 512),
+                    nn.Linear(hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Linear(512, 512),
+                    nn.Linear(hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Linear(512, style_dim),
+                    nn.Linear(hidden_dim, style_dim),
                 )
             ]
 
@@ -236,10 +237,16 @@ class MappingNetwork(nn.Module):
 
 class StyleEncoder(nn.Module):
     def __init__(
-        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+        self,
+        img_size=256,
+        style_dim=64,
+        num_domains=2,
+        max_conv_dim=512,
+        input_dim=3,
+        base_channels=None,
     ):
         super().__init__()
-        dim_in = 2**14 // img_size
+        dim_in = base_channels or 2**14 // img_size
 
         self.nearest_power = None
         if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
@@ -282,10 +289,16 @@ class StyleEncoder(nn.Module):
 
 class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
     def __init__(
-        self, img_size=256, style_dim=64, num_domains=2, max_conv_dim=512, input_dim=3
+        self,
+        img_size=256,
+        style_dim=64,
+        num_domains=2,
+        max_conv_dim=512,
+        input_dim=3,
+        base_channels=None,
     ):
         super().__init__()
-        dim_in = 2**14 // img_size
+        dim_in = base_channels or 2**14 // img_size
 
         self.nearest_power = None
         if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
@@ -321,9 +334,16 @@ class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, img_size=256, num_domains=2, max_conv_dim=512, input_dim=3):
+    def __init__(
+        self,
+        img_size=256,
+        num_domains=2,
+        max_conv_dim=512,
+        input_dim=3,
+        base_channels=None,
+    ):
         super().__init__()
-        dim_in = 2**14 // img_size
+        dim_in = base_channels or 2**14 // img_size
         blocks = []
         blocks += [nn.Conv2d(input_dim, dim_in, 3, 1, 1)]
 
@@ -345,71 +365,3 @@ class Discriminator(nn.Module):
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
         out = out[idx, y]  # (batch)
         return out
-
-
-def build_model(
-    img_size=128,
-    style_dim=64,
-    input_dim=3,
-    latent_dim=16,
-    num_domains=4,
-    single_output_style_encoder=False,
-    final_activation=None,
-    gpu_ids=[0],
-):
-    generator = nn.DataParallel(
-        Generator(
-            img_size, style_dim, input_dim=input_dim, final_activation=final_activation
-        ),
-        device_ids=gpu_ids,
-    )
-    mapping_network = nn.DataParallel(
-        MappingNetwork(latent_dim, style_dim, num_domains),
-        device_ids=gpu_ids,
-    )
-    if single_output_style_encoder:
-        print("Using single output style encoder")
-        style_encoder = nn.DataParallel(
-            SingleOutputStyleEncoder(
-                img_size,
-                style_dim,
-                num_domains,
-                input_dim=input_dim,
-            ),
-            device_ids=gpu_ids,
-        )
-    else:
-        style_encoder = nn.DataParallel(
-            StyleEncoder(
-                img_size,
-                style_dim,
-                num_domains,
-                input_dim=input_dim,
-            ),
-            device_ids=gpu_ids,
-        )
-    discriminator = nn.DataParallel(
-        Discriminator(img_size, num_domains, input_dim=input_dim),
-        device_ids=gpu_ids,
-    )
-    generator_ema = copy.deepcopy(generator)
-    mapping_network_ema = copy.deepcopy(mapping_network)
-    style_encoder_ema = copy.deepcopy(style_encoder)
-
-    nets = torch.nn.ModuleDict(
-        {
-            "generator": generator,
-            "mapping_network": mapping_network,
-            "style_encoder": style_encoder,
-            "discriminator": discriminator,
-        }
-    )
-
-    nets_ema = torch.nn.ModuleDict(
-        {
-            "generator": generator_ema,
-            "mapping_network": mapping_network_ema,
-            "style_encoder": style_encoder_ema,
-        }
-    )
-    return nets, nets_ema

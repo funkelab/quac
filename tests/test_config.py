@@ -1,36 +1,30 @@
-from quac.config import DataConfig
+from pathlib import Path
+
 import pytest
+from pydantic import ValidationError
+
+from quac.config import Config, load_config
 
 
-@pytest.fixture
-def source():
-    return "test_source"
+def test_minimal_config(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("data:\n  source: images\n")
+    config = load_config(path)
+    assert config.data.source == tmp_path / "images"
+    assert config.output.report == tmp_path / "quac-output/report.sqlite"
+    assert config.classifier.checkpoint is None
+    assert config.explanation.levels == 101
+    assert "img_size" not in config.generator.model_fields
 
 
-def test_default(source):
-    """By default, DataConfig should have rgb=True and grayscale=False."""
-    config = DataConfig(source=source)
-    assert config.rgb is True, "Default RGB should be True"
-    assert config.grayscale is False, "Default Grayscale should be False"
-
-
-def test_grayscale_true(source):
-    """
-    If we make a DataConfig with grayscale=True, that should set rgb=False.
-    """
-    config = DataConfig(source=source, grayscale=True)
-    assert config.rgb is False, "Grayscale should set RGB to False"
-
-
-@pytest.mark.xfail(
-    reason="This test is expected to fail due to both rgb and grayscale being set."
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"data": {"source": ".", "scale": 2}},
+        {"data": {"source": "."}, "explanation": {"levels": 1}},
+        {"data": {"source": "."}, "training": {"lr": -1}},
+    ],
 )
-def test_both_set():
-    """
-    If we make a DataConfig with both rgb and grayscale set, it should raise an error.
-    """
-    config = DataConfig(source=source, rgb=True, grayscale=True)
-    assert config.rgb != config.grayscale, "RGB and Grayscale should not be both True"
-
-    config = DataConfig(source=source, rgb=False, grayscale=False)
-    assert config.rgb != config.grayscale, "RGB and Grayscale should not be both False"
+def test_invalid_config(value):
+    with pytest.raises(ValidationError):
+        Config.model_validate(value)

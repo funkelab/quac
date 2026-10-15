@@ -1,144 +1,127 @@
-from pydantic import BaseModel, model_validator
-import quac.attribution
-from typing import Optional, Union, Literal
-import warnings
+"""Validated configuration shared by the Python API and command line."""
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+import yaml
 
 
-class ModelConfig(BaseModel):
-    img_size: int = 128
-    style_dim: int = 64
-    latent_dim: int = 16
-    num_domains: int = 5
-    input_dim: int = 3
-    final_activation: str = "tanh"
+class Settings(BaseModel):
+    """Reject misspelled settings rather than silently ignoring them."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
-class DataConfig(BaseModel):
-    source: str
-    img_size: int = 128
-    batch_size: int = 1
-    num_workers: int = 4
-    grayscale: bool = False
-    rgb: bool = True  # default based on model default
-    reference: Optional[str] = None
-    scale: Optional[float] = 2
-    shift: Optional[float] = -1
-    rand_crop_prob: Optional[float] = 0
+class DataConfig(Settings):
+    """Source directory containing one subdirectory per class."""
 
-    @model_validator(mode="before")
-    @classmethod
-    def handle_grayscale_rgb_logic(cls, data):
-        # If grayscale is explicitly set to True and rgb is not explicitly provided,
-        # set rgb to False
-        if data.get("grayscale") is True and "rgb" not in data:
-            data = data.copy()  # Don't mutate the original dict
-            data["rgb"] = False
-
-        # If rgb is explicitly set to True and grayscale is not explicitly provided,
-        # set grayscale to False
-        if data.get("rgb") is True and "grayscale" not in data:
-            data = data.copy()
-            data["grayscale"] = False
-
-        # If both are set to True or both are set to False, raise an error
-        if data.get("rgb") is True and data.get("grayscale") is True:
-            raise ValueError("Both rgb and grayscale cannot be True at the same time.")
-        if data.get("rgb") is False and data.get("grayscale") is False:
-            raise ValueError("Both rgb and grayscale cannot be False at the same time.")
-
-        return data
+    source: Path
 
 
-class RunConfig(BaseModel):
-    resume_iter: int = 0
-    total_iters: int = 100000
-    log_every: int = 1000
-    save_every: int = 10000
-    eval_every: int = 10000
+class GeneratorConfig(Settings):
+    """StarGAN architecture and translation sampling settings."""
+
+    kind: str = "stargan"
+    checkpoint: Path | None = None
+    sampling: Literal["latent", "reference"] = "latent"
+    style_dim: int = Field(64, ge=1)
+    latent_dim: int = Field(16, ge=1)
+    max_channels: int = Field(512, ge=1)
+    base_channels: int | None = Field(None, ge=1)
+    mapping_width: int = Field(512, ge=1)
 
 
-class ValConfig(BaseModel):
-    classifier_checkpoint: str
-    num_outs_per_domain: int = 10
-    scale: Optional[float] = 1.0
-    shift: Optional[float] = 0.0
-    img_size: int = 128
-    val_batch_size: int = 16
+class TrainingConfig(Settings):
+    """Optimization, logging, and checkpoint intervals."""
+
+    steps: int = Field(100000, ge=1)
+    batch_size: int = Field(4, ge=1)
+    lr: float = Field(1e-4, gt=0)
+    mapping_lr: float = Field(1e-6, gt=0)
+    beta1: float = Field(0.0, ge=0, lt=1)
+    beta2: float = Field(0.99, ge=0, lt=1)
+    weight_decay: float = Field(1e-4, ge=0)
+    lambda_style: float = Field(1.0, ge=0)
+    lambda_cycle: float = Field(1.0, ge=0)
+    lambda_reg: float = Field(1.0, ge=0)
+    ema_beta: float = Field(0.999, ge=0, lt=1)
+    log_every: int = Field(100, ge=1)
+    save_every: int = Field(10000, ge=1)
 
 
-class LossConfig(BaseModel):
-    lambda_sty: float = 1.0
-    lambda_cyc: float = 1.0
-    lambda_reg: float = 1.0
-    ds_iter: int = 100000
+class ClassifierConfig(Settings):
+    """TorchScript checkpoint returning logits in directory-label order."""
+
+    checkpoint: Path | None = None
 
 
-class SolverConfig(BaseModel):
-    root_dir: str
-    f_lr: float = 1e-6
-    lr: float = 1e-4
-    beta1: float = 0.0
-    beta2: float = 0.99
-    weight_decay: float = 1e-4
+class ExplanationConfig(Settings):
+    """Attribution and counterfactual evaluation parameters."""
+
+    methods: list[str] = Field(
+        default_factory=lambda: ["DIntegratedGradients"], min_length=1
+    )
+    samples: int = Field(3, ge=1)
+    levels: int = Field(101, ge=2)
+    sigma: float = Field(1.0, ge=0)
+    batch_size: int = Field(16, ge=1)
+    integration_steps: int = Field(50, ge=2)
 
 
-class WandBLogConfig(BaseModel):
-    project: str = "default"
-    name: str = "default"
-    notes: str = ""
-    tags: list = []
+class OutputConfig(Settings):
+    """Config-relative artifact locations."""
+
+    directory: Path = Path("quac-output")
+    report: Path | None = None
+    summary: Path | None = None
+    overwrite: bool = False
 
 
-class TensorboardLogConfig(BaseModel):
-    log_dir: str
-    comment: str = ""
+class SummaryConfig(Settings):
+    """Interactive summary layout."""
+
+    top_k: int = Field(5, ge=1)
 
 
-class AttributionConfig(BaseModel):
-    """
-    Attributions available
-    """
+class Config(Settings):
+    """Complete run configuration; only data.source is required for training."""
 
-    attributions: list = ["DIntegratedGradients", "DDeepLift"]
-
-    # Verify that the attributions are available
-    def __init__(self, **data):
-        super().__init__(**data)
-        for attr in self.attributions:
-            if not hasattr(quac.attribution, attr):
-                raise ValueError(
-                    f"Attribution {attr} is not available in quac.attribution"
-                )
-
-
-class ExperimentConfig(BaseModel):
-    # Metadata for keeping track of experiments
-    log_type: Literal["wandb", "tensorboard"] = "wandb"
-    log: Union[WandBLogConfig, TensorboardLogConfig] = WandBLogConfig()
-    # Some input required
     data: DataConfig
-    solver: SolverConfig
-    validation_data: DataConfig
-    validation_config: ValConfig
-    # No input required
-    model: ModelConfig = ModelConfig()
-    run: RunConfig = RunConfig()
-    loss: LossConfig = LossConfig()
-    attribution: AttributionConfig = AttributionConfig()
-    # Optional
-    test_data: Optional[DataConfig] = None
+    generator: GeneratorConfig = Field(default_factory=GeneratorConfig)
+    training: TrainingConfig = Field(default_factory=TrainingConfig)
+    classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)
+    explanation: ExplanationConfig = Field(default_factory=ExplanationConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
+    summary: SummaryConfig = Field(default_factory=SummaryConfig)
+    device: str = "auto"
+    seed: int = Field(0, ge=0)
+
+    def resolve_paths(self, base: Path) -> "Config":
+        """Return a copy with absolute paths relative to base."""
+        config = self.model_copy(deep=True)
+        for section, name in [
+            (config.data, "source"),
+            (config.generator, "checkpoint"),
+            (config.classifier, "checkpoint"),
+            (config.output, "directory"),
+            (config.output, "report"),
+            (config.output, "summary"),
+        ]:
+            path = getattr(section, name)
+            if path is not None:
+                setattr(section, name, (base / path).resolve())
+        config.output.report = (
+            config.output.report or config.output.directory / "report.sqlite"
+        )
+        config.output.summary = (
+            config.output.summary or config.output.directory / "summary.html"
+        )
+        return config
 
 
-def get_data_config(experiment, dataset="test"):
-    """
-    Choose a data configuration to use for training or testing.
-    If "test" is not available, use "validation".
-    """
-    dataset = dataset or "test"
-    if dataset == "train":
-        return experiment.data
-    elif dataset == "test":
-        if experiment.test_data:
-            return experiment.test_data
-        warnings.warn("No test data found, using validation data.")
-    return experiment.validation_data
+def load_config(path: str | Path = "config.yaml") -> Config:
+    """Read YAML and resolve artifact paths against its containing directory."""
+    path = Path(path).resolve()
+    with path.open() as stream:
+        return Config.model_validate(yaml.safe_load(stream)).resolve_paths(path.parent)
