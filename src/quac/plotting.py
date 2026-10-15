@@ -1,5 +1,3 @@
-"""Optional Plotly figures built entirely from SQLite report records."""
-
 from pathlib import Path
 
 import numpy as np

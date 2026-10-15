@@ -26,7 +26,7 @@ def test_signed_boundary_and_padding():
 
 
 @pytest.mark.parametrize("channels", [1, 3])
-def test_real_stargan_translation_and_legacy_checkpoint(tmp_path, channels):
+def test_real_stargan_translation_and_ema_checkpoint(tmp_path, channels):
     options = GeneratorConfig(
         style_dim=4, latent_dim=2, base_channels=4, max_channels=8, mapping_width=8
     )
@@ -36,7 +36,7 @@ def test_real_stargan_translation_and_legacy_checkpoint(tmp_path, channels):
         output = model.translate(image, torch.tensor([1]), reference)
         assert output.shape == image.shape
         assert 0 <= output.min() <= output.max() <= 1
-    path = tmp_path / "legacy.ckpt"
+    path = tmp_path / "ema.ckpt"
     torch.save(
         {
             name: (net.network if isinstance(net, ImageAdapter) else net).state_dict()

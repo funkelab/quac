@@ -1,5 +1,3 @@
-"""Shared reproducibility and device selection."""
-
 import random
 import numpy as np
 import torch

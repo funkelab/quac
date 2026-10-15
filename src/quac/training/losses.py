@@ -1,9 +1,3 @@
-"""StarGAN adversarial, style reconstruction, and cycle losses.
-
-Adapted from the existing QuAC StarGAN solver, based on NAVER StarGAN v2
-(Copyright 2020-present NAVER Corp., CC BY-NC 4.0).
-"""
-
 import torch
 from torch.nn import functional as F
 

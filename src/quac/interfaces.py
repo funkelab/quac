@@ -1,5 +1,3 @@
-"""Small contracts for replaceable generation and attribution components."""
-
 from typing import Protocol
 import torch
 

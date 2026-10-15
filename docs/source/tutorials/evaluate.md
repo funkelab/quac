@@ -20,6 +20,4 @@ Completed method sweeps are committed atomically; failed writes remove newly
 created image files. Interrupted/failed runs retain their completed records and failure
 status. Existing reports require explicit `output.overwrite: true` to replace.
 
-Keep the database and its image directory together when moving a report. Schema
-version 2 replaces image blobs with paths; regenerate earlier reports by rerunning
-`quac explain` with `output.overwrite: true`.
+Keep the database and its image directory together when moving a report.

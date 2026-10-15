@@ -1,5 +1,3 @@
-"""Pairwise attribution methods and classical Captum baselines."""
-
 import torch
 
 METHODS = (

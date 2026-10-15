@@ -1,5 +1,3 @@
-"""High-level training and explanation orchestration."""
-
 import hashlib
 from pathlib import Path
 

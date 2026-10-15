@@ -16,7 +16,7 @@ pip install '.[plot]'
 Arrange grayscale or RGB images in one directory per class. All images must have
 the same dimensions and channel count. Class indices follow sorted directory
 names. Floating images must already be finite and in `[0,1]`; integer images are
-scaled by their dtype maximum. QuAC never rescales images for the classifier.
+scaled by their dtype maximum. Classifiers receive float32 images in `[0,1]`.
 
 A source-only configuration is sufficient for generator training:
 
@@ -120,7 +120,7 @@ Common overrides:
 generator:
   kind: stargan
   sampling: latent  # or reference, sampled from the target class
-  # checkpoint: previous-run/checkpoints/latest.pt
+  # checkpoint: checkpoints/latest.pt
 training:
   steps: 100000
   batch_size: 4
@@ -136,8 +136,8 @@ summary:
 Available attribution methods are `DIntegratedGradients`, `DDeepLift`, `DInGrad`,
 `VanillaIntegratedGradients`, `VanillaDeepLift`, `residual`, and `random`.
 DeepLift requires a compatible eager PyTorch classifier; inject one through the
-Python API rather than using a TorchScript classifier. The default integrated
-gradients method works with the CLI's TorchScript contract.
+Python API. The default integrated gradients method works with the CLI's
+TorchScript contract.
 
 `quac.interfaces` defines the translator and attribution contracts. Python callers
 can inject `generator`, `classifier`, and a dictionary of `attributions` into
@@ -146,25 +146,15 @@ receive/return unit-range NCHW images, and attribution components receive CHW
 image pairs and return spatial HW or channel CHW importance. Register additional
 CLI generator factories in `quac.generators.build_generator`; training routines
 belong to the corresponding backend. Class count, channel count, and spatial
-size are inferred, never configured. StarGAN pads internally to a supported
+size are inferred from the dataset. StarGAN pads internally to a supported
 square size and crops its outputs back to the original dimensions.
 
-Native checkpoints contain trainable weights, EMA weights, optimizer states,
+Checkpoints contain trainable weights, EMA weights, optimizer states,
 architecture metadata, and CPU/CUDA RNG states. Set `generator.checkpoint` to resume
 training, with `training.steps` specifying the final step. It also selects the
-checkpoint for explanation. Compatible old EMA checkpoints can be used for
-inference when architecture parameters match; they cannot resume training.
+checkpoint for explanation.
 
-## Migration and development
-
-Version 0.3 replaces the old `ExperimentConfig`, filesystem generation/evaluation
-pipeline, `Explanation`, and JSON `Report` APIs. Use the commands and query API
-above. Old JSON reports and configs are not automatically migrated; rerun
-explanation to capture the full threshold sweep. The old area-minus-delta optimum
-and AUC-based exemplar ranking have been replaced by the definitions above.
-`examples/two_domains` replaces `example_experiment`.
-SQLite schema version 2 uses external image files. Regenerate earlier blob-based
-reports with `quac explain` and `output.overwrite: true`.
+## Development
 
 ```sh
 pip install -e '.[dev,plot]'
@@ -180,7 +170,6 @@ playwright install chromium
 QUAC_BROWSER_TESTS=1 pytest tests/test_browser.py
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) for implementation stages and verification.
-The StarGAN implementation is adapted from NAVER's StarGAN v2; its original
-license notices are retained. Project documentation is at
+The StarGAN implementation is adapted from NAVER's StarGAN v2; see [NOTICE](NOTICE).
+Project documentation is at
 https://funkelab.github.io/quac/.

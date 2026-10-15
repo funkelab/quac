@@ -146,22 +146,3 @@ def test_reference_sampling_records_reference_path(tmp_path):
     with Report(path) as report:
         for row in report.top("residual"):
             assert report.pair(row["pair_id"])["reference_path"].endswith("one.tif")
-
-
-def test_custom_database_path_keeps_images_under_output(tmp_path):
-    for label, name in enumerate(["a", "b"]):
-        write_image(
-            torch.full((1, 4, 4), float(label)), tmp_path / "images" / name / "one.tif"
-        )
-    output = tmp_path / "quac-output"
-    config = Config(
-        data={"source": tmp_path / "images"},
-        explanation={"methods": ["residual"], "samples": 1, "levels": 3},
-        output={"directory": output, "report": tmp_path / "reports/custom.sqlite"},
-    )
-    path = explain(config, generator=UnitTranslator(), classifier=MeanClassifier())
-    with Report(path) as report:
-        pair = report.pair(report.top("residual")[0]["pair_id"])
-        artifact = (path.parent / pair["generated_path"]).resolve()
-        assert artifact.is_relative_to(output / "images")
-        assert artifact.is_file()

@@ -1,5 +1,3 @@
-"""Command line entry point for the three stages of QuAC."""
-
 import argparse
 import sys
 import sqlite3

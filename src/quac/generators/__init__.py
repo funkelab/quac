@@ -1,6 +1,3 @@
-"""Generator factories, kept independent of pipeline orchestration."""
-
-
 def build_generator(dataset, config, device):
     """Construct the configured generator; custom Python callers may inject their own."""
     if config.kind != "stargan":

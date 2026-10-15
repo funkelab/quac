@@ -1,5 +1,3 @@
-"""Image I/O and class-directory discovery with a single [0,1] contract."""
-
 from dataclasses import dataclass
 from pathlib import Path
 

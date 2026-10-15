@@ -1,5 +1,3 @@
-"""StarGAN backend; signed image values never leave these network adapters."""
-
 import copy
 from pathlib import Path
 
@@ -129,7 +127,7 @@ class StarGAN:
         temporary.replace(path)
 
     def load(self, path: Path) -> dict:
-        """Load a native checkpoint or compatible legacy EMA state dictionaries."""
+        """Load checkpoint weights and validate architecture metadata."""
         payload = torch.load(path, map_location=self.device, weights_only=True)
         try:
             if "version" in payload:

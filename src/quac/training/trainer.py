@@ -1,5 +1,3 @@
-"""Optimization and checkpoint scheduling for the StarGAN backend."""
-
 import torch
 
 from .losses import discriminator_loss, generator_loss
@@ -19,7 +17,7 @@ def _step(loss, optimizers, names):
 
 
 def train_stargan(model, dataset, config, directory):
-    """Train latent/reference branches and save resumable native checkpoints."""
+    """Train latent/reference branches and save resumable checkpoints."""
     options = config.training
     nets = model.nets
     optimizers = {
@@ -36,7 +34,7 @@ def train_stargan(model, dataset, config, directory):
         payload = model.load(config.generator.checkpoint)
         if "optimizers" not in payload:
             raise ValueError(
-                "Legacy EMA checkpoints support inference only; training requires a native checkpoint"
+                "Resuming training requires a checkpoint with optimizer states"
             )
         for name, optimizer in optimizers.items():
             optimizer.load_state_dict(payload["optimizers"][name])

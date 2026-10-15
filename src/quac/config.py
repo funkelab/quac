@@ -1,5 +1,3 @@
-"""Validated configuration shared by the Python API and command line."""
-
 from pathlib import Path
 from typing import Literal
 
@@ -8,7 +6,7 @@ import yaml
 
 
 class Settings(BaseModel):
-    """Reject misspelled settings rather than silently ignoring them."""
+    """Validate configuration keys."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

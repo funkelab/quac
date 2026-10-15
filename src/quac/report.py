@@ -1,5 +1,3 @@
-"""SQLite report queries with image artifacts stored on the filesystem."""
-
 from contextlib import AbstractContextManager
 from io import BytesIO
 import json
@@ -63,9 +61,7 @@ class Report(AbstractContextManager):
             != SCHEMA_VERSION
         ):
             self.close()
-            raise ValueError(
-                "Unsupported report schema version; rerun explain to create a filesystem-backed report"
-            )
+            raise ValueError("Unsupported report schema version")
 
     @classmethod
     def create(cls, path, metadata, overwrite=False, *, image_directory=None):

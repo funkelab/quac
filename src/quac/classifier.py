@@ -1,5 +1,3 @@
-"""Classifier loading and batched inference without image rescaling."""
-
 from pathlib import Path
 import torch
 

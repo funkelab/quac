@@ -1,10 +1,3 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 from datetime import datetime
 
 
@@ -22,8 +15,6 @@ version = quac.__version__
 release = quac.__version__
 copyright = f"{datetime.now().year}, {author_list}"
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
     "jupyter_sphinx",
@@ -49,9 +40,6 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
 html_theme = "sphinx_rtd_theme"
 html_logo = "assets/quac.png"
 html_static_path = ["_static"]
@@ -63,7 +51,6 @@ togglebutton_hint_hide = ""
 
 pygments_style = "arduino"
 
-# Napoleon settings
 napoleon_google_docstring = True
 
 intersphinx_mapping = {
@@ -72,5 +59,4 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
 }
 
-# Email
 email_automode = True

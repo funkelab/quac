@@ -1,5 +1,3 @@
-"""Quantitative Attribution with Counterfactuals."""
-
 __version__ = "0.3.0"
 
 

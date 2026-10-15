@@ -3,8 +3,8 @@
 Put images in one subdirectory per class. Classes are ordered alphabetically.
 Images must share their dimensions and grayscale/RGB channel count; these are
 inferred automatically. Floating-point images must be finite in `[0,1]`.
-Integer images are scaled by their dtype maximum. There is no per-image min/max
-normalization. Float TIFF preserves full precision.
+Integer images are scaled by their dtype maximum. Floating-point images retain their values.
+Float TIFF preserves full precision.
 
 ```yaml
 data:

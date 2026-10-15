@@ -1,5 +1,3 @@
-"""Create two image domains and a matching TorchScript classifier without downloads."""
-
 import argparse
 from pathlib import Path
 
@@ -34,7 +32,9 @@ def generate(directory: Path, count: int = 8):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Generate two image domains and a classifier."
+    )
     parser.add_argument("--directory", type=Path, default=Path(__file__).parent)
     parser.add_argument("--count", type=int, default=8)
     args = parser.parse_args()

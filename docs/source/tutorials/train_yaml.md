@@ -18,5 +18,5 @@ mapping-network learning rate 0.000001, and EMA beta 0.999. Override values unde
 `quac.config.Config.model_json_schema()` for all fields and defaults.
 
 The final checkpoint is `quac-output/checkpoints/latest.pt`. To resume, set
-`generator.checkpoint` to a native checkpoint and increase `training.steps` to the
+`generator.checkpoint` to a checkpoint and increase `training.steps` to the
 desired final step. Configurations reject unknown keys.

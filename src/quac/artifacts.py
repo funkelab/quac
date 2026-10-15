@@ -1,5 +1,3 @@
-"""Lossless image artifacts addressed relative to a report database."""
-
 from contextlib import contextmanager
 import os
 from pathlib import Path

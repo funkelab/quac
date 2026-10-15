@@ -1,5 +1,3 @@
-"""Optional real-browser checks: QUAC_BROWSER_TESTS=1 pytest tests/test_browser.py."""
-
 import os
 
 import pytest

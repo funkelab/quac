@@ -1,5 +1,3 @@
-"""Area-controlled masking, blending, and counterfactual scoring."""
-
 from dataclasses import dataclass
 
 import numpy as np
