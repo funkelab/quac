@@ -23,7 +23,7 @@ def test_summary_contains_independent_sliders_and_method_frames(report_path):
 
 
 def test_html_is_self_contained(report_path):
-    # Remove all source images before building the summary.
+    # Remove the original dataset; the report references copies under output/images.
     for image in report_path.parent.parent.glob("images/*/*.tif"):
         image.unlink()
     path = write_summary(report_path, report_path.with_suffix(".html"), top_k=1)

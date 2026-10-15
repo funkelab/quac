@@ -13,7 +13,13 @@ Delta is the change in target probability. The optimum maximizes delta divided b
 positive binary area, with ties favoring smaller masks. Exemplars are ranked by
 optimal delta. Curve AUC is stored separately.
 
-`report.sqlite` stores every image, attribution, threshold mask, counterfactual,
-logit, probability, delta, and run metadata. Completed method sweeps are committed
-atomically. Interrupted/failed runs retain their completed records and failure
+`report.sqlite` stores logits, probabilities, deltas, metadata, and relative paths
+to image artifacts. Originals, generated images, attribution maps, masks, and
+counterfactuals are saved as lossless TIFF files under `quac-output/images`.
+Completed method sweeps are committed atomically; failed writes remove newly
+created image files. Interrupted/failed runs retain their completed records and failure
 status. Existing reports require explicit `output.overwrite: true` to replace.
+
+Keep the database and its image directory together when moving a report. Schema
+version 2 replaces image blobs with paths; regenerate earlier reports by rerunning
+`quac explain` with `output.overwrite: true`.

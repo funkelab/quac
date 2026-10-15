@@ -42,7 +42,7 @@ def train(config: Config) -> Path:
 def explain(
     config: Config, *, generator=None, classifier=None, attributions=None
 ) -> Path:
-    """Run every pair/method and persist a self-contained report; components may be injected."""
+    """Run every pair/method and persist a report and its image artifacts; components may be injected."""
     config = config.resolve_paths(Path.cwd())
     device = initialize(config)
     if classifier is None and config.classifier.checkpoint is None:
@@ -91,7 +91,10 @@ def explain(
         optimum="max(delta / positive_binary_area)",
     )
     with Report.create(
-        config.output.report, metadata, config.output.overwrite
+        config.output.report,
+        metadata,
+        config.output.overwrite,
+        image_directory=config.output.directory / "images",
     ) as report:
         try:
             _explain_pairs(

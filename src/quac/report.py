@@ -1,4 +1,4 @@
-"""Self-contained SQLite reports and queries; no plotting or model dependencies."""
+"""SQLite report queries with image artifacts stored on the filesystem."""
 
 from contextlib import AbstractContextManager
 from io import BytesIO
@@ -9,24 +9,26 @@ import zlib
 
 import numpy as np
 
-SCHEMA_VERSION = 1
+from .artifacts import ImageStore
+
+SCHEMA_VERSION = 2
 SCHEMA = """
 CREATE TABLE run (id INTEGER PRIMARY KEY CHECK(id=1), metadata TEXT NOT NULL,
                   status TEXT NOT NULL, error TEXT);
 CREATE TABLE pair (
     id INTEGER PRIMARY KEY, source_path TEXT NOT NULL, source INTEGER NOT NULL,
     target INTEGER NOT NULL, sample INTEGER NOT NULL, reference_path TEXT,
-    original BLOB NOT NULL, generated BLOB NOT NULL,
+    original_path TEXT NOT NULL, generated_path TEXT NOT NULL,
     original_logits BLOB NOT NULL, original_probabilities BLOB NOT NULL,
     generated_logits BLOB NOT NULL, generated_probabilities BLOB NOT NULL);
 CREATE TABLE explanation (
     id INTEGER PRIMARY KEY, pair_id INTEGER NOT NULL REFERENCES pair(id),
-    method TEXT NOT NULL, attribution BLOB NOT NULL, optimal_index INTEGER NOT NULL,
+    method TEXT NOT NULL, attribution_path TEXT NOT NULL, optimal_index INTEGER NOT NULL,
     optimal_delta REAL NOT NULL, auc REAL NOT NULL, UNIQUE(pair_id, method));
 CREATE TABLE threshold (
     explanation_id INTEGER NOT NULL REFERENCES explanation(id),
     idx INTEGER NOT NULL, area REAL NOT NULL, cutoff REAL NOT NULL,
-    mask BLOB NOT NULL, image BLOB NOT NULL, logits BLOB NOT NULL,
+    mask_path TEXT NOT NULL, image_path TEXT NOT NULL, logits BLOB NOT NULL,
     probabilities BLOB NOT NULL, delta REAL NOT NULL,
     PRIMARY KEY(explanation_id, idx));
 CREATE INDEX ranking ON explanation(method, optimal_delta DESC);
@@ -50,7 +52,8 @@ class Report(AbstractContextManager):
     """Query a report read-only, or create it explicitly through Report.create."""
 
     def __init__(self, path: str | Path):
-        self.path = Path(path)
+        self.path = Path(path).resolve()
+        self.images = ImageStore(self.path)
         self.connection = sqlite3.connect(
             self.path.resolve().as_uri() + "?mode=ro", uri=True
         )
@@ -60,12 +63,14 @@ class Report(AbstractContextManager):
             != SCHEMA_VERSION
         ):
             self.close()
-            raise ValueError("Unsupported report schema version")
+            raise ValueError(
+                "Unsupported report schema version; rerun explain to create a filesystem-backed report"
+            )
 
     @classmethod
-    def create(cls, path, metadata, overwrite=False):
+    def create(cls, path, metadata, overwrite=False, *, image_directory=None):
         """Create an empty report, refusing to overwrite unless explicitly requested."""
-        path = Path(path)
+        path = Path(path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             if not overwrite:
@@ -75,6 +80,10 @@ class Report(AbstractContextManager):
             path.unlink()
         report = cls.__new__(cls)
         report.path = path
+        report.images = ImageStore(
+            path,
+            Path(image_directory).resolve() if image_directory is not None else None,
+        )
         report.connection = sqlite3.connect(path)
         report.connection.row_factory = sqlite3.Row
         report.connection.execute("PRAGMA foreign_keys=ON")
@@ -121,8 +130,8 @@ class Report(AbstractContextManager):
         generated_probabilities,
         reference_path=None,
     ) -> int:
-        """Store images and predictions once for all methods evaluating the pair."""
-        with self.connection:
+        """Write pair images to disk and record their paths and predictions."""
+        with self.images.batch() as directory, self.connection:
             cursor = self.connection.execute(
                 "INSERT INTO pair VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -131,8 +140,8 @@ class Report(AbstractContextManager):
                     target,
                     sample,
                     str(reference_path) if reference_path else None,
-                    pack(original),
-                    pack(generated),
+                    self.images.write(directory / "original.tif", original),
+                    self.images.write(directory / "generated.tif", generated),
                     pack(original_logits),
                     pack(original_probabilities),
                     pack(generated_logits),
@@ -142,14 +151,14 @@ class Report(AbstractContextManager):
         return cursor.lastrowid
 
     def add_explanation(self, pair_id, method, attribution, result) -> int:
-        """Atomically store a complete method sweep, including every image and prediction."""
-        with self.connection:
+        """Commit a complete sweep and its image paths; discard artifacts on failure."""
+        with self.images.batch() as directory, self.connection:
             cursor = self.connection.execute(
                 "INSERT INTO explanation VALUES (NULL,?,?,?,?,?,?)",
                 (
                     pair_id,
                     method,
-                    pack(attribution),
+                    self.images.write(directory / "attribution.tif", attribution),
                     result.optimal_index,
                     float(result.deltas[result.optimal_index]),
                     result.auc,
@@ -164,8 +173,13 @@ class Report(AbstractContextManager):
                         index,
                         float(area),
                         float(result.cutoffs[index]),
-                        pack(result.masks[index]),
-                        pack(result.images[index]),
+                        self.images.write(
+                            directory / f"{index:04d}-mask.tif", result.masks[index]
+                        ),
+                        self.images.write(
+                            directory / f"{index:04d}-counterfactual.tif",
+                            result.images[index],
+                        ),
                         pack(result.logits[index]),
                         pack(result.probabilities[index]),
                         float(result.deltas[index]),
@@ -202,16 +216,16 @@ class Report(AbstractContextManager):
         return [dict(row) for row in self.connection.execute(query, [*parameters, k])]
 
     def pair(self, pair_id: int) -> dict:
-        """Read stored source/generated images and exact predictions."""
+        """Read pair images from their stored paths and decode exact predictions."""
         row = self.connection.execute(
             "SELECT * FROM pair WHERE id=?", (pair_id,)
         ).fetchone()
         if row is None:
             raise KeyError(pair_id)
         result = dict(row)
+        for key in ("original", "generated"):
+            result[key] = self.images.read(result[f"{key}_path"])
         for key in (
-            "original",
-            "generated",
             "original_logits",
             "original_probabilities",
             "generated_logits",
@@ -221,14 +235,16 @@ class Report(AbstractContextManager):
         return result
 
     def thresholds(self, explanation_id: int) -> list[dict]:
-        """Read the complete ordered sweep for an interactive exemplar."""
+        """Read the ordered sweep, loading masks and counterfactuals from disk."""
         result = []
         for row in self.connection.execute(
             "SELECT * FROM threshold WHERE explanation_id=? ORDER BY idx",
             (explanation_id,),
         ):
             record = dict(row)
-            for key in ("mask", "image", "logits", "probabilities"):
+            record["mask"] = self.images.read(record["mask_path"], spatial=True)
+            record["image"] = self.images.read(record["image_path"])
+            for key in ("logits", "probabilities"):
                 record[key] = unpack(record[key])
             result.append(record)
         return result

@@ -33,3 +33,11 @@
 - Ignore generated example and packaging artifacts.
 - Validation: ran the installed commands through all 50 training steps and explanation on all 16 example images, producing 64 explanations and 1,344 threshold records; generated the standalone HTML successfully. The short run demonstrates execution, not generator convergence.
 - Final checks: 45 standard tests passed (two browser tests skipped in that run); both browser tests also passed separately. Black and git whitespace checks passed. Wheel and editable package builds passed.
+
+## 5. Filesystem image artifacts
+
+- Moved originals, generated images, counterfactuals, masks, and attribution maps to lossless TIFF files under the configured output directory's `images` subdirectory.
+- SQLite schema version 2 stores relative image paths; logits, probabilities, scores, and metadata remain in the database. Older blob-based reports must be regenerated.
+- Report readers resolve paths relative to the database. Move the database and image directory together; exported HTML remains standalone.
+- Failed file writes or database transactions discard the newly created artifact batch without disturbing committed images.
+- Validation: 53 standard tests passed and both Chromium interaction tests passed. Added coverage for exact grayscale/RGB/map round trips, SQL path columns, report relocation, custom database locations, missing files, and failed-write cleanup. Black and whitespace checks passed.

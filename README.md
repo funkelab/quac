@@ -2,8 +2,8 @@
 
 QuAC explains image classifiers by translating real images into another class,
 computing pairwise attribution maps, and blending progressively larger regions
-from each translation into the original. A SQLite report stores every evaluated
-counterfactual and prediction for later inspection.
+from each translation into the original. A SQLite report stores scores, predictions, and paths to image files for later
+inspection. Image artifacts live alongside it under `quac-output/images`.
 
 Install with Python 3.10–3.12:
 
@@ -90,11 +90,14 @@ figure = summarize(path, top_k=5)
 write_summary(path, "summary.html", top_k=5)
 ```
 
-The report contains source/generated images, normalized attribution maps, all
-threshold masks and counterfactual images, exact logits and probabilities,
-source/target labels, optimal selections, curve AUCs, resolved configuration,
-model hashes, and completion/failure status. It remains usable after input
-images and models are moved or deleted. Readers open databases read-only.
+SQLite stores relative paths to lossless TIFF files for source/generated images,
+attribution maps, threshold masks, and counterfactuals. These files live under
+`quac-output/images`; exact logits and probabilities, labels, optimal selections,
+curve AUCs, resolved configuration, model hashes, and run status stay in SQLite.
+The report API loads the referenced files when returning images. Keep the database
+and its image directory together when moving or sharing a report. Original input
+images and model checkpoints can be moved or deleted. Database readers are
+read-only, and exported HTML summaries remain standalone.
 
 For every pair, pixels are ranked by spatial attribution importance. Masks select
 equidistant binary areas (stable row-major ordering breaks importance ties), then
@@ -160,6 +163,8 @@ above. Old JSON reports and configs are not automatically migrated; rerun
 explanation to capture the full threshold sweep. The old area-minus-delta optimum
 and AUC-based exemplar ranking have been replaced by the definitions above.
 `examples/two_domains` replaces `example_experiment`.
+SQLite schema version 2 uses external image files. Regenerate earlier blob-based
+reports with `quac explain` and `output.overwrite: true`.
 
 ```sh
 pip install -e '.[dev,plot]'

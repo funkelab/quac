@@ -13,8 +13,11 @@ changes attribution methods and refreshes the exemplars and median curve with
 
 Set `summary.top_k` to change the number of exemplars (default five). Python users
 can call `quac.plotting.summarize(path, top_k=5)` to obtain a Plotly figure, or
-`write_summary(path, output_path, top_k=5)` to write HTML. The report alone is
-sufficient; images and models are not read or recomputed.
+`write_summary(path, output_path, top_k=5)` to write HTML. Summary generation reads
+image files referenced by the database under `quac-output/images`. Keep that
+directory with the report. The original dataset and models are unnecessary;
+no counterfactuals or predictions are recomputed. Once exported, the HTML needs
+no external files.
 
 ```python
 from quac.report import Report
