@@ -10,7 +10,7 @@ import yaml
 class Settings(BaseModel):
     """Reject misspelled settings rather than silently ignoring them."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 class DataConfig(Settings):

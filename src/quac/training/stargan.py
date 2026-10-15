@@ -287,52 +287,6 @@ class StyleEncoder(nn.Module):
         return s
 
 
-class SingleOutputStyleEncoder(StyleEncoder, nn.Module):
-    def __init__(
-        self,
-        img_size=256,
-        style_dim=64,
-        num_domains=2,
-        max_conv_dim=512,
-        input_dim=3,
-        base_channels=None,
-    ):
-        super().__init__()
-        dim_in = base_channels or 2**14 // img_size
-
-        self.nearest_power = None
-        if np.ceil(np.log2(img_size)) != np.floor(np.log2(img_size)):  # Not power of 2
-            self.nearest_power = int(np.log2(img_size))
-
-        blocks = []
-        blocks += [nn.Conv2d(input_dim, dim_in, 3, 1, 1)]
-
-        repeat_num = int(np.log2(img_size)) - 2
-        for _ in range(repeat_num):
-            # For img_size = 224, repeat_num = 5, dim_out = 256, 512, 512, 512, 512
-            dim_out = min(dim_in * 2, max_conv_dim)
-            blocks += [ResBlk(dim_in, dim_out, downsample=True)]
-            dim_in = dim_out
-
-        blocks += [nn.LeakyReLU(0.2)]
-        blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
-        blocks += [nn.LeakyReLU(0.2)]
-        self.shared = nn.Sequential(*blocks)
-
-        # Making this shared again, to try to learn new things from data
-        self.output = nn.Linear(dim_out, style_dim)
-
-    def forward(self, x, y):
-        if self.nearest_power is not None:
-            # Required for img_size=224 in the retina case
-            # Resize input image to nearest power of 2
-            x = F.interpolate(x, size=2**self.nearest_power, mode="bilinear")
-        h = self.shared(x)
-        h = h.view(h.size(0), -1)
-        s = self.output(h)
-        return s
-
-
 class Discriminator(nn.Module):
     def __init__(
         self,

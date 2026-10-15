@@ -1,7 +1,6 @@
 """Pairwise attribution methods and classical Captum baselines."""
 
 import torch
-from captum import attr
 
 METHODS = (
     "DIntegratedGradients",
@@ -33,6 +32,10 @@ class PairAttribution:
     def __init__(self, classifier, method: str, integration_steps: int = 50):
         if method not in METHODS:
             raise ValueError(f"Unknown attribution {method}; choose from {METHODS}")
+        if "DeepLift" in method and isinstance(classifier, torch.jit.ScriptModule):
+            raise ValueError(
+                "DeepLift requires an eager PyTorch classifier; inject classifier= into explain"
+            )
         self.classifier = classifier
         self.method = method
         self.integration_steps = integration_steps
@@ -43,6 +46,8 @@ class PairAttribution:
             return normalize(real - generated)
         if self.method == "random":
             return normalize(torch.rand_like(real))
+        from captum import attr
+
         image = real[None].detach().requires_grad_(True)
         baseline = generated[None].detach() if self.method.startswith("D") else 0
         self.classifier.zero_grad(set_to_none=True)

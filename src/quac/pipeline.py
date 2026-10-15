@@ -9,7 +9,7 @@ import torch
 from .attribution import METHODS, PairAttribution, normalize
 from .classifier import load_classifier, predict
 from .config import Config
-from .data import ImageDataset
+from .data import ImageDataset, validate_image
 from .evaluation import evaluate
 from .generators import build_generator
 from .report import Report
@@ -128,6 +128,7 @@ def _explain_pairs(
                     generated = generator.translate(
                         real[None], torch.tensor([target], device=device), reference
                     )[0].detach()
+                validate_image(generated)
                 generated_logits, generated_probs = predict(
                     classifier, generated[None], len(dataset.classes)
                 )

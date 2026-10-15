@@ -79,3 +79,21 @@ def test_attributions_are_finite(method):
 
 def test_constant_attribution():
     assert torch.equal(normalize(torch.ones(3, 4, 4)), torch.zeros(4, 4))
+
+
+@pytest.mark.parametrize("method", ["DDeepLift", "VanillaDeepLift"])
+def test_deeplift_eager_baselines(method):
+    classifier = torch.nn.Sequential(
+        torch.nn.Flatten(), torch.nn.Linear(16, 2), torch.nn.ReLU()
+    )
+    importance = PairAttribution(classifier, method).attribute(
+        torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
+    )
+    assert torch.isfinite(importance).all()
+    assert importance.shape == (4, 4)
+
+
+def test_deeplift_torchscript_error_is_actionable():
+    classifier = torch.jit.script(MeanClassifier())
+    with pytest.raises(ValueError, match="eager"):
+        PairAttribution(classifier, "DDeepLift")

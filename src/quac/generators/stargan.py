@@ -120,6 +120,9 @@ class StarGAN:
             ema=self.ema.state_dict(),
             optimizers={name: opt.state_dict() for name, opt in optimizers.items()},
             rng=torch.get_rng_state(),
+            rng_cuda=(
+                torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []
+            ),
         )
         temporary = path.with_suffix(".tmp")
         torch.save(payload, temporary)

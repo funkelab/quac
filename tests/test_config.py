@@ -14,7 +14,7 @@ def test_minimal_config(tmp_path):
     assert config.output.report == tmp_path / "quac-output/report.sqlite"
     assert config.classifier.checkpoint is None
     assert config.explanation.levels == 101
-    assert "img_size" not in config.generator.model_fields
+    assert "img_size" not in type(config.generator).model_fields
 
 
 @pytest.mark.parametrize(

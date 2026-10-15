@@ -42,6 +42,8 @@ def train_stargan(model, dataset, config, directory):
             optimizer.load_state_dict(payload["optimizers"][name])
         start = payload["step"]
         torch.set_rng_state(payload["rng"].cpu())
+        if model.device.type == "cuda" and payload.get("rng_cuda"):
+            torch.cuda.set_rng_state_all([state.cpu() for state in payload["rng_cuda"]])
         if start >= options.steps:
             raise ValueError("training.steps must exceed the resumed checkpoint step")
     class_indices = [dataset.indices(i) for i in range(len(dataset.classes))]

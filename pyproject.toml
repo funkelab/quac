@@ -6,7 +6,7 @@ requires = ["setuptools", "wheel"]
 name = "quac"
 description = "Quantitative Attribution with Counterfactuals"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 classifiers = ["Programming Language :: Python :: 3"]
 keywords = []
 license = { text = "BSD 3-Clause License" }
@@ -18,20 +18,23 @@ dynamic = ["version"]
 dependencies = [
   "captum",
   "numpy>=2.0",
-  "torch==2.4.0",
-  "torchvision",
-  "funlib.learn.torch@git+https://github.com/funkelab/funlib.learn.torch",
-  "opencv-python",
-  "pydantic",
+  "torch",
   "scipy",
-  "scikit-learn",
+  "pydantic>=2",
   "imageio>=2.37.0,<3",
-  "scikit-image>=0.24.0,<0.25",
-  "pandas>=2.2.3,<3",
-  "pyyaml"
+  "pillow",
+  "tifffile",
+  "pyyaml",
 ]
 
+[project.scripts]
+quac = "quac.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "quac.__version__"}
+
 [project.optional-dependencies]
+plot = ['plotly>=5', 'pillow']
 dev = ['pytest', 'black', 'mypy', 'pdoc', 'pre-commit']
 docs = [
   "ipykernel",
