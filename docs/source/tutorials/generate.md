@@ -1,12 +1,13 @@
-# Sample translations
+# Generate images
 
-`quac explain` samples translations and evaluates them in one pipeline. Set
-`generator.sampling` to `latent` (default) or `reference`. References are sampled
-from the target class. `explanation.samples` defaults to three translations per
-image and other target class. Each generated pair is shared across all configured
-attribution methods.
+`quac explain` generates images and evaluates counterfactuals in one pipeline.
+Set `generator.sampling` to `latent` (default) or `reference`. Reference images
+are sampled from the target class. `explanation.samples` defaults to three
+generated images per source image and other target class. Each source/generated
+image pair is shared across all configured attribution methods.
 
-For Python extensions, implement the `quac.interfaces.Translator` contract and
-pass an instance as `explain(config, generator=translator)`. The interface accepts
-unit-range NCHW images, target labels, and an optional reference batch, and returns
-unit-range NCHW translated images.
+For Python extensions, implement the `quac.interfaces.ImageGenerator` contract
+and pass an instance as `explain(config, generator=generator)`. Its `generate`
+method accepts source images as unit-range NCHW tensors, target-class indices,
+and an optional batch of reference images. It returns generated images as
+unit-range NCHW tensors.

@@ -23,20 +23,24 @@ def test_report_queries_and_complete_sweeps(report_path):
         top = report.top("residual", k=10)
         assert len(top) == 2
         assert top[0]["optimal_delta"] >= top[1]["optimal_delta"]
-        assert len(report.top("residual", source=0, target=1)) == 1
+        assert len(report.top("residual", source_class=0, target_class=1)) == 1
         for row in top:
             pair = report.pair(row["pair_id"])
             records = report.thresholds(row["id"])
             assert len(records) == 5
             assert records[row["optimal_index"]]["delta"] == row["optimal_delta"]
-            np.testing.assert_array_equal(records[0]["image"], pair["original"])
-            np.testing.assert_array_equal(records[-1]["image"], pair["generated"])
+            np.testing.assert_array_equal(
+                records[0]["counterfactual"], pair["source_image"]
+            )
+            np.testing.assert_array_equal(
+                records[-1]["counterfactual"], pair["generated_image"]
+            )
             for record in records:
                 assert record["logits"].shape == record["probabilities"].shape == (2,)
                 assert np.isclose(
                     record["delta"],
-                    record["probabilities"][pair["target"]]
-                    - pair["original_probabilities"][pair["target"]],
+                    record["probabilities"][pair["target_class"]]
+                    - pair["source_probabilities"][pair["target_class"]],
                 )
         grid, median, p25, p75 = report.curve("residual")
         assert grid.shape == median.shape == (101,)
@@ -81,7 +85,7 @@ def test_failed_explanation_rolls_back_sweep(report_path):
         areas=[0, 1],
         cutoffs=[0],
         masks=[np.zeros((4, 4))],
-        images=[np.zeros((1, 4, 4))],
+        counterfactuals=[np.zeros((1, 4, 4))],
         logits=[np.zeros(2)],
         probabilities=[np.zeros(2)],
     )

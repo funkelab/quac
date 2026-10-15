@@ -10,7 +10,7 @@ from quac.training.stargan import Generator, MappingNetwork, StyleEncoder, Discr
 
 
 class ImageAdapter(nn.Module):
-    """Pad and scale unit-range inputs; optionally undo generator output scaling."""
+    """Pad and scale network inputs; restore generated images to [0,1]."""
 
     def __init__(self, network: nn.Module, size: int, generates: bool = False):
         super().__init__()
@@ -33,7 +33,7 @@ class ImageAdapter(nn.Module):
 
 
 class StarGAN:
-    """Own trainable networks and EMA networks for translation."""
+    """Own trainable and EMA networks for image generation."""
 
     def __init__(
         self,
@@ -85,16 +85,16 @@ class StarGAN:
         )
 
     @torch.no_grad()
-    def translate(self, images, targets, reference=None):
-        """Sample EMA translations using a reference image or a fresh latent code."""
-        if reference is None:
+    def generate(self, source_images, target_classes, reference_images=None):
+        """Generate images with EMA weights using a reference image or a fresh latent code."""
+        if reference_images is None:
             latent = torch.randn(
-                len(images), self.config.latent_dim, device=self.device
+                len(source_images), self.config.latent_dim, device=self.device
             )
-            style = self.ema["mapping_network"](latent, targets)
+            style = self.ema["mapping_network"](latent, target_classes)
         else:
-            style = self.ema["style_encoder"](reference, targets)
-        return self.ema["generator"](images, style)
+            style = self.ema["style_encoder"](reference_images, target_classes)
+        return self.ema["generator"](source_images, style)
 
     @torch.no_grad()
     def update_ema(self, beta: float):

@@ -12,9 +12,9 @@ class MeanClassifier(torch.nn.Module):
         return torch.stack([1 - value, value], dim=1)
 
 
-class UnitTranslator:
-    def translate(self, images, targets, reference=None):
-        return targets[:, None, None, None].float().expand_as(images)
+class UnitGenerator:
+    def generate(self, source_images, target_classes, reference_images=None):
+        return target_classes[:, None, None, None].float().expand_as(source_images)
 
 
 @pytest.fixture
@@ -32,4 +32,4 @@ def report_path(tmp_path):
             output={"directory": str(tmp_path / "output")},
         )
     )
-    return explain(config, generator=UnitTranslator(), classifier=MeanClassifier())
+    return explain(config, generator=UnitGenerator(), classifier=MeanClassifier())

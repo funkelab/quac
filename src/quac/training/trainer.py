@@ -17,7 +17,7 @@ def _step(loss, optimizers, names):
 
 
 def train_stargan(model, dataset, config, directory):
-    """Train latent/reference branches and save resumable checkpoints."""
+    """Train latent and reference branches and save resumable checkpoints."""
     options = config.training
     nets = model.nets
     optimizers = {
@@ -59,35 +59,42 @@ def train_stargan(model, dataset, config, directory):
             class_indices[y][torch.randint(len(class_indices[y]), ()).item()]
             for y in target_labels
         ]
-        real, source = _batch(dataset, source_indices, model.device)
-        reference, target = _batch(dataset, reference_indices, model.device)
+        source_images, source_classes = _batch(dataset, source_indices, model.device)
+        reference_images, target_classes = _batch(
+            dataset, reference_indices, model.device
+        )
         latent = torch.randn(
-            len(real), config.generator.latent_dim, device=model.device
+            len(source_images), config.generator.latent_dim, device=model.device
         )
         losses = []
         for mode in ("latent", "reference"):
             with torch.no_grad():
                 style = (
-                    nets["mapping_network"](latent, target)
+                    nets["mapping_network"](latent, target_classes)
                     if mode == "latent"
-                    else nets["style_encoder"](reference, target)
+                    else nets["style_encoder"](reference_images, target_classes)
                 )
             loss = discriminator_loss(
-                nets, real, source, target, style, options.lambda_reg
+                nets,
+                source_images,
+                source_classes,
+                target_classes,
+                style,
+                options.lambda_reg,
             )
             _step(loss, optimizers, ["discriminator"])
             losses.append(loss.item())
         for mode in ("latent", "reference"):
             style = (
-                nets["mapping_network"](latent, target)
+                nets["mapping_network"](latent, target_classes)
                 if mode == "latent"
-                else nets["style_encoder"](reference, target)
+                else nets["style_encoder"](reference_images, target_classes)
             )
             loss = generator_loss(
                 nets,
-                real,
-                source,
-                target,
+                source_images,
+                source_classes,
+                target_classes,
                 style,
                 options.lambda_style,
                 options.lambda_cycle,

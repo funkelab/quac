@@ -33,7 +33,7 @@ def test_real_stargan_translation_and_ema_checkpoint(tmp_path, channels):
     model = StarGAN((channels, 13, 19), ["a", "b"], options, torch.device("cpu"))
     image = torch.rand(1, channels, 13, 19)
     for reference in [None, image]:
-        output = model.translate(image, torch.tensor([1]), reference)
+        output = model.generate(image, torch.tensor([1]), reference)
         assert output.shape == image.shape
         assert 0 <= output.min() <= output.max() <= 1
     path = tmp_path / "ema.ckpt"
@@ -47,8 +47,8 @@ def test_real_stargan_translation_and_ema_checkpoint(tmp_path, channels):
     reloaded = StarGAN(model.shape, model.classes, options, torch.device("cpu"))
     reloaded.load(path)
     torch.testing.assert_close(
-        model.translate(image, torch.tensor([1]), image),
-        reloaded.translate(image, torch.tensor([1]), image),
+        model.generate(image, torch.tensor([1]), image),
+        reloaded.generate(image, torch.tensor([1]), image),
     )
 
 

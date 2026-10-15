@@ -27,21 +27,23 @@ class ImageStore:
             raise
 
     def write(self, path: Path, array) -> str:
-        """Save a spatial map or CHW image without changing values or dtype."""
+        """Save an attribution map, mask, or CHW image without changing values or dtype."""
         array = np.asarray(array)
         if array.ndim == 3 and array.shape[0] in (1, 3):
             array = np.moveaxis(array, 0, -1)
             if array.shape[-1] == 1:
                 array = array[..., 0]
         elif array.ndim != 2:
-            raise ValueError("Expected an HW map or grayscale/RGB CHW image")
+            raise ValueError(
+                "Expected an HW attribution map, mask, or grayscale/RGB CHW image"
+            )
         tifffile.imwrite(
             path, array, photometric="rgb" if array.ndim == 3 else "minisblack"
         )
         return Path(os.path.relpath(path, self.base)).as_posix()
 
     def read(self, path: str, *, spatial: bool = False) -> np.ndarray:
-        """Read a stored path as an HW map or CHW image, relative to the database."""
+        """Read a stored path as an HW attribution map, mask, or CHW image, relative to the database."""
         array = tifffile.imread(self.base / path)
         if spatial:
             return array

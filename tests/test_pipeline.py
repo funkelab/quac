@@ -11,7 +11,7 @@ from quac.config import Config
 from quac.data import write_image
 from quac.pipeline import explain, train
 from quac.report import Report
-from conftest import MeanClassifier, UnitTranslator
+from conftest import MeanClassifier, UnitGenerator
 
 
 def test_explain_requires_explicit_classifier():
@@ -35,7 +35,7 @@ def test_failed_run_records_error(tmp_path):
     with pytest.raises(ValueError, match="bad attribution"):
         explain(
             config,
-            generator=UnitTranslator(),
+            generator=UnitGenerator(),
             classifier=MeanClassifier(),
             attributions={"broken": BrokenAttribution()},
         )
@@ -52,7 +52,7 @@ def test_overwrite_protection(report_path):
         output={"report": report_path},
     )
     with pytest.raises(FileExistsError, match="already exists"):
-        explain(config, generator=UnitTranslator(), classifier=MeanClassifier())
+        explain(config, generator=UnitGenerator(), classifier=MeanClassifier())
 
 
 def test_cli_config_errors_and_missing_extra(tmp_path, capsys, monkeypatch):
@@ -130,11 +130,11 @@ def test_reference_sampling_records_reference_path(tmp_path):
             torch.full((1, 4, 4), float(label)), tmp_path / "images" / name / "one.tif"
         )
 
-    class ReferenceTranslator:
-        def translate(self, images, targets, reference=None):
-            assert reference is not None
-            assert reference.mean().item() == targets.item()
-            return reference
+    class ReferenceGenerator:
+        def generate(self, source_images, target_classes, reference_images=None):
+            assert reference_images is not None
+            assert reference_images.mean().item() == target_classes.item()
+            return reference_images
 
     config = Config(
         data={"source": tmp_path / "images"},
@@ -142,7 +142,7 @@ def test_reference_sampling_records_reference_path(tmp_path):
         explanation={"methods": ["residual"], "samples": 1, "levels": 3},
         output={"directory": tmp_path / "output"},
     )
-    path = explain(config, generator=ReferenceTranslator(), classifier=MeanClassifier())
+    path = explain(config, generator=ReferenceGenerator(), classifier=MeanClassifier())
     with Report(path) as report:
         for row in report.top("residual"):
             assert report.pair(row["pair_id"])["reference_path"].endswith("one.tif")

@@ -35,7 +35,7 @@ def _method_figure(report, method, k):
     titles = []
     for index in range(k):
         titles.extend(
-            ["Original", "Generated", "Counterfactual"]
+            ["Source image", "Generated image", "Counterfactual"]
             if index < len(rows)
             else ["No exemplar", "No exemplar", "No exemplar"]
         )
@@ -55,13 +55,17 @@ def _method_figure(report, method, k):
             thresholds = report.thresholds(row["id"])
             optimum = row["optimal_index"]
             record = thresholds[optimum]
-            images = [pair["original"], pair["generated"], record["image"]]
+            images = [
+                pair["source_image"],
+                pair["generated_image"],
+                record["counterfactual"],
+            ]
             texts = [
-                f"<b>Original · {classes[pair['source']]} → {classes[pair['target']]}</b><br>"
+                f"<b>Source image · {classes[pair['source_class']]} → {classes[pair['target_class']]}</b><br>"
                 + _prediction(
-                    pair["original_probabilities"], pair["original_logits"], classes
+                    pair["source_probabilities"], pair["source_logits"], classes
                 ),
-                "<b>Generated</b><br>"
+                "<b>Generated image</b><br>"
                 + _prediction(
                     pair["generated_probabilities"], pair["generated_logits"], classes
                 ),
@@ -95,7 +99,7 @@ def _method_figure(report, method, k):
                     label=f"{record['area']:.2f}",
                     method="update",
                     args=[
-                        {"z": [_display(record["image"])]},
+                        {"z": [_display(record["counterfactual"])]},
                         {annotation_key: _threshold_text(record, classes)},
                         [slot * 3 + 2],
                     ],

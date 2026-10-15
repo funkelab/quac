@@ -16,7 +16,7 @@ tutorials/data
 tutorials/classifier
 ``` 
 
-## Train the Conversion Network
+## Train the generator
 ```{toctree}
 :maxdepth: 1
 
@@ -24,7 +24,7 @@ Train <tutorials/train_yaml>
 Generate <tutorials/generate>
 ``` 
 
-## Generate Attribution Maps
+## Compute attribution maps
 ```{toctree}
 :maxdepth: 1
 

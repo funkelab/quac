@@ -15,7 +15,7 @@ class Evaluation:
     areas: np.ndarray
     cutoffs: np.ndarray
     masks: np.ndarray
-    images: np.ndarray
+    counterfactuals: np.ndarray
     logits: np.ndarray
     probabilities: np.ndarray
     deltas: np.ndarray
@@ -23,15 +23,20 @@ class Evaluation:
     auc: float
 
 
-def area_masks(attribution: torch.Tensor, levels: int, sigma: float):
+def area_masks(attribution_map: torch.Tensor, levels: int, sigma: float):
     """Select ranked pixels at equidistant areas, with stable ties and spatial blur."""
-    if attribution.ndim != 2 or not torch.isfinite(attribution).all():
+    if attribution_map.ndim != 2 or not torch.isfinite(attribution_map).all():
         raise ValueError("Expected a finite HW attribution map")
-    if attribution.min() < 0 or attribution.max() > 1 or levels < 2 or sigma < 0:
+    if (
+        attribution_map.min() < 0
+        or attribution_map.max() > 1
+        or levels < 2
+        or sigma < 0
+    ):
         raise ValueError(
-            "Require [0,1] attribution, at least two levels, and nonnegative sigma"
+            "Require a [0,1] attribution map, at least two levels, and nonnegative sigma"
         )
-    values = attribution.detach().cpu().numpy()
+    values = attribution_map.detach().cpu().numpy()
     order = np.argsort(-values.ravel(), kind="stable")
     counts = np.rint(np.linspace(0, values.size, levels)).astype(int)
     masks, cutoffs = [], []
@@ -56,44 +61,44 @@ def optimal_threshold_index(areas, deltas) -> int:
 
 def evaluate(
     classifier,
-    real,
-    generated,
-    attribution,
-    target,
+    source_image,
+    generated_image,
+    attribution_map,
+    target_class,
     classes,
-    original_probability,
+    source_target_probability,
     levels=101,
     sigma=1.0,
     batch_size=16,
 ) -> Evaluation:
     """Blend and classify every stored area level without further generation."""
-    validate_image(real)
-    validate_image(generated)
-    if real.shape != generated.shape or tuple(attribution.shape) != tuple(
-        real.shape[-2:]
-    ):
+    validate_image(source_image)
+    validate_image(generated_image)
+    if source_image.shape != generated_image.shape or tuple(
+        attribution_map.shape
+    ) != tuple(source_image.shape[-2:]):
         raise ValueError(
-            "Real/generated images and spatial attribution must have matching shapes"
+            "Source image, generated image, and attribution map must have matching shapes"
         )
-    areas, cutoffs, masks = area_masks(attribution, levels, sigma)
-    images, logits, probabilities = [], [], []
+    areas, cutoffs, masks = area_masks(attribution_map, levels, sigma)
+    counterfactual_batches, logits, probabilities = [], [], []
     for start in range(0, levels, batch_size):
-        mask = torch.from_numpy(masks[start : start + batch_size]).to(real.device)[
-            :, None
-        ]
-        hybrids = real[None] * (1 - mask) + generated[None] * mask
-        output, probability = predict(classifier, hybrids, classes, batch_size)
-        images.append(hybrids.cpu().numpy())
+        mask = torch.from_numpy(masks[start : start + batch_size]).to(
+            source_image.device
+        )[:, None]
+        counterfactuals = source_image[None] * (1 - mask) + generated_image[None] * mask
+        output, probability = predict(classifier, counterfactuals, classes, batch_size)
+        counterfactual_batches.append(counterfactuals.cpu().numpy())
         logits.append(output.numpy())
         probabilities.append(probability.numpy())
     logits, probabilities = np.concatenate(logits), np.concatenate(probabilities)
-    deltas = probabilities[:, target] - original_probability
+    deltas = probabilities[:, target_class] - source_target_probability
     optimal = optimal_threshold_index(areas, deltas)
     return Evaluation(
         areas,
         cutoffs,
         masks,
-        np.concatenate(images),
+        np.concatenate(counterfactual_batches),
         logits,
         probabilities,
         deltas,

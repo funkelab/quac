@@ -16,7 +16,7 @@ order. The setup script exports its TorchScript classifier along with the images
 
 The config deliberately uses small networks and 50 training steps. This is a
 workflow demonstration, not a convergence guarantee. Increase `training.steps`
-for better translations. To resume, set `generator.checkpoint` to
+to improve the generated images. To resume, set `generator.checkpoint` to
 `quac-output/checkpoints/latest.pt` and increase the final step count. Repeating
 explanation requires `output.overwrite: true` or a different output directory.
 

@@ -8,10 +8,10 @@ from quac.data import ImageDataset, read_image, write_image
 
 @pytest.mark.parametrize("channels", [1, 3])
 def test_float_tiff_roundtrip(tmp_path, channels):
-    original = torch.rand(channels, 9, 13)
+    source_image = torch.rand(channels, 9, 13)
     path = tmp_path / "image.tif"
-    write_image(original, path)
-    assert torch.equal(read_image(path), original)
+    write_image(source_image, path)
+    assert torch.equal(read_image(path), source_image)
 
 
 def test_integer_normalization_preserves_brightness(tmp_path):

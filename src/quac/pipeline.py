@@ -85,7 +85,7 @@ def explain(
         shape=dataset.shape,
         generator=generator_identity,
         classifier=classifier_identity,
-        delta="target_probability - original_target_probability",
+        delta="target_probability - source_target_probability",
         optimum="max(delta / positive_binary_area)",
     )
     with Report.create(
@@ -110,59 +110,63 @@ def _explain_pairs(
 ):
     options = config.explanation
     for index, sample in enumerate(dataset.samples):
-        real, source = dataset[index]
-        real = real.to(device)
-        original_logits, original_probs = predict(
-            classifier, real[None], len(dataset.classes)
+        source_image, source_class = dataset[index]
+        source_image = source_image.to(device)
+        source_logits, source_probabilities = predict(
+            classifier, source_image[None], len(dataset.classes)
         )
-        for target in range(len(dataset.classes)):
-            if target == source:
+        for target_class in range(len(dataset.classes)):
+            if target_class == source_class:
                 continue
             for number in range(options.samples):
                 reference, reference_path = None, None
                 if config.generator.sampling == "reference":
-                    candidates = dataset.indices(target)
+                    candidates = dataset.indices(target_class)
                     chosen = candidates[np.random.randint(len(candidates))]
                     reference = dataset[chosen][0][None].to(device)
                     reference_path = dataset.samples[chosen].path
                 with torch.no_grad():
-                    generated = generator.translate(
-                        real[None], torch.tensor([target], device=device), reference
+                    generated_image = generator.generate(
+                        source_image[None],
+                        torch.tensor([target_class], device=device),
+                        reference,
                     )[0].detach()
-                validate_image(generated)
-                generated_logits, generated_probs = predict(
-                    classifier, generated[None], len(dataset.classes)
+                validate_image(generated_image)
+                generated_logits, generated_probabilities = predict(
+                    classifier, generated_image[None], len(dataset.classes)
                 )
                 pair_id = report.add_pair(
                     sample.path,
-                    source,
-                    target,
+                    source_class,
+                    target_class,
                     number,
-                    real.cpu().numpy(),
-                    generated.cpu().numpy(),
-                    original_logits[0].numpy(),
-                    original_probs[0].numpy(),
+                    source_image.cpu().numpy(),
+                    generated_image.cpu().numpy(),
+                    source_logits[0].numpy(),
+                    source_probabilities[0].numpy(),
                     generated_logits[0].numpy(),
-                    generated_probs[0].numpy(),
+                    generated_probabilities[0].numpy(),
                     reference_path,
                 )
                 for name, attribution in attributions.items():
-                    importance = normalize(
-                        attribution.attribute(real, generated, source, target)
+                    attribution_map = normalize(
+                        attribution.attribute(
+                            source_image, generated_image, source_class, target_class
+                        )
                     )
                     result = evaluate(
                         classifier,
-                        real,
-                        generated,
-                        importance,
-                        target,
+                        source_image,
+                        generated_image,
+                        attribution_map,
+                        target_class,
                         len(dataset.classes),
-                        float(original_probs[0, target]),
+                        float(source_probabilities[0, target_class]),
                         options.levels,
                         options.sigma,
                         options.batch_size,
                     )
                     report.add_explanation(
-                        pair_id, name, importance.cpu().numpy(), result
+                        pair_id, name, attribution_map.cpu().numpy(), result
                     )
         print(f"explained {index + 1}/{len(dataset)}: {sample.path.name}", flush=True)

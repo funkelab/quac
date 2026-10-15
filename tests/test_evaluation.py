@@ -21,8 +21,8 @@ def test_area_masks_rank_ties_and_endpoints():
 
 
 def test_blur_preserves_area_measurement():
-    importance = torch.zeros(5, 5)
-    areas, _, blurred = area_masks(importance, 6, 1)
+    attribution_map = torch.zeros(5, 5)
+    areas, _, blurred = area_masks(attribution_map, 6, 1)
     assert areas[1] == 0.2
     assert np.any((blurred[1] > 0) & (blurred[1] < 1))
     assert blurred.min() >= 0 and blurred.max() <= 1
@@ -36,26 +36,28 @@ def test_optimum_uses_ratio_not_difference():
 
 def test_sweep_predictions_and_blending():
     classifier = MeanClassifier()
-    original = torch.zeros(1, 4, 4)
-    generated = torch.ones_like(original)
-    original_p = torch.softmax(torch.tensor([1.0, 0.0]), dim=0)[1].item()
+    source_image = torch.zeros(1, 4, 4)
+    generated_image = torch.ones_like(source_image)
+    source_probability = torch.softmax(torch.tensor([1.0, 0.0]), dim=0)[1].item()
     result = evaluate(
         classifier,
-        original,
-        generated,
+        source_image,
+        generated_image,
         torch.arange(16).reshape(4, 4) / 15,
         1,
         2,
-        original_p,
+        source_probability,
         levels=5,
         sigma=0,
         batch_size=2,
     )
-    np.testing.assert_allclose(result.images.mean((1, 2, 3)), result.areas)
+    np.testing.assert_allclose(result.counterfactuals.mean((1, 2, 3)), result.areas)
     np.testing.assert_allclose(result.logits[:, 1], result.areas)
-    np.testing.assert_allclose(result.deltas, result.probabilities[:, 1] - original_p)
-    np.testing.assert_array_equal(result.images[0], original)
-    np.testing.assert_array_equal(result.images[-1], generated)
+    np.testing.assert_allclose(
+        result.deltas, result.probabilities[:, 1] - source_probability
+    )
+    np.testing.assert_array_equal(result.counterfactuals[0], source_image)
+    np.testing.assert_array_equal(result.counterfactuals[-1], generated_image)
 
 
 @pytest.mark.parametrize(
@@ -69,12 +71,12 @@ def test_sweep_predictions_and_blending():
     ],
 )
 def test_attributions_are_finite(method):
-    importance = PairAttribution(MeanClassifier(), method, 4).attribute(
+    attribution_map = PairAttribution(MeanClassifier(), method, 4).attribute(
         torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
     )
-    assert importance.shape == (4, 4)
-    assert torch.isfinite(importance).all()
-    assert importance.min() >= 0 and importance.max() <= 1
+    assert attribution_map.shape == (4, 4)
+    assert torch.isfinite(attribution_map).all()
+    assert attribution_map.min() >= 0 and attribution_map.max() <= 1
 
 
 def test_constant_attribution():
@@ -86,11 +88,11 @@ def test_deeplift_eager_baselines(method):
     classifier = torch.nn.Sequential(
         torch.nn.Flatten(), torch.nn.Linear(16, 2), torch.nn.ReLU()
     )
-    importance = PairAttribution(classifier, method).attribute(
+    attribution_map = PairAttribution(classifier, method).attribute(
         torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
     )
-    assert torch.isfinite(importance).all()
-    assert importance.shape == (4, 4)
+    assert torch.isfinite(attribution_map).all()
+    assert attribution_map.shape == (4, 4)
 
 
 def test_deeplift_torchscript_error_is_actionable():

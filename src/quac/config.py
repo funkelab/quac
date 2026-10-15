@@ -18,7 +18,7 @@ class DataConfig(Settings):
 
 
 class GeneratorConfig(Settings):
-    """StarGAN architecture and translation sampling settings."""
+    """StarGAN architecture and image generation settings."""
 
     kind: str = "stargan"
     checkpoint: Path | None = None

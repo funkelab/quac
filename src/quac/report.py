@@ -9,28 +9,28 @@ import numpy as np
 
 from .artifacts import ImageStore
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SCHEMA = """
 CREATE TABLE run (id INTEGER PRIMARY KEY CHECK(id=1), metadata TEXT NOT NULL,
                   status TEXT NOT NULL, error TEXT);
 CREATE TABLE pair (
-    id INTEGER PRIMARY KEY, source_path TEXT NOT NULL, source INTEGER NOT NULL,
-    target INTEGER NOT NULL, sample INTEGER NOT NULL, reference_path TEXT,
-    original_path TEXT NOT NULL, generated_path TEXT NOT NULL,
-    original_logits BLOB NOT NULL, original_probabilities BLOB NOT NULL,
+    id INTEGER PRIMARY KEY, source_input_path TEXT NOT NULL, source_class INTEGER NOT NULL,
+    target_class INTEGER NOT NULL, sample INTEGER NOT NULL, reference_path TEXT,
+    source_path TEXT NOT NULL, generated_path TEXT NOT NULL,
+    source_logits BLOB NOT NULL, source_probabilities BLOB NOT NULL,
     generated_logits BLOB NOT NULL, generated_probabilities BLOB NOT NULL);
 CREATE TABLE explanation (
     id INTEGER PRIMARY KEY, pair_id INTEGER NOT NULL REFERENCES pair(id),
-    method TEXT NOT NULL, attribution_path TEXT NOT NULL, optimal_index INTEGER NOT NULL,
+    method TEXT NOT NULL, attribution_map_path TEXT NOT NULL, optimal_index INTEGER NOT NULL,
     optimal_delta REAL NOT NULL, auc REAL NOT NULL, UNIQUE(pair_id, method));
 CREATE TABLE threshold (
     explanation_id INTEGER NOT NULL REFERENCES explanation(id),
     idx INTEGER NOT NULL, area REAL NOT NULL, cutoff REAL NOT NULL,
-    mask_path TEXT NOT NULL, image_path TEXT NOT NULL, logits BLOB NOT NULL,
+    mask_path TEXT NOT NULL, counterfactual_path TEXT NOT NULL, logits BLOB NOT NULL,
     probabilities BLOB NOT NULL, delta REAL NOT NULL,
     PRIMARY KEY(explanation_id, idx));
 CREATE INDEX ranking ON explanation(method, optimal_delta DESC);
-CREATE INDEX class_pair ON pair(source, target);
+CREATE INDEX class_pair ON pair(source_class, target_class);
 """
 
 
@@ -114,47 +114,49 @@ class Report(AbstractContextManager):
 
     def add_pair(
         self,
-        source_path,
-        source,
-        target,
+        source_input_path,
+        source_class,
+        target_class,
         sample,
-        original,
-        generated,
-        original_logits,
-        original_probabilities,
+        source_image,
+        generated_image,
+        source_logits,
+        source_probabilities,
         generated_logits,
         generated_probabilities,
         reference_path=None,
     ) -> int:
-        """Write pair images to disk and record their paths and predictions."""
+        """Write source and generated images and record their paths and predictions."""
         with self.images.batch() as directory, self.connection:
             cursor = self.connection.execute(
                 "INSERT INTO pair VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    str(source_path),
-                    source,
-                    target,
+                    str(source_input_path),
+                    source_class,
+                    target_class,
                     sample,
                     str(reference_path) if reference_path else None,
-                    self.images.write(directory / "original.tif", original),
-                    self.images.write(directory / "generated.tif", generated),
-                    pack(original_logits),
-                    pack(original_probabilities),
+                    self.images.write(directory / "source.tif", source_image),
+                    self.images.write(directory / "generated.tif", generated_image),
+                    pack(source_logits),
+                    pack(source_probabilities),
                     pack(generated_logits),
                     pack(generated_probabilities),
                 ),
             )
         return cursor.lastrowid
 
-    def add_explanation(self, pair_id, method, attribution, result) -> int:
-        """Commit a complete sweep and its image paths; discard artifacts on failure."""
+    def add_explanation(self, pair_id, method, attribution_map, result) -> int:
+        """Commit a counterfactual sweep and its artifact paths; discard artifacts on failure."""
         with self.images.batch() as directory, self.connection:
             cursor = self.connection.execute(
                 "INSERT INTO explanation VALUES (NULL,?,?,?,?,?,?)",
                 (
                     pair_id,
                     method,
-                    self.images.write(directory / "attribution.tif", attribution),
+                    self.images.write(
+                        directory / "attribution-map.tif", attribution_map
+                    ),
                     result.optimal_index,
                     float(result.deltas[result.optimal_index]),
                     result.auc,
@@ -174,7 +176,7 @@ class Report(AbstractContextManager):
                         ),
                         self.images.write(
                             directory / f"{index:04d}-counterfactual.tif",
-                            result.images[index],
+                            result.counterfactuals[index],
                         ),
                         pack(result.logits[index]),
                         pack(result.probabilities[index]),
@@ -194,17 +196,22 @@ class Report(AbstractContextManager):
             )
         ]
 
-    def top(self, method: str, k: int = 5, source=None, target=None) -> list[dict]:
-        """Query exemplars by optimal delta, optionally restricting source and target."""
+    def top(
+        self, method: str, k: int = 5, source_class=None, target_class=None
+    ) -> list[dict]:
+        """Query exemplars by optimal delta, optionally filtering by source and target class."""
         if k < 1:
             raise ValueError("k must be positive")
         where, parameters = ["e.method=?"], [method]
-        for field, value in (("source", source), ("target", target)):
+        for field, value in (
+            ("source_class", source_class),
+            ("target_class", target_class),
+        ):
             if value is not None:
                 where.append(f"p.{field}=?")
                 parameters.append(value)
         query = (
-            "SELECT e.*, p.source_path, p.source, p.target, p.sample FROM explanation e "
+            "SELECT e.*, p.source_input_path, p.source_class, p.target_class, p.sample FROM explanation e "
             "JOIN pair p ON p.id=e.pair_id WHERE "
             + " AND ".join(where)
             + " ORDER BY e.optimal_delta DESC, e.id LIMIT ?"
@@ -212,18 +219,18 @@ class Report(AbstractContextManager):
         return [dict(row) for row in self.connection.execute(query, [*parameters, k])]
 
     def pair(self, pair_id: int) -> dict:
-        """Read pair images from their stored paths and decode exact predictions."""
+        """Load source and generated images and decode their predictions."""
         row = self.connection.execute(
             "SELECT * FROM pair WHERE id=?", (pair_id,)
         ).fetchone()
         if row is None:
             raise KeyError(pair_id)
         result = dict(row)
-        for key in ("original", "generated"):
-            result[key] = self.images.read(result[f"{key}_path"])
+        for role in ("source", "generated"):
+            result[f"{role}_image"] = self.images.read(result[f"{role}_path"])
         for key in (
-            "original_logits",
-            "original_probabilities",
+            "source_logits",
+            "source_probabilities",
             "generated_logits",
             "generated_probabilities",
         ):
@@ -239,7 +246,7 @@ class Report(AbstractContextManager):
         ):
             record = dict(row)
             record["mask"] = self.images.read(record["mask_path"], spatial=True)
-            record["image"] = self.images.read(record["image_path"])
+            record["counterfactual"] = self.images.read(record["counterfactual_path"])
             for key in ("logits", "probabilities"):
                 record[key] = unpack(record[key])
             result.append(record)

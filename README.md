@@ -1,9 +1,10 @@
 # Quantitative Attribution with Counterfactuals
 
-QuAC explains image classifiers by translating real images into another class,
-computing pairwise attribution maps, and blending progressively larger regions
-from each translation into the original. A SQLite report stores scores, predictions, and paths to image files for later
-inspection. Image artifacts live alongside it under `quac-output/images`.
+QuAC explains image classifiers by generating images conditioned on a target
+class, computing attribution maps for source/generated image pairs, and blending
+progressively larger regions of each generated image into its source image to
+form counterfactuals. A SQLite report stores scores, predictions, and paths to
+image files. Image artifacts live under `quac-output/images`.
 
 Install with Python 3.10–3.12:
 
@@ -64,8 +65,8 @@ quac summarize -c examples/two_domains/config.yaml
 The setup creates small synthetic images differing in a localized bright marker
 and exports a classifier that detects that detail. The example configuration uses
 small networks and a short training run to demonstrate the whole workflow.
-Converged, meaningful translations require longer training; inspect the generated
-panels before interpreting explanations.
+Generating meaningful images requires longer training; inspect the generated
+images before interpreting explanations.
 
 ## Python API and report queries
 
@@ -79,9 +80,9 @@ train(config)
 path = explain(config)
 with Report(path) as report:
     methods = report.methods()
-    best = report.top(methods[0], k=5, source=0, target=1)
+    best = report.top(methods[0], k=5, source_class=0, target_class=1)
     sweep = report.thresholds(best[0]["id"])
-    original = report.pair(best[0]["pair_id"])
+    pair = report.pair(best[0]["pair_id"])
     area, median, q25, q75 = report.curve(methods[0])
 
 # Requires quac[plot]:
@@ -90,18 +91,18 @@ figure = summarize(path, top_k=5)
 write_summary(path, "summary.html", top_k=5)
 ```
 
-SQLite stores relative paths to lossless TIFF files for source/generated images,
-attribution maps, threshold masks, and counterfactuals. These files live under
+SQLite stores relative paths to lossless TIFF files for source images, generated
+images, attribution maps, threshold masks, and counterfactuals. These files live under
 `quac-output/images`; exact logits and probabilities, labels, optimal selections,
 curve AUCs, resolved configuration, model hashes, and run status stay in SQLite.
 The report API loads the referenced files when returning images. Keep the database
-and its image directory together when moving or sharing a report. Original input
-images and model checkpoints can be moved or deleted. Database readers are
-read-only, and exported HTML summaries remain standalone.
+and its image directory together when moving or sharing a report. Source images
+in the input dataset and model checkpoints can be moved or deleted. Database
+readers are read-only, and exported HTML summaries remain standalone.
 
-For every pair, pixels are ranked by spatial attribution importance. Masks select
-equidistant binary areas (stable row-major ordering breaks importance ties), then
-undergo Gaussian smoothing. Delta is the change in target-class probability.
+For every pair, pixels are ranked by their attribution map values. Masks select
+equidistant binary areas, using stable row-major ordering to break ties in
+attribution map values, then undergo Gaussian smoothing. Delta is the change in target-class probability.
 The optimal mask maximizes delta divided by positive binary area, with ties
 favoring smaller areas. Exemplars are ranked by their optimal delta. Curves show
 median delta and the 25th–75th percentile distribution across explanations.
@@ -139,15 +140,15 @@ DeepLift requires a compatible eager PyTorch classifier; inject one through the
 Python API. The default integrated gradients method works with the CLI's
 TorchScript contract.
 
-`quac.interfaces` defines the translator and attribution contracts. Python callers
+`quac.interfaces` defines the image generator and attribution contracts. Python callers
 can inject `generator`, `classifier`, and a dictionary of `attributions` into
 `explain`. Custom attribution names must match `explanation.methods`. Generators
 receive/return unit-range NCHW images, and attribution components receive CHW
-image pairs and return spatial HW or channel CHW importance. Register additional
+image pairs and return spatial HW or channel CHW attribution maps. Register additional
 CLI generator factories in `quac.generators.build_generator`; training routines
 belong to the corresponding backend. Class count, channel count, and spatial
 size are inferred from the dataset. StarGAN pads internally to a supported
-square size and crops its outputs back to the original dimensions.
+square size and crops generated images to the source image dimensions.
 
 Checkpoints contain trainable weights, EMA weights, optimizer states,
 architecture metadata, and CPU/CUDA RNG states. Set `generator.checkpoint` to resume
