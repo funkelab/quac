@@ -1,147 +1,94 @@
-import json
-from quac.explanation import Explanation
-from quac.report import Report
-from quac.data import SampleWithAttribution
-import torch
-from pathlib import Path
+import sqlite3
+
+import numpy as np
 import pytest
 
-
-@pytest.fixture
-def result():
-    result = {
-        "counterfactual_path": Path("path/to/counterfactual"),
-        "mask_path": Path("path/to/mask"),
-        "thresholds": [0.1, 0.2, 0.3],
-        "mask_sizes": [10, 20, 30],
-        "score_change": [0.1, 0.2, 0.3],
-        "hybrids": [1, 2, 3],
-    }
-    return result
+from quac.report import Report, pack, unpack
 
 
-@pytest.fixture
-def inputs():
-    inputs = SampleWithAttribution(
-        image=torch.Tensor([1, 2, 3]),
-        generated=torch.Tensor([4, 5, 6]),
-        attribution=torch.Tensor([7, 8, 9]),
-        source_class_index=0,
-        target_class_index=1,
-        path=Path("sample_path"),
-        generated_path=Path("target_path"),
-        source_class="duck",
-        target_class="pigeon",
-        attribution_path=Path("attribution_path"),
+def test_array_codec_preserves_dtype_and_values():
+    array = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    decoded = unpack(pack(array))
+    assert decoded.dtype == array.dtype
+    np.testing.assert_array_equal(decoded, array)
+
+
+def test_report_queries_and_complete_sweeps(report_path):
+    with Report(report_path) as report:
+        assert report.status == {"status": "complete", "error": None}
+        assert report.methods() == ["random", "residual"]
+        assert report.metadata["classes"] == ["a", "b"]
+        assert report.metadata["shape"] == [1, 4, 4]
+        top = report.top("residual", k=10)
+        assert len(top) == 2
+        assert top[0]["optimal_delta"] >= top[1]["optimal_delta"]
+        assert len(report.top("residual", source=0, target=1)) == 1
+        for row in top:
+            pair = report.pair(row["pair_id"])
+            records = report.thresholds(row["id"])
+            assert len(records) == 5
+            assert records[row["optimal_index"]]["delta"] == row["optimal_delta"]
+            np.testing.assert_array_equal(records[0]["image"], pair["original"])
+            np.testing.assert_array_equal(records[-1]["image"], pair["generated"])
+            for record in records:
+                assert record["logits"].shape == record["probabilities"].shape == (2,)
+                assert np.isclose(
+                    record["delta"],
+                    record["probabilities"][pair["target"]]
+                    - pair["original_probabilities"][pair["target"]],
+                )
+        grid, median, p25, p75 = report.curve("residual")
+        assert grid.shape == median.shape == (101,)
+        assert np.all(p25 <= median) and np.all(median <= p75)
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            report.connection.execute("DELETE FROM threshold")
+
+
+def test_schema_and_overwrite_validation(tmp_path):
+    path = tmp_path / "report.sqlite"
+    with Report.create(path, {"classes": ["a", "b"]}) as report:
+        report.finish("test failure")
+    with pytest.raises(FileExistsError):
+        Report.create(path, {})
+    with Report(path) as report:
+        assert report.status["status"] == "failed"
+        assert report.methods() == []
+        with pytest.raises(ValueError, match="No explanations"):
+            report.curve("unknown")
+    with Report.create(path, {}, overwrite=True) as report:
+        report.finish()
+    database = sqlite3.connect(path)
+    database.execute("PRAGMA user_version=999")
+    database.close()
+    with pytest.raises(ValueError, match="schema"):
+        Report(path)
+
+
+def test_failed_explanation_rolls_back_sweep(report_path):
+    from types import SimpleNamespace
+
+    with Report(report_path) as report:
+        pair_id = report.top("residual")[0]["pair_id"]
+    report = Report.__new__(Report)
+    report.connection = sqlite3.connect(report_path)
+    report.connection.execute("PRAGMA foreign_keys=ON")
+    broken = SimpleNamespace(
+        optimal_index=0,
+        deltas=[1],
+        auc=1,
+        areas=[0, 1],
+        cutoffs=[0],
+        masks=[np.zeros((4, 4))],
+        images=[np.zeros((1, 4, 4))],
+        logits=[np.zeros(2)],
+        probabilities=[np.zeros(2)],
     )
-    return inputs
-
-
-@pytest.fixture
-def predictions():
-    predictions = {
-        "original": [10, 11, 12],
-        "counterfactual": [13, 14, 15],
-        "generated": [16, 17, 18],
-    }
-    return predictions
-
-
-def make_report(source_classes, target_classes, scores):
-    """
-    A simple report with 3 exp
-    """
-    report = Report("report_test")
-    report.explanations = [
-        Explanation(
-            "query_path",
-            "counterfactual_path",
-            "mask_path",
-            query_prediction=[0, 1],
-            counterfactual_prediction=[1, 0],
-            source_class=i,
-            target_class=j,
-            score=k,
-        )
-        for i, j, k in zip(source_classes, target_classes, scores)
-    ]
-    return report
-
-
-def test_report(inputs, predictions, result, tmpdir):
-    """Make sure that the report class accumulates correctly."""
-    report = Report("report_test")
-    for _ in range(10):
-        report.accumulate(inputs, predictions, result)
-
-    assert len(report) == 10
-
-    tmpdir = Path(tmpdir)
-    report.store(tmpdir)
-    assert (tmpdir / f"{report.name}.json").exists(), "The files in {} are: {}".format(
-        tmpdir, list(tmpdir.iterdir())
+    with pytest.raises(IndexError):
+        report.add_explanation(pair_id, "broken", np.zeros((4, 4)), broken)
+    assert (
+        report.connection.execute(
+            "SELECT count(*) FROM explanation WHERE method='broken'"
+        ).fetchone()[0]
+        == 0
     )
-    # Load the report back
-    loaded_report = Report()
-    loaded_report.load(tmpdir / f"{report.name}.json")
-    # Check that the loaded report is the same as the original
-    assert loaded_report.explanations[0] == report.explanations[0], (
-        f"Loaded report: {loaded_report.explanations[0]} != {report.explanations[0]}"
-    )
-
-
-def test_bad_report_io(tmp_path):
-    bad_json = {
-        # Missing "thresholds" key
-        "mask_sizes": [10, 20, 30],
-        "score_change": [0.1, 0.2],  # Mismatched length
-        "hybrids": [1, 2, 3],
-        "extra_field": "unexpected",
-        "unexpected_list": [1, 2, 3],
-    }
-    with open(tmp_path / "bad_report.json", "w") as f:
-        json.dump(bad_json, f)
-    with pytest.raises(KeyError):
-        report = Report()
-        report.load(tmp_path / "bad_report.json")
-
-
-def test_report_filtering():
-    """Check that filtering works correctly."""
-    report = make_report(
-        [0, 0, 1, 1, 2, 2],  # source classes
-        [1, 2, 0, 2, 0, 1],  # target classes
-        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],  # scores
-    )
-
-    # filter by source class
-    filtered_report = report.from_source(0)
-    # check
-    assert all(
-        [explanation.source_class == 0 for explanation in filtered_report.explanations]
-    ), "Filtering by source class failed"
-
-    # filter by target class
-    filtered_report = report.to_target(1)
-    # check
-    assert all(
-        [explanation.target_class == 1 for explanation in filtered_report.explanations]
-    ), "Filtering by target class failed"
-
-    # threshold scores
-    filtered_report = report.score_threshold(0.3)
-    # check
-    assert all(
-        [explanation.score >= 0.3 for explanation in filtered_report.explanations]
-    ), "Filtering by score threshold failed"
-
-    # top n
-    filtered_report = report.top_n(2)
-    # check that the values are 0.5 and 0.6
-    assert {explanation.score for explanation in filtered_report.explanations} == {
-        0.5,
-        0.6,
-    }, "Filtering by top n failed"
-
-    # Check that the original report is unchanged
-    assert len(report.explanations) == 6, "Original report was modified"
+    report.close()

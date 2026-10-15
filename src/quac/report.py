@@ -1,292 +1,260 @@
+"""Self-contained SQLite reports and queries; no plotting or model dependencies."""
+
+from contextlib import AbstractContextManager
+from io import BytesIO
 import json
-import matplotlib.pyplot as plt
-import numpy as np
 from pathlib import Path
-from quac.explanation import Explanation, explanation_encoder
-from scipy.interpolate import interp1d
-import logging
+import sqlite3
+import zlib
+
+import numpy as np
+
+SCHEMA_VERSION = 1
+SCHEMA = """
+CREATE TABLE run (id INTEGER PRIMARY KEY CHECK(id=1), metadata TEXT NOT NULL,
+                  status TEXT NOT NULL, error TEXT);
+CREATE TABLE pair (
+    id INTEGER PRIMARY KEY, source_path TEXT NOT NULL, source INTEGER NOT NULL,
+    target INTEGER NOT NULL, sample INTEGER NOT NULL, reference_path TEXT,
+    original BLOB NOT NULL, generated BLOB NOT NULL,
+    original_logits BLOB NOT NULL, original_probabilities BLOB NOT NULL,
+    generated_logits BLOB NOT NULL, generated_probabilities BLOB NOT NULL);
+CREATE TABLE explanation (
+    id INTEGER PRIMARY KEY, pair_id INTEGER NOT NULL REFERENCES pair(id),
+    method TEXT NOT NULL, attribution BLOB NOT NULL, optimal_index INTEGER NOT NULL,
+    optimal_delta REAL NOT NULL, auc REAL NOT NULL, UNIQUE(pair_id, method));
+CREATE TABLE threshold (
+    explanation_id INTEGER NOT NULL REFERENCES explanation(id),
+    idx INTEGER NOT NULL, area REAL NOT NULL, cutoff REAL NOT NULL,
+    mask BLOB NOT NULL, image BLOB NOT NULL, logits BLOB NOT NULL,
+    probabilities BLOB NOT NULL, delta REAL NOT NULL,
+    PRIMARY KEY(explanation_id, idx));
+CREATE INDEX ranking ON explanation(method, optimal_delta DESC);
+CREATE INDEX class_pair ON pair(source, target);
+"""
 
 
-def merge_reports(reports, **kwargs):
-    """
-    Merge all available reports into a single, final report.
-    This chooses the best attribution method for each sample, based on the QuAC score.
-    It also sorts the samples by QuAC score.
-    """
-    # Make sure that each report has the same number of samples
-    num_samples = len(reports[list(reports.keys())[0]])
-    for name, report in reports.items():
-        if len(report) != num_samples:
-            raise ValueError(
-                f"Reports have different number of samples: {len(report)} vs {num_samples}"
-            )
-
-    final_report = Report(**kwargs)
-    for i in range(num_samples):
-        options = [report[i] for report in reports.values()]  # Gets you an explanation
-        # Select one explanation for each sample, based on the QuAC score
-        best_explanation = max(options, key=lambda x: x.score)
-        best_explanation.method = name
-        final_report.explanations.append(best_explanation)
-
-    # Sort the items in the final report by QuAC score, from highest to lowest
-    final_report.explanations.sort(key=lambda x: x.score, reverse=True)
-    # The data in the final report is now sorted by QuAC score
-    return final_report
+def pack(array) -> bytes:
+    """Encode a typed NumPy array without pickle."""
+    stream = BytesIO()
+    np.save(stream, np.asarray(array), allow_pickle=False)
+    return zlib.compress(stream.getvalue())
 
 
-class Report:
-    """This class stores the results of the evaluation.
+def unpack(blob: bytes) -> np.ndarray:
+    """Decode a compressed array without executing serialized objects."""
+    return np.load(BytesIO(zlib.decompress(blob)), allow_pickle=False)
 
-    The report combines a set of Explanation objects, and can be used to store and load them from disk.
-    It also has several filtering methods, to help interact with the results.
 
-    For example, given the output of the QuAC evaluation, stored in a directory, we can do the following:
-    ```
-    report = Report.from_directory("eval_directory", name="final_report")
+class Report(AbstractContextManager):
+    """Query a report read-only, or create it explicitly through Report.create."""
 
-    # Select a specific source and target, and look at the QuAC curve
-    report.from_source(0).to_target(1).plot_curve()
-
-    # OR select the top 10 explanations for the conversion from 0 to 1 and store them
-    report.from_source(0).to_target(1).top_n(10).store("top_10_explanations")
-    ```
-    """
-
-    def __init__(self, name=None, metadata={}):
-        if name is None:
-            self.name = "report"
-        else:
-            self.name = name
-        self.metadata = metadata
-        # Initialize as empty
-        self.explanations = []
-        self.interp_mask_values = np.arange(0.0, 1.0001, 0.01)
-
-    def __len__(self):
-        return len(self.explanations)
-
-    def __getitem__(self, idx):
-        return self.explanations[idx]
-
-    def interpolate_score_values(self, normalized_mask_sizes, score_changes):
-        """Computes the score changes interpolated at the desired mask sizes"""
-        f = interp1d(
-            np.concatenate([[1], normalized_mask_sizes, [0]]),
-            np.concatenate([[score_changes[0]], score_changes, [0]]),
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.connection = sqlite3.connect(
+            self.path.resolve().as_uri() + "?mode=ro", uri=True
         )
-        interp_score_values = [f(x) for x in self.interp_mask_values]
-        return interp_score_values
-
-    def get_quac_score(self, interp_score_values):
-        """
-        The QuAC score is the area under the mask-size vs. score-change curve.
-        We use the interpolated mask and score values to compute the QuAC score.
-        """
-        # QuAC score = AUC of above x-y values
-        quac_score = np.trapezoid(interp_score_values, self.interp_mask_values)
-        return quac_score
-
-    def accumulate(self, inputs, predictions, evaluation_results):
-        """
-        Store a new result.
-        """
-        quac_score = self.get_quac_score(
-            self.interpolate_score_values(
-                evaluation_results["mask_sizes"], evaluation_results["score_change"]
-            )
-        )
-        explanation = Explanation(
-            query_path=str(inputs.path),
-            counterfactual_path=str(evaluation_results["counterfactual_path"]),
-            mask_path=str(evaluation_results["mask_path"]),
-            query_prediction=predictions["original"],
-            counterfactual_prediction=predictions["counterfactual"],
-            source_class=inputs.source_class_index,
-            target_class=inputs.target_class_index,
-            score=quac_score,
-            attribution_path=str(inputs.attribution_path),
-            generated_path=str(inputs.generated_path),
-            generated_prediction=predictions["generated"],
-            normalized_mask_sizes=evaluation_results["mask_sizes"],
-            score_changes=evaluation_results["score_change"],
-            optimal_threshold=evaluation_results.get("optimal_threshold", None),
-        )
-        self.explanations.append(explanation)
-
-    def store(self, save_dir):
-        """Store the report in a JSON file."""
-        output = {
-            "name": self.name,
-            "metadata": self.metadata,
-            "results": self.explanations,
-        }
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
-        with open(save_dir / f"{self.name}.json", "w") as json_file:
-            json.dump(output, json_file, default=explanation_encoder)
-
-    def load(self, filename):
-        """Load report from disk"""
-        with open(filename, "r") as fd:
-            data = json.load(fd)
-            self.metadata = data.get("metadata", {})
-            self.name = data.get("name", "default_report")
-            self.explanations = [Explanation(**result) for result in data["results"]]
-
-    def get_curve(self):
-        """Gets the median and IQR of the QuAC curve"""
-        # TODO explanation might not have the right attributes
-        # -- maybe remove this from this class and make it a utility function instead
-        plot_values = []
-        normalized_mask_sizes = [
-            explanation._normalized_mask_sizes for explanation in self.explanations
-        ]
-        score_changes = [
-            explanation._score_changes for explanation in self.explanations
-        ]
-        for normalized_mask, score_change in zip(normalized_mask_sizes, score_changes):
-            interp_score_values = self.interpolate_score_values(
-                normalized_mask, score_change
-            )
-            plot_values.append(interp_score_values)
-        plot_values = np.array(plot_values)
-        median = np.median(plot_values, axis=0)
-        p25 = np.percentile(plot_values, 25, axis=0)
-        p75 = np.percentile(plot_values, 75, axis=0)
-        return median, p25, p75
-
-    def plot_curve(self, ax=None):
-        """Plot the QuAC curve
-
-        We plot the median and IQR of the QuAC curve across all accumulated results.
-
-        Parameters
-        ----------
-        ax: plt.axis
-                Axis on which to plot. Defaults to None in which case a new figure is created.
-        """
-        if ax is None:
-            fig, ax = plt.subplots()
-
-        mean, p25, p75 = self.get_curve()
-
-        ax.plot(self.interp_mask_values, mean, label=self.name)
-        ax.fill_between(self.interp_mask_values, p25, p75, alpha=0.2)
-        if ax is None:
-            plt.show()
-
-    # Filtering functions
-    def from_source(self, source_class, name=None) -> "Report":
-        """
-        Create a Report containing only the explanations with the given source class.
-
-        This filters explanations based on both the original and the *predicted* source class.
-        That is, if an explanation has a source of class 0, but the model predicted it as class 1, it will not be included.
-        """
-        filtered_report = Report(name=name)
-        filtered_report.explanations = [
-            explanation
-            for explanation in self.explanations
-            if explanation.source_class == source_class
-            and np.argmax(explanation.query_prediction) == source_class
-        ]
-        return filtered_report
-
-    def to_target(self, target_class, name=None) -> "Report":
-        """
-        Create a filtered Report containing only the explanations with the given target class.
-
-        This filters explanations based on both the original and the *predicted* target class.
-        That is, if an explanation has a target of class 0, but the model predicted it as class 1, it will not be included.
-        """
-        filtered_report = Report(name=name)
-        filtered_report.explanations = [
-            explanation
-            for explanation in self.explanations
-            if explanation.target_class == target_class
-            and np.argmax(explanation.counterfactual_prediction) == target_class
-        ]
-        return filtered_report
-
-    def score_threshold(self, threshold, name=None) -> "Report":
-        """
-        Create a filtered Report containing only the explanations with a QuAC score above the given threshold.
-        """
-        filtered_report = Report(name=name)
-        filtered_report.explanations = [
-            explanation
-            for explanation in self.explanations
-            if explanation.score > threshold
-        ]
-        return filtered_report
-
-    def top_n(self, n, name=None) -> "Report":
-        """
-        Create a filtered Report containing only the top n explanations.
-        """
-        filtered_report = Report(name=name)
-        filtered_report.explanations = sorted(
-            self.explanations, key=lambda x: x.score, reverse=True
-        )[:n]
-        return filtered_report
+        self.connection.row_factory = sqlite3.Row
+        if (
+            self.connection.execute("PRAGMA user_version").fetchone()[0]
+            != SCHEMA_VERSION
+        ):
+            self.close()
+            raise ValueError("Unsupported report schema version")
 
     @classmethod
-    def from_directory(cls, eval_directory, **kwargs) -> "Report":
-        """
-        Find and load all reports in a given directory, merging them into a single report.
-        The best attribution method for each sample is chosen based on the QuAC score.
-        The final report selects only the best results for each sample and sorts them by QuAC score.
-
-        Parameters
-        ----------
-        eval_directory: str
-            Path to the directory used for QuAC evaluation.
-            We expect it to be organized as follows:
-
-            ```
-            eval_directory/
-                method/
-                    report.json
-                method2/
-                    report.json
-            ```
-
-        kwargs: additional arguments to be passed to the Report constructor, specifying the name and metadata.
-
-        Returns
-        -------
-        reports: dict
-            A dictionary mapping method names to their respective reports.
-        """
-        reports = {}
-        # Search for all json files in the directory or any subdirectory
-        for json_file in Path(eval_directory).rglob("*.json"):
-            name = str(json_file.parent)
-            report = Report(name=name)
-            try:
-                report.load(json_file)
-                reports[report.name] = report
-            except KeyError:
-                logging.warning(f"Could not load {json_file}, not a valid report.")
-        # Check if there are any reports
-        if len(reports) == 0:
-            raise ValueError(
-                f"No reports found in {eval_directory}. Please check the directory structure."
+    def create(cls, path, metadata, overwrite=False):
+        """Create an empty report, refusing to overwrite unless explicitly requested."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if not overwrite:
+                raise FileExistsError(
+                    f"Report already exists: {path}; set output.overwrite: true to replace it"
+                )
+            path.unlink()
+        report = cls.__new__(cls)
+        report.path = path
+        report.connection = sqlite3.connect(path)
+        report.connection.row_factory = sqlite3.Row
+        report.connection.execute("PRAGMA foreign_keys=ON")
+        report.connection.executescript(SCHEMA)
+        report.connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        with report.connection:
+            report.connection.execute(
+                "INSERT INTO run VALUES (1, ?, 'running', NULL)",
+                (json.dumps(metadata),),
             )
-        return merge_reports(reports, **kwargs)
+        return report
 
-    def reroot(self, input: str, output: str):
-        """
-        Iteratively re-root the explanations in the report.
-        See `quac.explanation.Explanation.reroot` for more details.
+    @property
+    def metadata(self):
+        """Resolved configuration, class labels, model identity, and inferred dimensions."""
+        return json.loads(
+            self.connection.execute("SELECT metadata FROM run").fetchone()[0]
+        )
 
-        Parameters
-        ----------
-        input : str
-            The part of the input path to be replaced. E.g. "/home/user/data/".
-        output : str
-            The desired new path, to replace the input path. E.g. "/home/new_user/new_data/".
-        """
-        for explanation in self.explanations:
-            explanation.reroot(input, output)
+    @property
+    def status(self):
+        """Return run completion state and failure details."""
+        return dict(self.connection.execute("SELECT status, error FROM run").fetchone())
+
+    def finish(self, error: str | None = None):
+        """Record completion or failure without discarding committed explanations."""
+        with self.connection:
+            self.connection.execute(
+                "UPDATE run SET status=?, error=?",
+                ("failed" if error is not None else "complete", error),
+            )
+
+    def add_pair(
+        self,
+        source_path,
+        source,
+        target,
+        sample,
+        original,
+        generated,
+        original_logits,
+        original_probabilities,
+        generated_logits,
+        generated_probabilities,
+        reference_path=None,
+    ) -> int:
+        """Store images and predictions once for all methods evaluating the pair."""
+        with self.connection:
+            cursor = self.connection.execute(
+                "INSERT INTO pair VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(source_path),
+                    source,
+                    target,
+                    sample,
+                    str(reference_path) if reference_path else None,
+                    pack(original),
+                    pack(generated),
+                    pack(original_logits),
+                    pack(original_probabilities),
+                    pack(generated_logits),
+                    pack(generated_probabilities),
+                ),
+            )
+        return cursor.lastrowid
+
+    def add_explanation(self, pair_id, method, attribution, result) -> int:
+        """Atomically store a complete method sweep, including every image and prediction."""
+        with self.connection:
+            cursor = self.connection.execute(
+                "INSERT INTO explanation VALUES (NULL,?,?,?,?,?,?)",
+                (
+                    pair_id,
+                    method,
+                    pack(attribution),
+                    result.optimal_index,
+                    float(result.deltas[result.optimal_index]),
+                    result.auc,
+                ),
+            )
+            explanation_id = cursor.lastrowid
+            self.connection.executemany(
+                "INSERT INTO threshold VALUES (?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        explanation_id,
+                        index,
+                        float(area),
+                        float(result.cutoffs[index]),
+                        pack(result.masks[index]),
+                        pack(result.images[index]),
+                        pack(result.logits[index]),
+                        pack(result.probabilities[index]),
+                        float(result.deltas[index]),
+                    )
+                    for index, area in enumerate(result.areas)
+                ],
+            )
+        return explanation_id
+
+    def methods(self) -> list[str]:
+        """List stored attribution methods."""
+        return [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT DISTINCT method FROM explanation ORDER BY method"
+            )
+        ]
+
+    def top(self, method: str, k: int = 5, source=None, target=None) -> list[dict]:
+        """Query exemplars by optimal delta, optionally restricting source and target."""
+        if k < 1:
+            raise ValueError("k must be positive")
+        where, parameters = ["e.method=?"], [method]
+        for field, value in (("source", source), ("target", target)):
+            if value is not None:
+                where.append(f"p.{field}=?")
+                parameters.append(value)
+        query = (
+            "SELECT e.*, p.source_path, p.source, p.target, p.sample FROM explanation e "
+            "JOIN pair p ON p.id=e.pair_id WHERE "
+            + " AND ".join(where)
+            + " ORDER BY e.optimal_delta DESC, e.id LIMIT ?"
+        )
+        return [dict(row) for row in self.connection.execute(query, [*parameters, k])]
+
+    def pair(self, pair_id: int) -> dict:
+        """Read stored source/generated images and exact predictions."""
+        row = self.connection.execute(
+            "SELECT * FROM pair WHERE id=?", (pair_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(pair_id)
+        result = dict(row)
+        for key in (
+            "original",
+            "generated",
+            "original_logits",
+            "original_probabilities",
+            "generated_logits",
+            "generated_probabilities",
+        ):
+            result[key] = unpack(result[key])
+        return result
+
+    def thresholds(self, explanation_id: int) -> list[dict]:
+        """Read the complete ordered sweep for an interactive exemplar."""
+        result = []
+        for row in self.connection.execute(
+            "SELECT * FROM threshold WHERE explanation_id=? ORDER BY idx",
+            (explanation_id,),
+        ):
+            record = dict(row)
+            for key in ("mask", "image", "logits", "probabilities"):
+                record[key] = unpack(record[key])
+            result.append(record)
+        return result
+
+    def curve(self, method: str):
+        """Return area grid, median, and 25th/75th percentiles across stored curves."""
+        rows = self.connection.execute(
+            "SELECT t.explanation_id, t.area, t.delta FROM threshold t "
+            "JOIN explanation e ON e.id=t.explanation_id WHERE e.method=? ORDER BY t.explanation_id, t.idx",
+            (method,),
+        )
+        curves = {}
+        for row in rows:
+            curves.setdefault(row[0], []).append((row[1], row[2]))
+        if not curves:
+            raise ValueError(f"No explanations for method {method}")
+        grid = np.linspace(0, 1, 101)
+        interpolated = [
+            np.interp(grid, *np.array(points).T) for points in curves.values()
+        ]
+        p25, median, p75 = np.quantile(interpolated, [0.25, 0.5, 0.75], axis=0)
+        return grid, median, p25, p75
+
+    def close(self):
+        """Release the database connection."""
+        self.connection.close()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()

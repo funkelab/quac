@@ -1,44 +1,81 @@
-import pytest
-from quac.evaluation import Evaluator
-from funlib.learn.torch.models import Vgg2D
 import numpy as np
+import pytest
+import torch
+
+from quac.attribution import PairAttribution, normalize
+from quac.evaluation import area_masks, evaluate, optimal_threshold_index
 
 
-@pytest.mark.skip("Skip test until we have usable data in CI/CD")
-@pytest.mark.parametrize("input_shape", [(1, 128, 128)])
-@pytest.mark.parametrize("num_thresholds", [50, 100])
-def test_evaluator(input_shape, num_thresholds):
-    """Checks that evaluator runs without errors"""
-    x_real = np.random.rand(*input_shape)
-    x_fake = np.random.rand(*input_shape)
-    y_real = 0
-    y_fake = 1
-    attribution = np.random.rand(*input_shape)
-    vmin = -1
-    vmax = 1
-    classifier = Vgg2D(
-        (input_shape[1], input_shape[2]), output_classes=2, input_fmaps=input_shape[0]
+class MeanClassifier(torch.nn.Module):
+    def forward(self, images):
+        value = images.mean((1, 2, 3))
+        return torch.stack([1 - value, value], dim=1)
+
+
+def test_area_masks_rank_ties_and_endpoints():
+    attribution = torch.tensor([[0.0, 0.9], [0.9, 0.1]])
+    areas, cutoffs, masks = area_masks(attribution, 5, 0)
+    np.testing.assert_allclose(areas, [0, 0.25, 0.5, 0.75, 1])
+    np.testing.assert_array_equal(masks[1], [[0, 1], [0, 0]])
+    assert masks[0].sum() == 0 and masks[-1].sum() == 4
+
+
+def test_blur_preserves_area_measurement():
+    importance = torch.zeros(5, 5)
+    areas, _, blurred = area_masks(importance, 6, 1)
+    assert areas[1] == 0.2
+    assert np.any((blurred[1] > 0) & (blurred[1] < 1))
+    assert blurred.min() >= 0 and blurred.max() <= 1
+
+
+def test_optimum_uses_ratio_not_difference():
+    assert optimal_threshold_index([0, 0.1, 0.5, 1], [0, 0.15, 0.6, 0.8]) == 1
+    assert optimal_threshold_index([0, 0.25, 0.5], [0, 0.25, 0.5]) == 1
+    assert optimal_threshold_index([0, 0.25, 0.5], [0, -0.2, -0.1]) == 2
+
+
+def test_sweep_predictions_and_blending():
+    classifier = MeanClassifier()
+    original = torch.zeros(1, 4, 4)
+    generated = torch.ones_like(original)
+    original_p = torch.softmax(torch.tensor([1.0, 0.0]), dim=0)[1].item()
+    result = evaluate(
+        classifier,
+        original,
+        generated,
+        torch.arange(16).reshape(4, 4) / 15,
+        1,
+        2,
+        original_p,
+        levels=5,
+        sigma=0,
+        batch_size=2,
     )
+    np.testing.assert_allclose(result.images.mean((1, 2, 3)), result.areas)
+    np.testing.assert_allclose(result.logits[:, 1], result.areas)
+    np.testing.assert_allclose(result.deltas, result.probabilities[:, 1] - original_p)
+    np.testing.assert_array_equal(result.images[0], original)
+    np.testing.assert_array_equal(result.images[-1], generated)
 
-    predictions = {
-        "original": np.random.rand(2),
-        "counterfactual": np.random.rand(2),
-    }
 
-    evaluator = Evaluator(classifier, num_thresholds=num_thresholds)
-    results = evaluator.evaluate(
-        x_real,
-        x_fake,
-        y_real,
-        y_fake,
-        attribution,
-        predictions,
-        vmin,
-        vmax,
+@pytest.mark.parametrize(
+    "method",
+    [
+        "DIntegratedGradients",
+        "DInGrad",
+        "VanillaIntegratedGradients",
+        "residual",
+        "random",
+    ],
+)
+def test_attributions_are_finite(method):
+    importance = PairAttribution(MeanClassifier(), method, 4).attribute(
+        torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
     )
-    assert "thresholds" in results
-    assert len(results["thresholds"]) == num_thresholds
-    assert "hybrids" in results
-    assert results["hybrids"][0].shape == input_shape
-    assert "mask_sizes" in results
-    assert len(results["mask_sizes"]) == num_thresholds
+    assert importance.shape == (4, 4)
+    assert torch.isfinite(importance).all()
+    assert importance.min() >= 0 and importance.max() <= 1
+
+
+def test_constant_attribution():
+    assert torch.equal(normalize(torch.ones(3, 4, 4)), torch.zeros(4, 4))

@@ -1,401 +1,104 @@
-import cv2
+"""Area-controlled masking, blending, and counterfactual scoring."""
+
+from dataclasses import dataclass
+
 import numpy as np
-from pathlib import Path
-from quac.data import (
-    PairedImageDataset,
-    ConvertedDataset,
-    PairedWithAttribution,
-    write_image,
-)
-from quac.report import Report
-from torchvision.datasets import ImageFolder
-from torch.nn import functional as F
 import torch
-from tqdm import tqdm
+from scipy.ndimage import gaussian_filter
+
+from .classifier import predict
+from .data import validate_image
 
 
-def image_to_tensor(image, device=None):
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if isinstance(image, np.ndarray):
-        image_tensor = torch.from_numpy(image).to(device)
-    else:
-        image_tensor = image.clone().detach().to(device)
-    if len(np.shape(image)) == 2:
-        image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
-    elif len(np.shape(image)) == 3:
-        image_tensor = image_tensor.unsqueeze(0)
-    elif len(np.shape(image)) == 4:
-        return image_tensor.float()
-    else:
-        raise ValueError(f"Input shape not understood, {image.shape}")
-    return image_tensor.float()
+@dataclass
+class Evaluation:
+    """Complete stored counterfactual sweep for one attribution map."""
+
+    areas: np.ndarray
+    cutoffs: np.ndarray
+    masks: np.ndarray
+    images: np.ndarray
+    logits: np.ndarray
+    probabilities: np.ndarray
+    deltas: np.ndarray
+    optimal_index: int
+    auc: float
 
 
-class Processor:
-    """Class that turns attributions into masks."""
-
-    def __init__(
-        self, gaussian_kernel_size=11, struct=10, channel_wise=True, name="default"
-    ):
-        self.gaussian_kernel_size = gaussian_kernel_size
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struct, struct))
-        self.channel_wise = channel_wise
-        self.name = name
-
-    def create_mask(self, attribution, threshold, return_size=True):
-        channels, _, _ = attribution.shape
-        mask_size = 0
-        mask = []
-        # construct mask channel by channel
-        for c in range(channels):
-            # threshold
-            if self.channel_wise:
-                channel_mask = attribution[c, :, :] > threshold
-            else:
-                channel_mask = np.any(attribution > threshold, axis=0)
-            # TODO explain the reasoning behind the morphological closing
-            # Morphological closing
-            channel_mask = cv2.morphologyEx(
-                channel_mask.astype(np.uint8), cv2.MORPH_CLOSE, self.kernel
-            )
-            # TODO This might be misleading, given the blur afterwards
-            mask_size += np.sum(channel_mask)
-            # TODO Add connected components
-            # Blur
-            mask.append(
-                cv2.GaussianBlur(
-                    channel_mask.astype(np.float32),
-                    (self.gaussian_kernel_size, self.gaussian_kernel_size),
-                    0,
-                )
-            )
-            # TODO should we do this instead?
-            # mask_size += np.sum(mask)
-        if not return_size:
-            return np.array(mask)
-        return np.array(mask), mask_size
-
-
-class UnblurredProcessor(Processor):
-    """
-    Processor without any blurring
-    """
-
-    def __init__(self, struct=10, channel_wise=True, name="no_blur"):
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (struct, struct))
-        self.channel_wise = channel_wise
-        self.name = name
-
-    def create_mask(self, attribution, threshold, return_size=True):
-        channels, _, _ = attribution.shape
-        mask_size = 0
-        mask = []
-        # construct mask channel by channel
-        for c in range(channels):
-            # threshold
-            if self.channel_wise:
-                channel_mask = attribution[c, :, :] > threshold
-            else:
-                channel_mask = np.any(attribution > threshold, axis=0)
-            # Morphological closing
-            channel_mask = cv2.morphologyEx(
-                channel_mask.astype(np.uint8), cv2.MORPH_CLOSE, self.kernel
-            )
-            mask.append(channel_mask)
-            mask_size += np.sum(channel_mask)
-        if not return_size:
-            return np.array(mask)
-        return np.array(mask), mask_size
-
-
-def optimal_threshold_index(mask_sizes, mask_scores):
-    """
-    Find the index of the optimal threshold.
-    The optimal threshold has a minimal mask size, and maximizes the score change.
-    We optimize $|m| - \delta f$ where $m$ is the mask size and $\delta f$ is the score change.
-    """
-    mask_scores = np.array(mask_scores)
-    mask_sizes = np.array(mask_sizes)
-    tradeoff_scores = np.abs(mask_sizes) - mask_scores
-    return np.argmin(tradeoff_scores)
-
-
-class BaseEvaluator:
-    """Base class for evaluating attributions."""
-
-    def __init__(
-        self,
-        classifier,
-        source_dataset=None,
-        paired_dataset=None,
-        attribution_dataset=None,
-        num_thresholds=200,
-        device=None,
-        mask_directory=None,
-        counterfactual_directory=None,
-    ):
-        """Initializes the evaluator.
-
-        It requires three different datasets: the source dataset, the counterfactual dataset and the attribution dataset.
-        All of them must return objects in the forms of the dataclasses in `quac.data`.
-
-
-        Parameters
-        ----------
-        classifier:
-            The classifier to be used for the evaluation.
-        source_dataset:
-            The source dataset must returns a `quac.data.Sample` object in its `__getitem__` method.
-        paired_dataset:
-            The paired dataset must returns a `quac.data.PairedSample` object in its `__getitem__` method.
-        attribution_dataset:
-            The attribution dataset must returns a `quac.data.SampleWithAttribution` object in its `__getitem__` method.
-        num_thresholds: int, optional
-            The number of thresholds to be used for the evaluation. Defaults to 200.
-        device: torch.device, optional
-            The device to be used for the evaluation. If None, it will use the GPU if available, else CPU.
-        mask_directory: str, optional
-            A directory where the masks will be saved on-the-fly. If None, they will not be saved.
-        counterfactual_directory: str, optional
-            A directory where the counterfactuals will be saved on-the-fly. If None, they will not be saved.
-        """
-        self.device = device
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.classifier = classifier.to(self.device)
-        self.num_thresholds = num_thresholds
-        self.classifier = classifier
-
-        self._source_dataset = source_dataset
-        self._paired_dataset = paired_dataset
-        self._dataset_with_attribution = attribution_dataset
-
-        self.mask_directory = mask_directory
-        self.counterfactual_directory = counterfactual_directory
-
-    @property
-    def source_dataset(self):
-        return self._source_dataset
-
-    @property
-    def paired_dataset(self):
-        return self._paired_dataset
-
-    @property
-    def dataset_with_attribution(self):
-        return self._dataset_with_attribution
-
-    def quantify(self, processor=None):
-        if processor is None:
-            processor = Processor()
-        report = Report(name=processor.name + "_report")
-        for inputs in tqdm(self.dataset_with_attribution):
-            predictions = {
-                "original": self.run_inference(inputs.image)[0],
-                "generated": self.run_inference(inputs.generated)[0],
-            }
-            results = self.evaluate(
-                inputs.image,
-                inputs.generated,
-                inputs.source_class_index,
-                inputs.target_class_index,
-                inputs.attribution,
-                predictions,
-                processor,
-            )
-            # Store the mask and counterfactual
-            if self.mask_directory is not None:
-                self.save_mask(inputs, results)
-            if self.counterfactual_directory is not None:
-                self.save_counterfactual(inputs, results)
-            report.accumulate(
-                inputs,
-                predictions,
-                results,
-            )
-        return report
-
-    def save_mask(self, inputs, results):
-        """
-        Store the mask and counterfactual.
-        """
-        source_class = inputs.source_class
-        target_class = inputs.target_class
-
-        # Save the mask
-        if self.mask_directory is not None:
-            mask_directory = (
-                Path(self.mask_directory) / f"{source_class}/{target_class}"
-            )
-            mask_directory.mkdir(parents=True, exist_ok=True)
-            mask_path = mask_directory / (inputs.path.stem + ".npy")
-            np.save(mask_path, results["mask"])
-            results["mask_path"] = mask_path
-
-    def save_counterfactual(self, inputs, results):
-        """
-        Store the counterfactual.
-        """
-        source_class = inputs.source_class
-        target_class = inputs.target_class
-        if self.counterfactual_directory is not None:
-            # Save the counterfactual
-            counterfactual_directory = (
-                Path(self.counterfactual_directory) / f"{source_class}/{target_class}"
-            )
-            counterfactual_directory.mkdir(parents=True, exist_ok=True)
-            counterfactual_path = counterfactual_directory / inputs.path.name
-            write_image(results["hybrid"], counterfactual_path)
-            results["counterfactual_path"] = counterfactual_path
-
-    def evaluate(
-        self,
-        x,
-        x_t,
-        y,
-        y_t,
-        attribution,
-        predictions,
-        processor,
-        vmin=-1,
-        vmax=1,
-    ):
-        """
-        Run QuAC evaluation on the data point.
-
-        Parameters
-        ----------
-        x: the input image
-        x_t: the counterfactual image
-        y: the class of the input image
-        y_t: the class of the counterfactual image
-        attribution: the attribution map
-        predictions: the predictions of the classifier
-        processor: the attribution processing function (to get mask)
-        vmin: the minimal possible value of the attribution, to be used for thresholding. Defaults to -1
-        vmax: the maximal possible value of the attribution, to be used for thresholding. Defaults to 1.
-        """
-        # copy parts of "fake" into "real", see how much the classification of
-        # "real" changes into "fake_class"
-        classification_real = predictions["original"]
-        # TODO remove the need for this
-        results = {
-            "thresholds": [],
-            "mask_sizes": [],
-            "score_change": [],
-        }
-        hybrids = []
-        masks = []
-        for threshold in np.arange(vmin, vmax, (vmax - vmin) / self.num_thresholds):
-            # soft mask of the parts to copy
-            mask, mask_size = processor.create_mask(attribution, threshold)
-            # hybrid = real parts copied to fake
-            hybrid = x_t * mask + x * (1.0 - mask)
-            # Append results
-            results["thresholds"].append(threshold)
-            results["mask_sizes"].append(mask_size / np.prod(x.shape))
-            hybrids.append(hybrid)
-            masks.append(mask)
-
-        # Classification
-        hybrid = np.stack(hybrids, axis=0)
-        classification_hybrid = self.run_inference(hybrid)
-        score_change = classification_hybrid[:, y_t] - classification_real[y_t]
-        results["score_change"] = score_change
-        # Optimal index
-        optimal_index = optimal_threshold_index(
-            results["mask_sizes"], results["score_change"]
+def area_masks(attribution: torch.Tensor, levels: int, sigma: float):
+    """Select ranked pixels at equidistant areas, with stable ties and spatial blur."""
+    if attribution.ndim != 2 or not torch.isfinite(attribution).all():
+        raise ValueError("Expected a finite HW attribution map")
+    if attribution.min() < 0 or attribution.max() > 1 or levels < 2 or sigma < 0:
+        raise ValueError(
+            "Require [0,1] attribution, at least two levels, and nonnegative sigma"
         )
-        # Thresholding index
-        results["optimal_threshold"] = results["thresholds"][optimal_index]
-        results["mask"] = masks[optimal_index]
-        results["hybrid"] = hybrids[optimal_index]
-        predictions["counterfactual"] = classification_hybrid[optimal_index]
-        return results
-
-    @torch.no_grad()
-    def run_inference(self, im):
-        """
-        Net: network object
-        input_image: Normalized 2D input image.
-        """
-        im_tensor = image_to_tensor(im, device=self.device)
-        class_probs = F.softmax(self.classifier(im_tensor), dim=1).cpu().numpy()
-        return class_probs
+    values = attribution.detach().cpu().numpy()
+    order = np.argsort(-values.ravel(), kind="stable")
+    counts = np.rint(np.linspace(0, values.size, levels)).astype(int)
+    masks, cutoffs = [], []
+    for count in counts:
+        mask = np.zeros(values.size, dtype=np.float32)
+        mask[order[:count]] = 1
+        mask = mask.reshape(values.shape)
+        masks.append(gaussian_filter(mask, sigma=sigma) if sigma else mask)
+        cutoffs.append(1.0 if count == 0 else float(values.ravel()[order[count - 1]]))
+    return counts / values.size, np.array(cutoffs), np.stack(masks)
 
 
-class Evaluator(BaseEvaluator):
-    """This class evaluates the quality of an attribution using the QuAC method.
+def optimal_threshold_index(areas, deltas) -> int:
+    """Maximize delta/positive area, choosing the smallest area on ties."""
+    areas, deltas = np.asarray(areas), np.asarray(deltas)
+    valid = np.flatnonzero(areas > 0)
+    if not len(valid):
+        raise ValueError("At least one positive mask area is required")
+    valid = valid[np.argsort(areas[valid], kind="stable")]
+    return int(valid[np.argmax(deltas[valid] / areas[valid])])
 
-    Raises:
-        FileNotFoundError: If the source, counterfactual or attribution directories do not exist.
-    """
 
-    def __init__(
-        self,
-        classifier,
-        source_directory,
-        generated_directory,
-        attribution_directory,
-        transform=None,
-        num_thresholds=200,
-        device=None,
-        mask_directory=None,
-        counterfactual_directory=None,
+def evaluate(
+    classifier,
+    real,
+    generated,
+    attribution,
+    target,
+    classes,
+    original_probability,
+    levels=101,
+    sigma=1.0,
+    batch_size=16,
+) -> Evaluation:
+    """Blend and classify every stored area level without further generation."""
+    validate_image(real)
+    validate_image(generated)
+    if real.shape != generated.shape or tuple(attribution.shape) != tuple(
+        real.shape[-2:]
     ):
-        # Check that they all exist
-        for directory in [
-            source_directory,
-            generated_directory,
-            attribution_directory,
-        ]:
-            if not Path(directory).exists():
-                raise FileNotFoundError(f"Directory {directory} does not exist")
-
-        super().__init__(
-            classifier,
-            None,
-            None,
-            None,
-            num_thresholds=num_thresholds,
-            device=device,
-            mask_directory=mask_directory,
-            counterfactual_directory=counterfactual_directory,
+        raise ValueError(
+            "Real/generated images and spatial attribution must have matching shapes"
         )
-        self.transform = transform
-        self.source_directory = source_directory
-        self.generated_directory = generated_directory
-        self.attribution_directory = attribution_directory
-
-    @property
-    def source_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = ImageFolder(self.source_directory, transform=self.transform)
-        return dataset
-
-    @property
-    def counterfactual_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = ConvertedDataset(self.generated_directory, transform=self.transform)
-        return dataset
-
-    @property
-    def paired_dataset(self):
-        # NOTE: Recomputed each time, but should be used sparingly.
-        dataset = PairedImageDataset(
-            self.source_directory,
-            self.generated_directory,
-            transform=self.transform,
-        )
-        return dataset
-
-    @property
-    def dataset_with_attribution(self):
-        dataset = PairedWithAttribution(
-            self.source_directory,
-            self.generated_directory,
-            self.attribution_directory,
-            transform=self.transform,
-        )
-        return dataset
+    areas, cutoffs, masks = area_masks(attribution, levels, sigma)
+    images, logits, probabilities = [], [], []
+    for start in range(0, levels, batch_size):
+        mask = torch.from_numpy(masks[start : start + batch_size]).to(real.device)[
+            :, None
+        ]
+        hybrids = real[None] * (1 - mask) + generated[None] * mask
+        output, probability = predict(classifier, hybrids, classes, batch_size)
+        images.append(hybrids.cpu().numpy())
+        logits.append(output.numpy())
+        probabilities.append(probability.numpy())
+    logits, probabilities = np.concatenate(logits), np.concatenate(probabilities)
+    deltas = probabilities[:, target] - original_probability
+    optimal = optimal_threshold_index(areas, deltas)
+    return Evaluation(
+        areas,
+        cutoffs,
+        masks,
+        np.concatenate(images),
+        logits,
+        probabilities,
+        deltas,
+        optimal,
+        float(np.trapezoid(deltas, areas)),
+    )
