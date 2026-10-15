@@ -46,6 +46,18 @@ def unpack(blob: bytes) -> np.ndarray:
     return np.load(BytesIO(zlib.decompress(blob)), allow_pickle=False)
 
 
+def _selection(method, source_class, target_class):
+    conditions, parameters = ["e.method=?"], [method]
+    for field, value in (
+        ("source_class", source_class),
+        ("target_class", target_class),
+    ):
+        if value is not None:
+            conditions.append(f"p.{field}=?")
+            parameters.append(value)
+    return " AND ".join(conditions), parameters
+
+
 class Report(AbstractContextManager):
     """Query a report read-only, or create it explicitly through Report.create."""
 
@@ -196,24 +208,27 @@ class Report(AbstractContextManager):
             )
         ]
 
+    def directions(self, method: str) -> list[tuple[int, int]]:
+        """List source/target class directions with completed explanations."""
+        rows = self.connection.execute(
+            "SELECT DISTINCT p.source_class, p.target_class FROM pair p "
+            "JOIN explanation e ON e.pair_id=p.id WHERE e.method=? "
+            "AND p.source_class != p.target_class ORDER BY p.source_class, p.target_class",
+            (method,),
+        )
+        return [tuple(row) for row in rows]
+
     def top(
         self, method: str, k: int = 5, source_class=None, target_class=None
     ) -> list[dict]:
         """Query exemplars by optimal delta, optionally filtering by source and target class."""
         if k < 1:
             raise ValueError("k must be positive")
-        where, parameters = ["e.method=?"], [method]
-        for field, value in (
-            ("source_class", source_class),
-            ("target_class", target_class),
-        ):
-            if value is not None:
-                where.append(f"p.{field}=?")
-                parameters.append(value)
+        where, parameters = _selection(method, source_class, target_class)
         query = (
             "SELECT e.*, p.source_input_path, p.source_class, p.target_class, p.sample FROM explanation e "
             "JOIN pair p ON p.id=e.pair_id WHERE "
-            + " AND ".join(where)
+            + where
             + " ORDER BY e.optimal_delta DESC, e.id LIMIT ?"
         )
         return [dict(row) for row in self.connection.execute(query, [*parameters, k])]
@@ -252,12 +267,14 @@ class Report(AbstractContextManager):
             result.append(record)
         return result
 
-    def curve(self, method: str):
-        """Return area grid, median, and 25th/75th percentiles across stored curves."""
+    def curve(self, method: str, source_class=None, target_class=None):
+        """Return median and 25th/75th percentile curves for the selected classes."""
+        where, parameters = _selection(method, source_class, target_class)
         rows = self.connection.execute(
             "SELECT t.explanation_id, t.area, t.delta FROM threshold t "
-            "JOIN explanation e ON e.id=t.explanation_id WHERE e.method=? ORDER BY t.explanation_id, t.idx",
-            (method,),
+            "JOIN explanation e ON e.id=t.explanation_id JOIN pair p ON p.id=e.pair_id "
+            "WHERE " + where + " ORDER BY t.explanation_id, t.idx",
+            parameters,
         )
         curves = {}
         for row in rows:

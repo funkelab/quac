@@ -48,8 +48,9 @@ quac summarize --config config.yaml
 Paths are relative to the config file. The default outputs are
 `quac-output/checkpoints/latest.pt`, `quac-output/report.sqlite`, and
 `quac-output/summary.html`. Open the HTML in a browser: each exemplar has its own
-mask-area slider, and a menu switches attribution methods. JavaScript and image
-records are bundled for offline use. `summarize` needs `quac[plot]`; training and
+mask-area slider. Select the attribution method, source class, and target class
+to inspect each direction; exemplars and curves follow the same selection.
+JavaScript and image records are bundled for offline use. `summarize` needs `quac[plot]`; training and
 explanation do not import the plotting module. Existing reports require an
 explicit `output.overwrite: true` to replace them.
 
@@ -83,7 +84,7 @@ with Report(path) as report:
     best = report.top(methods[0], k=5, source_class=0, target_class=1)
     sweep = report.thresholds(best[0]["id"])
     pair = report.pair(best[0]["pair_id"])
-    area, median, q25, q75 = report.curve(methods[0])
+    area, median, q25, q75 = report.curve(methods[0], source_class=0, target_class=1)
 
 # Requires quac[plot]:
 from quac.plotting import summarize, write_summary

@@ -28,8 +28,38 @@ def _threshold_text(record, classes):
     )
 
 
-def _method_figure(report, method, k):
-    rows = report.top(method, k)
+def _image_axes(figure, shape, rows):
+    height, width = shape[-2:]
+    plot_width = figure.layout.width - figure.layout.margin.l - figure.layout.margin.r
+    plot_height = figure.layout.height - figure.layout.margin.t - figure.layout.margin.b
+    for index in range(1, rows * 3 + 1):
+        suffix = str(index) if index > 1 else ""
+        xaxis, yaxis = figure.layout[f"xaxis{suffix}"], figure.layout[f"yaxis{suffix}"]
+        x0, x1 = xaxis.domain
+        y0, y1 = yaxis.domain
+        scale = min((x1 - x0) * plot_width / width, (y1 - y0) * plot_height / height)
+        half_width, half_height = width * scale / (2 * plot_width), height * scale / (
+            2 * plot_height
+        )
+        xaxis.update(
+            domain=[(x0 + x1) / 2 - half_width, (x0 + x1) / 2 + half_width],
+            range=[-0.5, width - 0.5],
+            autorange=False,
+            fixedrange=True,
+            constrain="range",
+        )
+        yaxis.update(
+            domain=[(y0 + y1) / 2 - half_height, (y0 + y1) / 2 + half_height],
+            range=[height - 0.5, -0.5],
+            autorange=False,
+            fixedrange=True,
+            scaleanchor=False,
+            constrain="range",
+        )
+
+
+def _direction_figure(report, method, k, source_class, target_class):
+    rows = report.top(method, k, source_class, target_class)
     classes = report.metadata["classes"]
     specs = [[{}, {}, {}] for _ in range(k)] + [[{"colspan": 3}, None, None]]
     titles = []
@@ -39,7 +69,12 @@ def _method_figure(report, method, k):
             if index < len(rows)
             else ["No exemplar", "No exemplar", "No exemplar"]
         )
-    titles.append(f"{method}: median and 25–75% quantiles")
+    direction = f"{classes[source_class]} → {classes[target_class]}"
+    titles.append(
+        f"{method} · {direction}: median and 25–75% quantiles"
+        if rows
+        else "No explanations for this selection"
+    )
     figure = make_subplots(
         rows=k + 1,
         cols=3,
@@ -72,7 +107,7 @@ def _method_figure(report, method, k):
                 _threshold_text(record, classes),
             ]
         else:
-            images = [np.zeros((3, 1, 1))] * 3
+            images = [np.zeros(report.metadata["shape"], dtype=np.float32)] * 3
             texts = ["No exemplar"] * 3
         for column, (image, text) in enumerate(zip(images, texts), 1):
             figure.add_trace(
@@ -122,7 +157,11 @@ def _method_figure(report, method, k):
             )
         else:
             sliders.append(dict(visible=False, steps=[]))
-    grid, median, p25, p75 = report.curve(method)
+    grid, median, p25, p75 = (
+        report.curve(method, source_class, target_class)
+        if rows
+        else (np.array([]),) * 4
+    )
     for y, name, fill in [
         (p25, "25%", None),
         (p75, "25–75%", "tonexty"),
@@ -148,47 +187,141 @@ def _method_figure(report, method, k):
         sliders=sliders,
         height=520 * k + 400,
         width=1400,
-        margin={"t": 180, "b": 80},
-        title={"text": f"QuAC — {method}", "x": 0.5, "y": 0.98},
+        margin={"l": 80, "r": 80, "t": 220, "b": 80, "autoexpand": False},
+        title={"text": f"QuAC — {method} — {direction}", "x": 0.5, "y": 0.98},
         template="plotly_white",
+        meta={
+            "method": method,
+            "source_class": source_class,
+            "target_class": target_class,
+        },
     )
+    _image_axes(figure, report.metadata["shape"], k)
+    for slot, slider in enumerate(figure.layout.sliders):
+        if slider.visible:
+            slider.y = figure.layout[f"yaxis{slot * 3 + 3}"].domain[0] - 0.01
     figure.update_annotations(font={"size": 12})
     return figure
 
 
+def _frame_name(method_index, source_class, target_class):
+    return f"{method_index}:{source_class}:{target_class}"
+
+
+def _button(label, method_index, source_class, target_class):
+    return dict(
+        label=label,
+        method="animate",
+        args=[
+            [_frame_name(method_index, source_class, target_class)],
+            {
+                "mode": "immediate",
+                "frame": {"duration": 0, "redraw": True},
+                "transition": {"duration": 0},
+            },
+        ],
+    )
+
+
+def _selectors(methods, classes, method_index, source_class, target_class):
+    targets = [index for index in range(len(classes)) if index != source_class]
+    return [
+        dict(
+            active=method_index,
+            x=0,
+            buttons=[
+                _button(method, index, source_class, target_class)
+                for index, method in enumerate(methods)
+            ],
+        ),
+        dict(
+            active=source_class,
+            x=0.36,
+            buttons=[
+                _button(
+                    name,
+                    method_index,
+                    index,
+                    source_class if index == target_class else target_class,
+                )
+                for index, name in enumerate(classes)
+            ],
+        ),
+        dict(
+            active=targets.index(target_class),
+            x=0.70,
+            buttons=[
+                _button(classes[index], method_index, source_class, index)
+                for index in targets
+            ],
+        ),
+    ]
+
+
 def summarize(report_path: str | Path, top_k: int = 5) -> go.Figure:
-    """Return one interactive figure with independent exemplar sliders and method selection."""
+    """Return an interactive figure with method and source/target class selectors."""
     if top_k < 1:
         raise ValueError("top_k must be positive")
     with Report(report_path) as report:
         methods = report.methods()
         if not methods:
             raise ValueError("Report has no completed explanations")
-        k = min(top_k, max(len(report.top(method, top_k)) for method in methods))
-        figures = [_method_figure(report, method, k) for method in methods]
-    figure = figures[0]
-    figure.frames = [
-        go.Frame(name=method, data=list(item.data), layout=item.layout)
-        for method, item in zip(methods, figures)
-    ]
-    buttons = [
-        dict(
-            label=method,
-            method="animate",
-            args=[
-                [method],
-                {
-                    "mode": "immediate",
-                    "frame": {"duration": 0, "redraw": True},
-                    "transition": {"duration": 0},
-                },
-            ],
+        classes = report.metadata["classes"]
+        directions = {method: report.directions(method) for method in methods}
+        if not any(directions.values()):
+            raise ValueError("Report has no explanations between different classes")
+        k = max(
+            len(report.top(method, top_k, source, target))
+            for method in methods
+            for source, target in directions[method]
         )
-        for method in methods
+        initial_method = next(
+            index for index, method in enumerate(methods) if directions[method]
+        )
+        initial_source, initial_target = directions[methods[initial_method]][0]
+        views = {}
+        for method_index, method in enumerate(methods):
+            for source_class in range(len(classes)):
+                for target_class in range(len(classes)):
+                    if source_class == target_class:
+                        continue
+                    view = _direction_figure(
+                        report, method, k, source_class, target_class
+                    )
+                    menus = _selectors(
+                        methods, classes, method_index, source_class, target_class
+                    )
+                    plot_height = (
+                        view.layout.height - view.layout.margin.t - view.layout.margin.b
+                    )
+                    menu_y = 1 + (view.layout.margin.t - 90) / plot_height
+                    label_y = 1 + (view.layout.margin.t - 70) / plot_height
+                    for menu in menus:
+                        menu.update(
+                            direction="down", y=menu_y, yanchor="top", xanchor="left"
+                        )
+                    view.update_layout(updatemenus=menus)
+                    for label, x in (
+                        ("Attribution method", 0),
+                        ("Source class", 0.36),
+                        ("Target class", 0.70),
+                    ):
+                        view.add_annotation(
+                            text=label,
+                            x=x,
+                            y=label_y,
+                            xref="paper",
+                            yref="paper",
+                            showarrow=False,
+                            xanchor="left",
+                            yanchor="bottom",
+                        )
+                    views[_frame_name(method_index, source_class, target_class)] = view
+    figure = views[_frame_name(initial_method, initial_source, initial_target)]
+    figure.frames = [
+        go.Frame(name=name, data=list(view.data), layout=view.layout)
+        for name, view in views.items()
     ]
-    figure.update_layout(
-        updatemenus=[dict(buttons=buttons, direction="down", x=0, y=1.13)]
-    )
     return figure
 
 

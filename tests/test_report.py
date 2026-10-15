@@ -98,3 +98,35 @@ def test_failed_explanation_rolls_back_sweep(report_path):
         == 0
     )
     report.close()
+
+
+def test_curves_are_filtered_by_direction(multiclass_report_path):
+    with Report(multiclass_report_path) as report:
+        assert report.directions("residual") == [
+            (0, 1),
+            (0, 2),
+            (1, 0),
+            (1, 2),
+            (2, 0),
+            (2, 1),
+        ]
+        curves = []
+        for source, target in report.directions("residual"):
+            rows = report.top("residual", 10, source, target)
+            assert len(rows) == 2
+            assert {(row["source_class"], row["target_class"]) for row in rows} == {
+                (source, target)
+            }
+            deltas = [
+                [record["delta"] for record in report.thresholds(row["id"])]
+                for row in rows
+            ]
+            grid, median, q25, q75 = report.curve("residual", source, target)
+            expected_q25, expected_median, expected_q75 = np.quantile(
+                deltas, [0.25, 0.5, 0.75], axis=0
+            )
+            np.testing.assert_allclose(median[::25], expected_median)
+            np.testing.assert_allclose(q25[::25], expected_q25)
+            np.testing.assert_allclose(q75[::25], expected_q75)
+            curves.append(median)
+        assert not np.allclose(curves[0], curves[2])
