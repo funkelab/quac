@@ -3,7 +3,7 @@
 So you've decided to use QuAC...
 Great! In this how-to we'll describe the full QuAC pipeline, from installation to visualizing results.
 
-The self-contained `examples/two_domains` directory contains a data/classifier setup script and a runnable configuration.
+The self-contained `examples/two_classes` directory contains a data/classifier setup script and a runnable configuration.
 It will hold the configuration file and scripts which we will use later on.
 
 ## Setup

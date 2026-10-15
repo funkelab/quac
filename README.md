@@ -56,10 +56,10 @@ explicit `output.overwrite: true` to replace them.
 ## Self-contained example
 
 ```sh
-python examples/two_domains/generate.py
-quac train -c examples/two_domains/config.yaml
-quac explain -c examples/two_domains/config.yaml
-quac summarize -c examples/two_domains/config.yaml
+python examples/two_classes/generate.py
+quac train -c examples/two_classes/config.yaml
+quac explain -c examples/two_classes/config.yaml
+quac summarize -c examples/two_classes/config.yaml
 ```
 
 The setup creates small synthetic images differing in a localized bright marker
@@ -120,7 +120,7 @@ Common overrides:
 ```yaml
 generator:
   kind: stargan
-  sampling: latent  # or reference, sampled from the target class
+  sampling: latent  # latent vector sampling; or reference image sampling
   # checkpoint: checkpoints/latest.pt
 training:
   steps: 100000

@@ -17,7 +17,7 @@ def _step(loss, optimizers, names):
 
 
 def train_stargan(model, dataset, config, directory):
-    """Train latent and reference branches and save resumable checkpoints."""
+    """Train latent vector and reference image branches and save resumable checkpoints."""
     options = config.training
     nets = model.nets
     optimizers = {
@@ -46,7 +46,7 @@ def train_stargan(model, dataset, config, directory):
             raise ValueError("training.steps must exceed the resumed checkpoint step")
     class_indices = [dataset.indices(i) for i in range(len(dataset.classes))]
     for step in range(start + 1, options.steps + 1):
-        # Draw classes uniformly so small domains receive equal training weight.
+        # Draw classes uniformly so small classes receive equal training weight.
         source_labels = torch.randint(len(dataset.classes), (options.batch_size,))
         target_labels = (
             source_labels + torch.randint(1, len(dataset.classes), source_labels.shape)
@@ -63,14 +63,14 @@ def train_stargan(model, dataset, config, directory):
         reference_images, target_classes = _batch(
             dataset, reference_indices, model.device
         )
-        latent = torch.randn(
+        latent_vectors = torch.randn(
             len(source_images), config.generator.latent_dim, device=model.device
         )
         losses = []
         for mode in ("latent", "reference"):
             with torch.no_grad():
                 style = (
-                    nets["mapping_network"](latent, target_classes)
+                    nets["mapping_network"](latent_vectors, target_classes)
                     if mode == "latent"
                     else nets["style_encoder"](reference_images, target_classes)
                 )
@@ -86,7 +86,7 @@ def train_stargan(model, dataset, config, directory):
             losses.append(loss.item())
         for mode in ("latent", "reference"):
             style = (
-                nets["mapping_network"](latent, target_classes)
+                nets["mapping_network"](latent_vectors, target_classes)
                 if mode == "latent"
                 else nets["style_encoder"](reference_images, target_classes)
             )

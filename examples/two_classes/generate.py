@@ -15,7 +15,7 @@ class DetailClassifier(torch.nn.Module):
 
 
 def generate(directory: Path, count: int = 8):
-    """Generate paired domains differing only in a small bright square."""
+    """Generate paired classes differing only in a small bright square."""
     generator = torch.Generator().manual_seed(7)
     y, x = torch.meshgrid(torch.arange(32), torch.arange(32), indexing="ij")
     for index in range(count):
@@ -33,7 +33,7 @@ def generate(directory: Path, count: int = 8):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Generate two image domains and a classifier."
+        description="Generate two image classes and a classifier."
     )
     parser.add_argument("--directory", type=Path, default=Path(__file__).parent)
     parser.add_argument("--count", type=int, default=8)

@@ -12,8 +12,8 @@ docs/_build
 # MacOS files
 .DS_Store
 # Local example artifacts
-examples/two_domains/images/
-examples/two_domains/classifier.pt
+examples/two_classes/images/
+examples/two_classes/classifier.pt
 **/quac-output/
 
 # Packaging artifacts

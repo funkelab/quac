@@ -1,16 +1,16 @@
-# Two-domain example
+# Two-class example
 
 From the repository root, after installing `quac[plot]`:
 
 ```sh
-python examples/two_domains/generate.py
-quac train -c examples/two_domains/config.yaml
-quac explain -c examples/two_domains/config.yaml
-quac summarize -c examples/two_domains/config.yaml
+python examples/two_classes/generate.py
+quac train -c examples/two_classes/config.yaml
+quac explain -c examples/two_classes/config.yaml
+quac summarize -c examples/two_classes/config.yaml
 ```
 
-Open `examples/two_domains/quac-output/summary.html` in a browser. The generated
-`marked` and `plain` domains share a noisy disk-shaped object; only `marked` has a
+Open `examples/two_classes/quac-output/summary.html` in a browser. The generated
+`marked` and `plain` classes share a noisy disk-shaped object; only `marked` has a
 small bright upper-right square. Classifier outputs follow that sorted class
 order. The setup script exports its TorchScript classifier along with the images.
 

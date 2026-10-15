@@ -1,7 +1,8 @@
 # Generate images
 
 `quac explain` generates images and evaluates counterfactuals in one pipeline.
-Set `generator.sampling` to `latent` (default) or `reference`. Reference images
+Set `generator.sampling` to `latent` (default) to use latent vectors, or
+`reference` to use reference images. Reference images
 are sampled from the target class. `explanation.samples` defaults to three
 generated images per source image and other target class. Each source/generated
 image pair is shared across all configured attribution methods.

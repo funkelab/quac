@@ -143,7 +143,7 @@ def _method_figure(report, method, k):
             col=1,
         )
     figure.update_xaxes(title_text="Binary mask area", row=k + 1, col=1)
-    figure.update_yaxes(title_text="Target probability change", row=k + 1, col=1)
+    figure.update_yaxes(title_text="Delta", row=k + 1, col=1)
     figure.update_layout(
         sliders=sliders,
         height=520 * k + 400,

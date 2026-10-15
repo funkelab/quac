@@ -3,7 +3,7 @@ import torch
 
 
 class ImageGenerator(Protocol):
-    """Generate images from [0,1] NCHW source images using latent or reference sampling."""
+    """Generate images from [0,1] NCHW source images using latent vector or reference image sampling."""
 
     def generate(
         self,

@@ -62,12 +62,12 @@ class StarGAN:
                 ),
                 "style_encoder": ImageAdapter(
                     StyleEncoder(
-                        style_dim=config.style_dim, num_domains=len(classes), **common
+                        style_dim=config.style_dim, num_classes=len(classes), **common
                     ),
                     size,
                 ),
                 "discriminator": ImageAdapter(
-                    Discriminator(num_domains=len(classes), **common), size
+                    Discriminator(num_classes=len(classes), **common), size
                 ),
                 "mapping_network": MappingNetwork(
                     config.latent_dim,
@@ -86,12 +86,12 @@ class StarGAN:
 
     @torch.no_grad()
     def generate(self, source_images, target_classes, reference_images=None):
-        """Generate images with EMA weights using a reference image or a fresh latent code."""
+        """Generate images with EMA weights using a reference image or a fresh latent vector."""
         if reference_images is None:
-            latent = torch.randn(
+            latent_vectors = torch.randn(
                 len(source_images), self.config.latent_dim, device=self.device
             )
-            style = self.ema["mapping_network"](latent, target_classes)
+            style = self.ema["mapping_network"](latent_vectors, target_classes)
         else:
             style = self.ema["style_encoder"](reference_images, target_classes)
         return self.ema["generator"](source_images, style)

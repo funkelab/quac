@@ -189,7 +189,7 @@ class Generator(nn.Module):
 
 
 class MappingNetwork(nn.Module):
-    def __init__(self, latent_dim=16, style_dim=64, num_domains=2, hidden_dim=512):
+    def __init__(self, latent_dim=16, style_dim=64, num_classes=2, hidden_dim=512):
         super().__init__()
         self.latent_dim = latent_dim
         layers = []
@@ -201,7 +201,7 @@ class MappingNetwork(nn.Module):
         self.shared = nn.Sequential(*layers)
 
         self.unshared = nn.ModuleList()
-        for _ in range(num_domains):
+        for _ in range(num_classes):
             self.unshared += [
                 nn.Sequential(
                     nn.Linear(hidden_dim, hidden_dim),
@@ -214,12 +214,12 @@ class MappingNetwork(nn.Module):
                 )
             ]
 
-    def forward(self, z, y):
-        h = self.shared(z)
+    def forward(self, latent_vectors, y):
+        h = self.shared(latent_vectors)
         out = []
         for layer in self.unshared:
             out += [layer(h)]
-        out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
+        out = torch.stack(out, dim=1)  # (batch, num_classes, style_dim)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
         s = out[idx, y]  # (batch, style_dim)
         return s
@@ -230,7 +230,7 @@ class StyleEncoder(nn.Module):
         self,
         img_size=256,
         style_dim=64,
-        num_domains=2,
+        num_classes=2,
         max_conv_dim=512,
         input_dim=3,
         base_channels=None,
@@ -258,7 +258,7 @@ class StyleEncoder(nn.Module):
         self.shared = nn.Sequential(*blocks)
 
         self.unshared = nn.ModuleList()
-        for _ in range(num_domains):
+        for _ in range(num_classes):
             self.unshared += [nn.Linear(dim_out, style_dim)]
 
     def forward(self, x, y):
@@ -271,7 +271,7 @@ class StyleEncoder(nn.Module):
         out = []
         for layer in self.unshared:
             out += [layer(h)]
-        out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
+        out = torch.stack(out, dim=1)  # (batch, num_classes, style_dim)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
         s = out[idx, y]  # (batch, style_dim)
         return s
@@ -281,7 +281,7 @@ class Discriminator(nn.Module):
     def __init__(
         self,
         img_size=256,
-        num_domains=2,
+        num_classes=2,
         max_conv_dim=512,
         input_dim=3,
         base_channels=None,
@@ -300,12 +300,12 @@ class Discriminator(nn.Module):
         blocks += [nn.LeakyReLU(0.2)]
         blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
         blocks += [nn.LeakyReLU(0.2)]
-        blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
+        blocks += [nn.Conv2d(dim_out, num_classes, 1, 1, 0)]
         self.main = nn.Sequential(*blocks)
 
     def forward(self, x, y):
         out = self.main(x)
-        out = out.view(out.size(0), -1)  # (batch, num_domains)
+        out = out.view(out.size(0), -1)  # (batch, num_classes)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
         out = out[idx, y]  # (batch)
         return out
