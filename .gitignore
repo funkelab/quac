@@ -11,3 +11,12 @@ docs/_build
 
 # MacOS files
 .DS_Store
+# Local example artifacts
+examples/two_domains/images/
+examples/two_domains/classifier.pt
+**/quac-output/
+
+# Packaging artifacts
+build/
+dist/
+.pytest_cache/

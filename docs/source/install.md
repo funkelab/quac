@@ -1,5 +1,10 @@
 # Installation
 
-1. Clone this repository
-2. Install [`pixi`](https://pixi.sh/latest/installation/)
-3. Run your scripts in this repository with `pixi run` OR start a `pixi shell` and run your scripts as normal.
+Use Python 3.10–3.12 and install QuAC from the repository:
+
+```sh
+pip install .
+pip install '.[plot]'  # Optional interactive HTML summaries.
+```
+
+For development, use `pip install -e '.[dev,plot]'` and run `pytest tests`.

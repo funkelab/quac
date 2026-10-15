@@ -1,25 +1,181 @@
-# Quantitative Attributions with Counterfactuals <img src="docs/source/assets/quac.png" alt="Logo" width="50" height="auto" />
+# Quantitative Attribution with Counterfactuals
 
-[![tests](https://github.com/funkelab/quac/actions/workflows/tests.yaml/badge.svg)](https://github.com/funkelab/quac/actions/workflows/tests.yaml)
-[![documentation](https://github.com/funkelab/quac/actions/workflows/deploy-docs.yaml/badge.svg)](https://github.com/funkelab/quac/actions/workflows/deploy-docs.yaml)
-[![DOI:10.1101/2024.11.26.625505](http://img.shields.io/badge/DOI-10.1101/2024.11.26.625505-B31B1B.svg)](https://doi.org/10.1101/2024.11.26.625505)
+QuAC explains image classifiers by translating real images into another class,
+computing pairwise attribution maps, and blending progressively larger regions
+from each translation into the original. A SQLite report stores every evaluated
+counterfactual and prediction for later inspection.
 
-Pre-print can be found on [bioRxiv](https://www.biorxiv.org/content/10.1101/2021.01.08.425840v1)
-Documentation can be found [here](https://funkelab.github.io/quac/).
+Install with Python 3.10–3.12:
 
-<img src="docs/source/assets/overview.png" />
+```sh
+pip install .
+# Include the optional interactive HTML summaries:
+pip install '.[plot]'
+```
 
-Installing:
-1. Clone this repository
-2. Create a `conda` environment with `python, pytorch, torchvision`; I recommend `mamba`
-3. Activate your new environment (`mamba activate ...`)
-4. Change into the directory holding this repository.
-5. `pip install .`
+Arrange grayscale or RGB images in one directory per class. All images must have
+the same dimensions and channel count. Class indices follow sorted directory
+names. Floating images must already be finite and in `[0,1]`; integer images are
+scaled by their dtype maximum. QuAC never rescales images for the classifier.
 
-Installing as developer:
-1. - 4. Same as above.
-5. `pip install -e .\[dev\]`
+A source-only configuration is sufficient for generator training:
 
+```yaml
+data:
+  source: images
+```
 
-Logo made with the help of DALL-E 2.
-The code for training the StarGAN is adapted from the [Official Pytorch Implementation of StarGANv2](https://github.com/clovaai/stargan-v2).
+To explain predictions, additionally supply your classifier, a TorchScript model
+accepting `[N,C,H,W]` float32 images in `[0,1]` and returning `[N,num_classes]`
+logits in sorted class order:
+
+```yaml
+data:
+  source: images
+classifier:
+  checkpoint: classifier.pt
+```
+
+Run the three stages using the same configuration:
+
+```sh
+quac train --config config.yaml
+quac explain --config config.yaml
+quac summarize --config config.yaml
+```
+
+Paths are relative to the config file. The default outputs are
+`quac-output/checkpoints/latest.pt`, `quac-output/report.sqlite`, and
+`quac-output/summary.html`. Open the HTML in a browser: each exemplar has its own
+mask-area slider, and a menu switches attribution methods. JavaScript and image
+records are bundled for offline use. `summarize` needs `quac[plot]`; training and
+explanation do not import the plotting module. Existing reports require an
+explicit `output.overwrite: true` to replace them.
+
+## Self-contained example
+
+```sh
+python examples/two_domains/generate.py
+quac train -c examples/two_domains/config.yaml
+quac explain -c examples/two_domains/config.yaml
+quac summarize -c examples/two_domains/config.yaml
+```
+
+The setup creates small synthetic images differing in a localized bright marker
+and exports a classifier that detects that detail. The example configuration uses
+small networks and a short training run to demonstrate the whole workflow.
+Converged, meaningful translations require longer training; inspect the generated
+panels before interpreting explanations.
+
+## Python API and report queries
+
+```python
+from quac import train, explain
+from quac.config import load_config
+from quac.report import Report
+
+config = load_config("config.yaml")
+train(config)
+path = explain(config)
+with Report(path) as report:
+    methods = report.methods()
+    best = report.top(methods[0], k=5, source=0, target=1)
+    sweep = report.thresholds(best[0]["id"])
+    original = report.pair(best[0]["pair_id"])
+    area, median, q25, q75 = report.curve(methods[0])
+
+# Requires quac[plot]:
+from quac.plotting import summarize, write_summary
+figure = summarize(path, top_k=5)
+write_summary(path, "summary.html", top_k=5)
+```
+
+The report contains source/generated images, normalized attribution maps, all
+threshold masks and counterfactual images, exact logits and probabilities,
+source/target labels, optimal selections, curve AUCs, resolved configuration,
+model hashes, and completion/failure status. It remains usable after input
+images and models are moved or deleted. Readers open databases read-only.
+
+For every pair, pixels are ranked by spatial attribution importance. Masks select
+equidistant binary areas (stable row-major ordering breaks importance ties), then
+undergo Gaussian smoothing. Delta is the change in target-class probability.
+The optimal mask maximizes delta divided by positive binary area, with ties
+favoring smaller areas. Exemplars are ranked by their optimal delta. Curves show
+median delta and the 25th–75th percentile distribution across explanations.
+
+## Configuration and extension
+
+Optional sections are `generator`, `training`, `explanation`, `output`, and
+`summary`; `device` defaults to `auto` (CUDA when available, otherwise CPU) and
+`seed` to 0. Unknown settings are errors. The validated defaults live in
+`quac.config.Config`; use `Config.model_json_schema()` for the complete settings
+and constraints.
+
+Common overrides:
+
+```yaml
+generator:
+  kind: stargan
+  sampling: latent  # or reference, sampled from the target class
+  # checkpoint: previous-run/checkpoints/latest.pt
+training:
+  steps: 100000
+  batch_size: 4
+explanation:
+  methods: [DIntegratedGradients, residual]
+  samples: 3
+  levels: 101
+  sigma: 1.0
+summary:
+  top_k: 5
+```
+
+Available attribution methods are `DIntegratedGradients`, `DDeepLift`, `DInGrad`,
+`VanillaIntegratedGradients`, `VanillaDeepLift`, `residual`, and `random`.
+DeepLift requires a compatible eager PyTorch classifier; inject one through the
+Python API rather than using a TorchScript classifier. The default integrated
+gradients method works with the CLI's TorchScript contract.
+
+`quac.interfaces` defines the translator and attribution contracts. Python callers
+can inject `generator`, `classifier`, and a dictionary of `attributions` into
+`explain`. Custom attribution names must match `explanation.methods`. Generators
+receive/return unit-range NCHW images, and attribution components receive CHW
+image pairs and return spatial HW or channel CHW importance. Register additional
+CLI generator factories in `quac.generators.build_generator`; training routines
+belong to the corresponding backend. Class count, channel count, and spatial
+size are inferred, never configured. StarGAN pads internally to a supported
+square size and crops its outputs back to the original dimensions.
+
+Native checkpoints contain trainable weights, EMA weights, optimizer states,
+architecture metadata, and CPU/CUDA RNG states. Set `generator.checkpoint` to resume
+training, with `training.steps` specifying the final step. It also selects the
+checkpoint for explanation. Compatible old EMA checkpoints can be used for
+inference when architecture parameters match; they cannot resume training.
+
+## Migration and development
+
+Version 0.3 replaces the old `ExperimentConfig`, filesystem generation/evaluation
+pipeline, `Explanation`, and JSON `Report` APIs. Use the commands and query API
+above. Old JSON reports and configs are not automatically migrated; rerun
+explanation to capture the full threshold sweep. The old area-minus-delta optimum
+and AUC-based exemplar ranking have been replaced by the definitions above.
+`examples/two_domains` replaces `example_experiment`.
+
+```sh
+pip install -e '.[dev,plot]'
+pytest tests
+black --check src tests examples
+```
+
+Optional browser checks require Playwright and Chromium:
+
+```sh
+pip install playwright
+playwright install chromium
+QUAC_BROWSER_TESTS=1 pytest tests/test_browser.py
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for implementation stages and verification.
+The StarGAN implementation is adapted from NAVER's StarGAN v2; its original
+license notices are retained. Project documentation is at
+https://funkelab.github.io/quac/.

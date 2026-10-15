@@ -25,3 +25,11 @@
 - Trimmed unused dependencies and added `quac[plot]`. Kept the existing unpinned Torch dependency; corrected `<=3.12` to `>=3.10,<3.13` so Python 3.12 patch releases can install.
 - Native checkpoints now preserve CPU and CUDA RNG states. Invalid generated images are rejected before classifier inference.
 - Validation: 45 standard tests pass; two optional Chromium tests pass, exercising real slider clicks and method changes with unequal exemplar counts. Editable installation and wheel building succeed.
+
+## 4. Self-contained example and migration documentation
+
+- Replaced `example_experiment` with `examples/two_domains`: a deterministic localized-marker dataset, exported TorchScript classifier, and small runnable configuration.
+- Rewrote the README and tutorials for the shared config, three commands, SQLite queries, unit-range contracts, component injection, checkpoint support, and API/scoring migration.
+- Ignore generated example and packaging artifacts.
+- Validation: ran the installed commands through all 50 training steps and explanation on all 16 example images, producing 64 explanations and 1,344 threshold records; generated the standalone HTML successfully. The short run demonstrates execution, not generator convergence.
+- Final checks: 45 standard tests passed (two browser tests skipped in that run); both browser tests also passed separately. Black and git whitespace checks passed. Wheel and editable package builds passed.
