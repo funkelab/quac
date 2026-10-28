@@ -14,6 +14,16 @@ direction. The target menu excludes the source class; choosing the current targe
 as the source swaps direction. Selections without stored explanations show an
 empty result. The figure is self-contained and works offline.
 
+A contour on each counterfactual outlines pixels whose stored blurred blending
+mask exceeds 0.5: those pixels draw predominantly from the generated image.
+The shared controls at the top set the contour color (bright pink by default),
+width, and smoothness. Width is a percentage of the smaller image dimension,
+defaulting to 1%, with a minimum of one image pixel. Native contours use whole
+pixels, rounding the width upward. Smoothness defaults to none. Higher settings
+interpolate the 0.5 level crossing from the blurred mask and antialias the contour
+at 2×, 3×, or 4× resolution. Contour settings persist while changing mask area,
+attribution method, or class direction.
+
 Set `summary.top_k` to change the number of exemplars (default five). Python users
 can call `quac.plotting.summarize(path, top_k=5)` to obtain a Plotly figure, or
 `write_summary(path, output_path, top_k=5)` to write HTML. Summary generation reads

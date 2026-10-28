@@ -12,13 +12,13 @@ def test_summary_contains_direction_and_method_selectors(report_path):
     assert len(figure.frames) == 4
     assert len(figure.layout.sliders) == 1
     slider = figure.layout.sliders[0]
-    assert slider.steps[0].args[2] == (2,)
+    assert slider.steps[0].args[2] == (2, 6)
     assert len(slider.steps) == 5
     assert "annotations[2].text" in slider.steps[0].args[1]
     assert len(figure.layout.updatemenus) == 3
     assert [len(menu.buttons) for menu in figure.layout.updatemenus] == [2, 2, 1]
-    assert len(figure.data) == 6
-    assert figure.data[-2].fill == "tonexty"
+    assert len(figure.data) == 7
+    assert figure.data[4].fill == "tonexty"
 
 
 def test_html_is_self_contained(report_path):
@@ -65,7 +65,7 @@ def test_direction_without_explanations_is_empty(report_path):
     assert not any(slider.visible for slider in missing.layout.sliders)
     assert missing.layout.annotations[0].text == "No exemplar"
     assert "No explanations" in missing.layout.annotations[3].text
-    assert not missing.data[-1].x and not missing.data[-1].y
+    assert not missing.data[5].x and not missing.data[5].y
 
 
 def test_multiclass_summary_covers_every_direction(multiclass_report_path):
@@ -102,5 +102,5 @@ def test_multiclass_summary_covers_every_direction(multiclass_report_path):
                 if index != source
             ]
             expected_curve = report.curve(selection["method"], source, target)[1]
-            np.testing.assert_allclose(frame.data[-1].y, expected_curve)
+            np.testing.assert_allclose(frame.data[8].y, expected_curve)
             assert len(frame.layout.sliders) == 2

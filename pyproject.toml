@@ -30,6 +30,9 @@ dependencies = [
 [project.scripts]
 quac = "quac.cli:main"
 
+[tool.setuptools.package-data]
+quac = ["*.js"]
+
 [tool.setuptools.dynamic]
 version = {attr = "quac.__version__"}
 

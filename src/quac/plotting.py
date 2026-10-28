@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from .contours import contour_metadata, contour_source
 from .report import Report
 
 
@@ -82,7 +83,7 @@ def _direction_figure(report, method, k, source_class, target_class):
         subplot_titles=titles,
         vertical_spacing=0.45 / (k + 1),
     )
-    sliders = []
+    sliders, overlays = [], []
     for slot in range(k):
         if slot < len(rows):
             row = rows[slot]
@@ -90,6 +91,13 @@ def _direction_figure(report, method, k, source_class, target_class):
             thresholds = report.thresholds(row["id"])
             optimum = row["optimal_index"]
             record = thresholds[optimum]
+            contour_sources = [contour_source(item["mask"]) for item in thresholds]
+            contour_masks = [contour_metadata(item["mask"]) for item in thresholds]
+            overlay = go.Image(
+                source=contour_sources[optimum],
+                meta=contour_masks[optimum],
+                hoverinfo="skip",
+            )
             images = [
                 pair["source_image"],
                 pair["generated_image"],
@@ -109,6 +117,12 @@ def _direction_figure(report, method, k, source_class, target_class):
         else:
             images = [np.zeros(report.metadata["shape"], dtype=np.float32)] * 3
             texts = ["No exemplar"] * 3
+            overlay = go.Image(
+                source=contour_source(np.zeros(report.metadata["shape"][-2:])),
+                meta={"quac_contour": None},
+                hoverinfo="skip",
+            )
+        overlays.append(overlay)
         for column, (image, text) in enumerate(zip(images, texts), 1):
             figure.add_trace(
                 go.Image(z=_display(image), hoverinfo="skip"), row=slot + 1, col=column
@@ -134,12 +148,16 @@ def _direction_figure(report, method, k, source_class, target_class):
                     label=f"{record['area']:.2f}",
                     method="update",
                     args=[
-                        {"z": [_display(record["counterfactual"])]},
+                        {
+                            "z": [_display(record["counterfactual"]), None],
+                            "source": [None, contour_sources[index]],
+                            "meta": [{}, contour_masks[index]],
+                        },
                         {annotation_key: _threshold_text(record, classes)},
-                        [slot * 3 + 2],
+                        [slot * 3 + 2, k * 3 + 3 + slot],
                     ],
                 )
-                for record in thresholds
+                for index, record in enumerate(thresholds)
             ]
             sliders.append(
                 dict(
@@ -181,6 +199,8 @@ def _direction_figure(report, method, k, source_class, target_class):
             row=k + 1,
             col=1,
         )
+    for slot, overlay in enumerate(overlays):
+        figure.add_trace(overlay, row=slot + 1, col=3)
     figure.update_xaxes(title_text="Binary mask area", row=k + 1, col=1)
     figure.update_yaxes(title_text="Delta", row=k + 1, col=1)
     figure.update_layout(
@@ -332,5 +352,7 @@ def write_summary(
     figure = summarize(report_path, top_k)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    figure.write_html(path, include_plotlyjs=True, auto_play=False)
+    script = Path(__file__).with_name("contours.js").read_text(encoding="utf-8")
+    script += '\nQuacContours.attach(document.getElementById("{plot_id}"));'
+    figure.write_html(path, include_plotlyjs=True, auto_play=False, post_script=script)
     return path
