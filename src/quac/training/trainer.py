@@ -10,13 +10,54 @@ from .losses import discriminator_loss, generator_loss
 MODES = ("latent", "reference")
 
 
-def _batch(dataset, indices, device):
-    images, labels = zip(*(dataset[index] for index in indices))
-    return torch.stack(images).to(device), torch.tensor(labels, device=device)
+def _sample(indices, generator=None):
+    return indices[torch.randint(len(indices), (), generator=generator).item()]
 
 
-def _sample(indices):
-    return indices[torch.randint(len(indices), ()).item()]
+def _loader(dataset, batches, config, device):
+    """Read listed index batches, in worker processes when training.num_workers > 0."""
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_sampler=batches,
+        num_workers=config.training.num_workers,
+        pin_memory=device.type == "cuda",
+        # Seed workers from a private generator so the global RNG stays resumable.
+        generator=torch.Generator().manual_seed(config.seed),
+    )
+
+
+class _PairSampler:
+    """Yield each step's source then reference indices.
+
+    Classes are drawn uniformly so small classes receive equal training weight. Each
+    step draws from its own seeded generator, so batches are independent of worker
+    prefetching and resuming from a checkpoint continues the same sequence.
+    """
+
+    def __init__(self, dataset, batch_size, seed, steps):
+        self.class_indices = [dataset.indices(i) for i in range(len(dataset.classes))]
+        self.batch_size = batch_size
+        self.seed = seed
+        self.steps = steps
+
+    def __len__(self):
+        return len(self.steps)
+
+    def __iter__(self):
+        classes = len(self.class_indices)
+        for step in self.steps:
+            generator = torch.Generator().manual_seed(self.seed * 2**32 + step)
+            source_labels = torch.randint(
+                classes, (self.batch_size,), generator=generator
+            )
+            target_labels = (
+                source_labels
+                + torch.randint(1, classes, source_labels.shape, generator=generator)
+            ) % classes
+            yield [
+                _sample(self.class_indices[y], generator)
+                for y in torch.cat([source_labels, target_labels])
+            ]
 
 
 def _style(nets, mode, latent_vectors, reference_images, target_classes):
@@ -57,42 +98,45 @@ def _translation_probabilities(model, dataset, classifier, config):
     options = config.training
     classes = dataset.classes
     class_indices = [dataset.indices(i) for i in range(len(classes))]
-    pairs = {}
+    reference = config.generator.sampling == "reference"
+    # Draw every reference image and latent vector up front so workers only read.
+    batches, plans = [], []
     for source, indices in enumerate(class_indices):
-        source_images, _ = _batch(
-            dataset, indices[: options.validation_samples], model.device
+        chosen = indices[: options.validation_samples]
+        targets = [target for target in range(len(classes)) if target != source]
+        for start in range(0, len(chosen), options.batch_size):
+            chunk = chosen[start : start + options.batch_size]
+            references = [
+                _sample(class_indices[target]) for target in targets for _ in chunk
+            ]
+            batches.append(chunk + (references if reference else []))
+            latent_vectors = torch.randn(
+                len(targets), len(chunk), config.generator.latent_dim
+            )
+            plans.append((source, targets, len(chunk), latent_vectors))
+    pairs = {}
+    for (images, _), (source, targets, size, latent_vectors) in zip(
+        _loader(dataset, batches, config, model.device), plans
+    ):
+        images = images.to(model.device)
+        source_images = images[:size]
+        reference_batches = (
+            images[size:].split(size) if reference else [None] * len(targets)
         )
         _, before = predict(classifier, source_images, len(classes), options.batch_size)
-        for target in range(len(classes)):
-            if target == source:
-                continue
-            generated = []
-            for images in source_images.split(options.batch_size):
-                target_classes = torch.full((len(images),), target, device=model.device)
-                reference_images = None
-                if config.generator.sampling == "reference":
-                    reference_images, _ = _batch(
-                        dataset,
-                        [_sample(class_indices[target]) for _ in images],
-                        model.device,
-                    )
-                latent_vectors = torch.randn(
-                    len(images), config.generator.latent_dim
-                ).to(model.device)
-                generated.append(
-                    model.generate(
-                        images, target_classes, reference_images, latent_vectors
-                    )
-                )
-            _, after = predict(
-                classifier, torch.cat(generated), len(classes), options.batch_size
+        for target, reference_images, latent in zip(
+            targets, reference_batches, latent_vectors
+        ):
+            target_classes = torch.full((size,), target, device=model.device)
+            generated = model.generate(
+                source_images, target_classes, reference_images, latent.to(model.device)
             )
-            pairs[classes[source], classes[target]] = (
-                before[:, target],
-                after[:, target],
-                after.argmax(1) == target,
-            )
-    return pairs
+            _, after = predict(classifier, generated, len(classes), options.batch_size)
+            pair = pairs.setdefault((classes[source], classes[target]), ([], [], []))
+            pair[0].append(before[:, target])
+            pair[1].append(after[:, target])
+            pair[2].append(after.argmax(1) == target)
+    return {pair: tuple(map(torch.cat, values)) for pair, values in pairs.items()}
 
 
 def _validate(model, dataset, classifier, config):
@@ -103,21 +147,22 @@ def _validate(model, dataset, classifier, config):
     class_indices = [dataset.indices(i) for i in range(classes)]
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(config.seed)
-        totals = [0.0] * 4
+        batches, latents = [], []
         for start in range(0, len(dataset), options.batch_size):
-            indices = range(start, min(start + options.batch_size, len(dataset)))
-            source_images, source_classes = _batch(dataset, indices, model.device)
+            indices = list(range(start, min(start + options.batch_size, len(dataset))))
+            source_labels = torch.tensor([dataset.samples[i].label for i in indices])
             target_labels = (
-                source_classes.cpu() + torch.randint(1, classes, (len(indices),))
+                source_labels + torch.randint(1, classes, (len(indices),))
             ) % classes
-            reference_images, target_classes = _batch(
-                dataset,
-                [_sample(class_indices[y]) for y in target_labels],
-                model.device,
-            )
-            latent_vectors = torch.randn(len(indices), config.generator.latent_dim).to(
-                model.device
-            )
+            batches.append(indices + [_sample(class_indices[y]) for y in target_labels])
+            latents.append(torch.randn(len(indices), config.generator.latent_dim))
+        totals = [0.0] * 4
+        for (images, labels), latent_vectors in zip(
+            _loader(dataset, batches, config, model.device), latents
+        ):
+            source_images, reference_images = images.to(model.device).chunk(2)
+            source_classes, target_classes = labels.to(model.device).chunk(2)
+            latent_vectors = latent_vectors.to(model.device)
             for index, mode in enumerate(MODES):
                 with torch.no_grad():
                     style = _style(
@@ -141,8 +186,8 @@ def _validate(model, dataset, classifier, config):
                     style,
                     options.lambda_reg,
                 )
-                totals[index] += discriminator.item() * len(indices)
-                totals[2 + index] += generator.item() * len(indices)
+                totals[index] += discriminator.item() * len(source_images)
+                totals[2 + index] += generator.item() * len(source_images)
         metrics = _loss_metrics([total / len(dataset) for total in totals])
         pairs = {}
         if classifier is not None:
@@ -191,7 +236,7 @@ def _step(loss, optimizers, names):
         optimizers[name].step()
 
 
-def train_stargan(model, dataset, config, directory, validation=None, classifier=None):
+def train_stargan(model, dataset, config, directory, validation_dataset=None, classifier=None):
     """Train latent vector and reference image branches and save resumable checkpoints.
 
     A validation dataset is scored every ``training.validate_every`` steps; with a
@@ -223,11 +268,12 @@ def train_stargan(model, dataset, config, directory, validation=None, classifier
             torch.cuda.set_rng_state_all([state.cpu() for state in payload["rng_cuda"]])
         if start >= options.steps:
             raise ValueError("training.steps must exceed the resumed checkpoint step")
-    class_indices = [dataset.indices(i) for i in range(len(dataset.classes))]
+    steps = range(start + 1, options.steps + 1)
+    sampler = _PairSampler(dataset, options.batch_size, config.seed, steps)
     # Without a terminal (e.g. logs redirected to a file) the bar is disabled and
     # only the logged lines are printed.
     progress = tqdm(
-        range(start + 1, options.steps + 1),
+        zip(steps, _loader(dataset, sampler, config, model.device)),
         initial=start,
         total=options.steps,
         desc="training",
@@ -236,27 +282,11 @@ def train_stargan(model, dataset, config, directory, validation=None, classifier
         disable=None,
     )
     with _wandb_run(config) as run, progress:
-        for step in progress:
-            # Draw classes uniformly so small classes receive equal training weight.
-            source_labels = torch.randint(len(dataset.classes), (options.batch_size,))
-            target_labels = (
-                source_labels
-                + torch.randint(1, len(dataset.classes), source_labels.shape)
-            ) % len(dataset.classes)
-            source_indices = [
-                class_indices[y][torch.randint(len(class_indices[y]), ()).item()]
-                for y in source_labels
-            ]
-            reference_indices = [
-                class_indices[y][torch.randint(len(class_indices[y]), ()).item()]
-                for y in target_labels
-            ]
-            source_images, source_classes = _batch(
-                dataset, source_indices, model.device
-            )
-            reference_images, target_classes = _batch(
-                dataset, reference_indices, model.device
-            )
+        for step, (images, labels) in progress:
+            source_images, reference_images = images.to(
+                model.device, non_blocking=True
+            ).chunk(2)
+            source_classes, target_classes = labels.to(model.device).chunk(2)
             latent_vectors = torch.randn(
                 len(source_images), config.generator.latent_dim, device=model.device
             )
@@ -311,10 +341,10 @@ def train_stargan(model, dataset, config, directory, validation=None, classifier
                         {f"train/{name}": value for name, value in metrics.items()},
                         step=step,
                     )
-            if validation is not None and (
+            if validation_dataset is not None and (
                 step % options.validate_every == 0 or step == options.steps
             ):
-                metrics, pairs = _validate(model, validation, classifier, config)
+                metrics, pairs = _validate(model, validation_dataset, classifier, config)
                 translation = (
                     f" translation_rate={metrics['translation_rate']:.3f}"
                     if pairs

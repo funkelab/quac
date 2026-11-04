@@ -30,10 +30,10 @@ def train(config: Config) -> Path:
 
     config = config.resolve_paths(Path.cwd())
     device = initialize(config)
-    dataset = ImageDataset(config.data.source)
+    dataset = ImageDataset(config.data.source, config.data.check_shapes)
     validation = None
     if config.data.validation is not None:
-        validation = ImageDataset(config.data.validation)
+        validation = ImageDataset(config.data.validation, config.data.check_shapes)
         if validation.classes != dataset.classes or validation.shape != dataset.shape:
             raise ValueError(
                 "Validation classes and image shape must match the training source"
@@ -73,7 +73,7 @@ def explain(
         raise FileExistsError(
             f"Report already exists: {config.output.report}; set output.overwrite: true"
         )
-    dataset = ImageDataset(config.data.source)
+    dataset = ImageDataset(config.data.source, config.data.check_shapes)
     checkpoint = (
         config.generator.checkpoint
         or config.output.directory / "checkpoints" / "latest.pt"

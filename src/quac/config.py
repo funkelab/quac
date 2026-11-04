@@ -16,6 +16,7 @@ class DataConfig(Settings):
 
     source: Path
     validation: Path | None = None
+    check_shapes: bool = True
 
 
 class GeneratorConfig(Settings):
@@ -49,6 +50,7 @@ class TrainingConfig(Settings):
     save_every: int = Field(10000, ge=1)
     validate_every: int = Field(1000, ge=1)
     validation_samples: int | None = Field(128, ge=1)
+    num_workers: int = Field(0, ge=0)
 
 
 class ClassifierConfig(Settings):

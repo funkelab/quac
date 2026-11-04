@@ -36,6 +36,12 @@ def read_image(path: str | Path) -> torch.Tensor:
     return tensor
 
 
+def image_shape(path: str | Path) -> tuple[int, ...]:
+    """Return the CHW shape that read_image would produce, reading only the file header."""
+    shape = iio.improps(path).shape
+    return (1, *shape) if len(shape) == 2 else (shape[-1], *shape[:-1])
+
+
 def write_image(image: torch.Tensor, path: str | Path) -> None:
     """Write lossless float TIFF or quantized 8-bit display images."""
     validate_image(image)
@@ -58,16 +64,20 @@ class Sample:
 
 
 class ImageDataset:
-    """Discover sorted class directories and validate consistent image shapes."""
+    """Discover sorted class directories and validate consistent image shapes.
 
-    def __init__(self, source: str | Path):
+    Shapes are checked from file headers; ``check_shapes=False`` skips the check for
+    datasets known to be consistent, taking the shape from the first image alone.
+    """
+
+    def __init__(self, source: str | Path, check_shapes: bool = True):
         self.source = Path(source)
         self.classes = sorted(
             path.name for path in self.source.iterdir() if path.is_dir()
         )
         if len(self.classes) < 2:
             raise ValueError("Source must contain at least two class directories")
-        self.samples = []
+        self.samples: list[Sample] = []
         for label, name in enumerate(self.classes):
             paths = sorted(
                 p
@@ -78,13 +88,11 @@ class ImageDataset:
                 raise ValueError(f"No images found for class {name}")
             self.samples.extend(Sample(path, label) for path in paths)
         self.shape = tuple(read_image(self.samples[0].path).shape)
-        # for sample in self.samples[1:]:
-            # TODO: this will take a long time for Optimam and shouldn't be repeated every training. 
-            # We already know that the Optimam images are the right size.
-            # if tuple(read_image(sample.path).shape) != self.shape:
-                # raise ValueError(
-                    # f"All images must have shape {self.shape}: {sample.path}"
-                # )
+        for sample in self.samples[1:] if check_shapes else []:
+            if image_shape(sample.path) != self.shape:
+                raise ValueError(
+                    f"All images must have shape {self.shape}: {sample.path}"
+                )
 
     def __len__(self):
         return len(self.samples)

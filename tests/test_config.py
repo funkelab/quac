@@ -16,6 +16,7 @@ def test_minimal_config(tmp_path):
     assert config.explanation.levels == 101
     assert "img_size" not in type(config.generator).model_fields
     assert config.data.validation is None and not config.wandb.enabled
+    assert config.data.check_shapes and config.training.num_workers == 0
 
 
 def test_validation_and_wandb_config(tmp_path):

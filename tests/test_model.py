@@ -162,3 +162,48 @@ def test_validation_logging_spares_training_rng(tmp_path, monkeypatch, sampling)
         assert 0 <= logged[f"validation/{pair}/translation_rate"] <= 1
     repeated = [_validate(model, validation, MeanClassifier(), config)[0] for _ in "ab"]
     assert repeated[0] == repeated[1]
+
+
+def test_workers_and_resume_reproduce_uninterrupted_training(tmp_path):
+    torch.set_num_threads(1)
+    for name in ["a", "b"]:
+        for index in range(3):
+            write_image(
+                torch.rand(1, 13, 19), tmp_path / "images" / name / f"{index}.tif"
+            )
+    dataset = ImageDataset(tmp_path / "images")
+    config = Config.model_validate(
+        dict(
+            data={"source": str(dataset.source)},
+            generator=dict(
+                style_dim=4,
+                latent_dim=2,
+                base_channels=4,
+                max_channels=8,
+                mapping_width=8,
+            ),
+            training=dict(steps=2, batch_size=2),
+        )
+    )
+
+    def train(steps, workers, checkpoint=None):
+        options = config.model_copy(deep=True)
+        options.training.steps = steps
+        options.training.num_workers = workers
+        options.generator.checkpoint = checkpoint
+        torch.manual_seed(0)
+        model = StarGAN(
+            dataset.shape, dataset.classes, options.generator, torch.device("cpu")
+        )
+        directory = tmp_path / f"checkpoints-{steps}-{workers}"
+        # Validating only while resuming also checks that it spares training RNG.
+        validation = dict(validation=dataset, classifier=MeanClassifier())
+        path = train_stargan(
+            model, dataset, options, directory, **(validation if checkpoint else {})
+        )
+        return path, next(model.ema["generator"].parameters()).detach()
+
+    _, uninterrupted = train(2, 0)
+    checkpoint, _ = train(1, 2)
+    _, resumed = train(2, 2, checkpoint)
+    torch.testing.assert_close(uninterrupted, resumed, rtol=0, atol=0)
