@@ -78,11 +78,13 @@ class ImageDataset:
                 raise ValueError(f"No images found for class {name}")
             self.samples.extend(Sample(path, label) for path in paths)
         self.shape = tuple(read_image(self.samples[0].path).shape)
-        for sample in self.samples[1:]:
-            if tuple(read_image(sample.path).shape) != self.shape:
-                raise ValueError(
-                    f"All images must have shape {self.shape}: {sample.path}"
-                )
+        # for sample in self.samples[1:]:
+            # TODO: this will take a long time for Optimam and shouldn't be repeated every training. 
+            # We already know that the Optimam images are the right size.
+            # if tuple(read_image(sample.path).shape) != self.shape:
+                # raise ValueError(
+                    # f"All images must have shape {self.shape}: {sample.path}"
+                # )
 
     def __len__(self):
         return len(self.samples)

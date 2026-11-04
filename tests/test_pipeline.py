@@ -19,6 +19,20 @@ def test_explain_requires_explicit_classifier():
         explain(Config(data={"source": "missing"}))
 
 
+def test_train_rejects_mismatched_validation_classes(tmp_path):
+    for split, names in [("images", ["a", "b"]), ("validation", ["a", "c"])]:
+        for name in names:
+            write_image(torch.rand(1, 4, 4), tmp_path / split / name / "one.tif")
+    config = Config(
+        data={
+            "source": str(tmp_path / "images"),
+            "validation": str(tmp_path / "validation"),
+        }
+    )
+    with pytest.raises(ValueError, match="Validation classes"):
+        train(config)
+
+
 def test_failed_run_records_error(tmp_path):
     for name in ["a", "b"]:
         write_image(torch.zeros(1, 4, 4), tmp_path / "images" / name / "one.tif")

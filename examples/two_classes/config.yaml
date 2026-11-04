@@ -1,5 +1,6 @@
 data:
   source: images
+  # validation: validation  # same class subdirectories as source
 classifier:
   checkpoint: classifier.pt
 
@@ -12,6 +13,8 @@ training:
   steps: 5000
   batch_size: 16
   log_every: 10
+  # validate_every: 500
+  # validation_samples: 128  # per class, for classifier translation metrics
 explanation:
   methods: [DIntegratedGradients, residual]
   samples: 2
@@ -22,3 +25,9 @@ summary:
 
 output:
   overwrite: true
+
+# Requires: pip install 'quac[wandb]'
+# wandb:
+#   enabled: true
+#   project: quac
+#   mode: online

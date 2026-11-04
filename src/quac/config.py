@@ -12,9 +12,10 @@ class Settings(BaseModel):
 
 
 class DataConfig(Settings):
-    """Source directory containing one subdirectory per class."""
+    """Source and optional validation directories containing one subdirectory per class."""
 
     source: Path
+    validation: Path | None = None
 
 
 class GeneratorConfig(Settings):
@@ -46,6 +47,8 @@ class TrainingConfig(Settings):
     ema_beta: float = Field(0.999, ge=0, lt=1)
     log_every: int = Field(100, ge=1)
     save_every: int = Field(10000, ge=1)
+    validate_every: int = Field(1000, ge=1)
+    validation_samples: int | None = Field(128, ge=1)
 
 
 class ClassifierConfig(Settings):
@@ -83,6 +86,17 @@ class SummaryConfig(Settings):
     top_k: int = Field(5, ge=1)
 
 
+class WandbConfig(Settings):
+    """Optional Weights & Biases logging of training losses and validation metrics."""
+
+    enabled: bool = False
+    project: str = "quac"
+    entity: str | None = None
+    name: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    mode: Literal["online", "offline"] = "online"
+
+
 class Config(Settings):
     """Complete run configuration; only data.source is required for training."""
 
@@ -93,6 +107,7 @@ class Config(Settings):
     explanation: ExplanationConfig = Field(default_factory=ExplanationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     summary: SummaryConfig = Field(default_factory=SummaryConfig)
+    wandb: WandbConfig = Field(default_factory=WandbConfig)
     device: str = "auto"
     seed: int = Field(0, ge=0)
 
@@ -101,6 +116,7 @@ class Config(Settings):
         config = self.model_copy(deep=True)
         for section, name in [
             (config.data, "source"),
+            (config.data, "validation"),
             (config.generator, "checkpoint"),
             (config.classifier, "checkpoint"),
             (config.output, "directory"),

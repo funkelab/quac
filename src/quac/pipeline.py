@@ -31,9 +31,24 @@ def train(config: Config) -> Path:
     config = config.resolve_paths(Path.cwd())
     device = initialize(config)
     dataset = ImageDataset(config.data.source)
+    validation = None
+    if config.data.validation is not None:
+        validation = ImageDataset(config.data.validation)
+        if validation.classes != dataset.classes or validation.shape != dataset.shape:
+            raise ValueError(
+                "Validation classes and image shape must match the training source"
+            )
+    classifier = None
+    if config.classifier.checkpoint is not None:
+        classifier = load_classifier(config.classifier.checkpoint, device)
     model = build_generator(dataset, config.generator, device)
     return train_stargan(
-        model, dataset, config, config.output.directory / "checkpoints"
+        model,
+        dataset,
+        config,
+        config.output.directory / "checkpoints",
+        validation=validation,
+        classifier=classifier,
     )
 
 

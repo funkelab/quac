@@ -25,6 +25,7 @@ dependencies = [
   "pillow",
   "tifffile",
   "pyyaml",
+  "tqdm",
 ]
 
 [project.scripts]
@@ -38,6 +39,7 @@ version = {attr = "quac.__version__"}
 
 [project.optional-dependencies]
 plot = ['plotly>=5', 'pillow']
+wandb = ['wandb']
 dev = ['pytest', 'black', 'mypy', 'pdoc', 'pre-commit']
 docs = [
   "ipykernel",
