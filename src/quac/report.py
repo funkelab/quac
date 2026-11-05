@@ -74,6 +74,13 @@ class Report(AbstractContextManager):
         ):
             self.close()
             raise ValueError("Unsupported report schema version")
+        self._curve_table = (
+            "curve_point"
+            if self.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='curve_point'"
+            ).fetchone()
+            else "threshold"
+        )
 
     @classmethod
     def create(cls, path, metadata, overwrite=False, *, image_directory=None):
@@ -87,6 +94,7 @@ class Report(AbstractContextManager):
                 )
             path.unlink()
         report = cls.__new__(cls)
+        report._curve_table = "threshold"
         report.path = path
         report.images = ImageStore(
             path,
@@ -271,7 +279,7 @@ class Report(AbstractContextManager):
         """Return median and 25th/75th percentile curves for the selected classes."""
         where, parameters = _selection(method, source_class, target_class)
         rows = self.connection.execute(
-            "SELECT t.explanation_id, t.area, t.delta FROM threshold t "
+            f"SELECT t.explanation_id, t.area, t.delta FROM {self._curve_table} t "
             "JOIN explanation e ON e.id=t.explanation_id JOIN pair p ON p.id=e.pair_id "
             "WHERE " + where + " ORDER BY t.explanation_id, t.idx",
             parameters,
@@ -292,7 +300,7 @@ class Report(AbstractContextManager):
         """Return each method's mask areas, classifier changes, and QuAC score for a pair."""
         rows = self.connection.execute(
             "SELECT e.method, e.auc, t.area, t.delta FROM explanation e "
-            "JOIN threshold t ON t.explanation_id=e.id WHERE e.pair_id=? "
+            f"JOIN {self._curve_table} t ON t.explanation_id=e.id WHERE e.pair_id=? "
             "ORDER BY e.method, t.idx",
             (pair_id,),
         )

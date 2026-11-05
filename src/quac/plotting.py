@@ -18,7 +18,8 @@ def _display(image):
 
 def _prediction(probabilities, logits, classes):
     return "<br>".join(
-        f"{name}: p={probability:.4f}, logit={logit:.4f}"
+        f"{name}: p={probability:.4f}"
+        + (f", logit={logit:.4f}" if np.isfinite(logit) else "")
         for name, probability, logit in zip(classes, probabilities, logits)
     )
 
