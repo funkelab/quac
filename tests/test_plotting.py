@@ -17,8 +17,53 @@ def test_summary_contains_direction_and_method_selectors(report_path):
     assert "annotations[2].text" in slider.steps[0].args[1]
     assert len(figure.layout.updatemenus) == 3
     assert [len(menu.buttons) for menu in figure.layout.updatemenus] == [2, 2, 1]
-    assert len(figure.data) == 7
+    assert len(figure.data) == 9
     assert figure.data[4].fill == "tonexty"
+
+
+def test_example_curves_scores_and_mask_area_markers(multiclass_report_path):
+    import numpy as np
+
+    figure = summarize(multiclass_report_path, top_k=2)
+    with Report(multiclass_report_path) as report:
+        methods = report.methods()
+        for frame in figure.frames:
+            selection = frame.layout.meta
+            rows = report.top(
+                selection["method"],
+                2,
+                selection["source_class"],
+                selection["target_class"],
+            )
+            for slot, row in enumerate(rows):
+                for index, method in enumerate(methods):
+                    explanation = report.connection.execute(
+                        "SELECT id, auc FROM explanation WHERE pair_id=? AND method=?",
+                        (row["pair_id"], method),
+                    ).fetchone()
+                    records = report.thresholds(explanation["id"])
+                    trace = frame.data[11 + slot * len(methods) + index]
+                    assert trace.name == method
+                    assert trace.xaxis == f"x{slot * 4 + 4}"
+                    np.testing.assert_allclose(trace.x, [r["area"] for r in records])
+                    np.testing.assert_allclose(trace.y, [r["delta"] for r in records])
+                    assert np.isclose(
+                        np.trapezoid(trace.y, trace.x), explanation["auc"]
+                    )
+                    assert (
+                        f"QuAC score: {explanation['auc']:.4f}" in trace.hovertemplate
+                    )
+                assert (
+                    f"QuAC score: {row['auc']:.4f}"
+                    in frame.layout.annotations[7 + slot].text
+                )
+                records = report.thresholds(row["id"])
+                marker = frame.layout.shapes[slot * 4 + 3]
+                assert marker.x0 == marker.x1 == records[row["optimal_index"]]["area"]
+                assert marker.xref == f"x{slot * 4 + 4}"
+                for record, step in zip(records, frame.layout.sliders[slot].steps):
+                    assert step.args[1][f"shapes[{slot * 4 + 3}].x0"] == record["area"]
+                    assert step.args[1][f"shapes[{slot * 4 + 3}].x1"] == record["area"]
 
 
 def test_html_is_self_contained(report_path):

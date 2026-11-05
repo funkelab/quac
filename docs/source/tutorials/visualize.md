@@ -14,6 +14,14 @@ direction. The target menu excludes the source class; choosing the current targe
 as the source swaps direction. Selections without stored explanations show an
 empty result. The figure is self-contained and works offline.
 
+Each example's QuAC score is the area under its mask-area versus classifier-change
+curve, computed with the trapezoidal rule over the stored sweep. The score above
+the plot belongs to the selected attribution method. The plot to the right of
+the counterfactual compares all available attribution methods for the same source
+and generated image pair, using consistent method colors. Hover over a curve to
+see its method's score, mask area, and classifier change. A vertical line marks
+the counterfactual's currently selected mask area and follows its slider.
+
 A contour on each counterfactual outlines pixels whose stored blurred blending
 mask exceeds 0.5: those pixels draw predominantly from the generated image.
 The shared controls at the top set the contour color (bright pink by default),

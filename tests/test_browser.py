@@ -29,7 +29,9 @@ def test_independent_sliders_and_method_selection(multiclass_report_path):
         initial = page.evaluate("""() => {
             const plot = document.querySelector('.js-plotly-plot');
             return {first: JSON.stringify(plot.data[2].z), second: JSON.stringify(plot.data[5].z),
-                    text: plot.layout.annotations[2].text};
+                    text: plot.layout.annotations[2].text,
+                    marker: plot.layout.shapes[7].x0,
+                    curves: JSON.stringify(plot.data.slice(11).map(trace => [trace.x, trace.y]))};
         }""")
         rail = page.locator(".slider-rail-touch-rect").first
         box = rail.bounding_box()
@@ -54,6 +56,15 @@ def test_independent_sliders_and_method_selection(multiclass_report_path):
         assert after["second"] == initial["second"]
         assert after["text"] != initial["text"]
         assert "area=0.000" in after["text"]
+        assert page.evaluate(
+            """previous => {
+            const plot = document.querySelector('.js-plotly-plot');
+            return plot.layout.shapes[3].x0 === 0 && plot.layout.shapes[3].x1 === 0 &&
+                   plot.layout.shapes[7].x0 === previous.marker &&
+                   JSON.stringify(plot.data.slice(11).map(trace => [trace.x, trace.y])) === previous.curves;
+        }""",
+            initial,
+        )
         # Switch methods using the actual dropdown; the new method resets its own sliders.
         page.locator(".updatemenu-header").nth(0).click()
         page.locator(".updatemenu-dropdown-button").filter(has_text="residual").click()
@@ -221,6 +232,7 @@ def test_class_selectors_cover_all_directions(multiclass_report_path):
             const plot = document.querySelector('.js-plotly-plot');
             return plot.layout.meta.target_class === 0 && plot.data[8].y.length === 0 &&
                    plot.layout.sliders.every(slider => !slider.visible) &&
+                   plot.layout.shapes[3].visible === false &&
                    plot.layout.annotations[0].text === 'No exemplar';
         }""")
         choose(2, "b")
@@ -228,6 +240,7 @@ def test_class_selectors_cover_all_directions(multiclass_report_path):
             const plot = document.querySelector('.js-plotly-plot');
             return plot.layout.meta.target_class === 1 && plot.data[8].y.length === 101 &&
                    plot.layout.sliders.every(slider => slider.visible) &&
+                   plot.layout.shapes[3].visible === true &&
                    plot.layout.annotations[0].text.includes('c → b');
         }""")
         page.wait_for_function("""() => {

@@ -288,6 +288,23 @@ class Report(AbstractContextManager):
         p25, median, p75 = np.quantile(interpolated, [0.25, 0.5, 0.75], axis=0)
         return grid, median, p25, p75
 
+    def example_curves(self, pair_id: int) -> dict[str, dict]:
+        """Return each method's mask areas, classifier changes, and QuAC score for a pair."""
+        rows = self.connection.execute(
+            "SELECT e.method, e.auc, t.area, t.delta FROM explanation e "
+            "JOIN threshold t ON t.explanation_id=e.id WHERE e.pair_id=? "
+            "ORDER BY e.method, t.idx",
+            (pair_id,),
+        )
+        curves = {}
+        for row in rows:
+            curve = curves.setdefault(
+                row["method"], {"score": row["auc"], "areas": [], "deltas": []}
+            )
+            curve["areas"].append(row["area"])
+            curve["deltas"].append(row["delta"])
+        return curves
+
     def close(self):
         """Release the database connection."""
         self.connection.close()

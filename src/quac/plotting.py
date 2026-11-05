@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from plotly.colors import qualitative
 
 from .contours import contour_metadata, contour_source
 from .report import Report
@@ -33,7 +34,7 @@ def _image_axes(figure, shape, rows):
     height, width = shape[-2:]
     plot_width = figure.layout.width - figure.layout.margin.l - figure.layout.margin.r
     plot_height = figure.layout.height - figure.layout.margin.t - figure.layout.margin.b
-    for index in range(1, rows * 3 + 1):
+    for index in (row * 4 + column for row in range(rows) for column in (1, 2, 3)):
         suffix = str(index) if index > 1 else ""
         xaxis, yaxis = figure.layout[f"xaxis{suffix}"], figure.layout[f"yaxis{suffix}"]
         x0, x1 = xaxis.domain
@@ -62,13 +63,14 @@ def _image_axes(figure, shape, rows):
 def _direction_figure(report, method, k, source_class, target_class):
     rows = report.top(method, k, source_class, target_class)
     classes = report.metadata["classes"]
-    specs = [[{}, {}, {}] for _ in range(k)] + [[{"colspan": 3}, None, None]]
+    methods = report.methods()
+    specs = [[{}, {}, {}, {}] for _ in range(k)] + [[{"colspan": 4}, None, None, None]]
     titles = []
     for index in range(k):
         titles.extend(
-            ["Source image", "Generated image", "Counterfactual"]
+            ["Source image", "Generated image", "Counterfactual", None]
             if index < len(rows)
-            else ["No exemplar", "No exemplar", "No exemplar"]
+            else ["No exemplar", "No exemplar", "No exemplar", None]
         )
     direction = f"{classes[source_class]} → {classes[target_class]}"
     titles.append(
@@ -78,16 +80,20 @@ def _direction_figure(report, method, k, source_class, target_class):
     )
     figure = make_subplots(
         rows=k + 1,
-        cols=3,
+        cols=4,
+        column_widths=[1, 1, 1, 1.25],
+        horizontal_spacing=0.045,
         specs=specs,
         subplot_titles=titles,
         vertical_spacing=0.45 / (k + 1),
     )
-    sliders, overlays = [], []
+    sliders, overlays, example_curves, curve_titles = [], [], [], []
     for slot in range(k):
         if slot < len(rows):
             row = rows[slot]
             pair = report.pair(row["pair_id"])
+            example_curves.append(report.example_curves(row["pair_id"]))
+            curve_titles.append(f"<b>QuAC score: {row['auc']:.4f}</b> · {method}")
             thresholds = report.thresholds(row["id"])
             optimum = row["optimal_index"]
             record = thresholds[optimum]
@@ -115,6 +121,8 @@ def _direction_figure(report, method, k, source_class, target_class):
                 _threshold_text(record, classes),
             ]
         else:
+            example_curves.append({})
+            curve_titles.append("No exemplar")
             images = [np.zeros(report.metadata["shape"], dtype=np.float32)] * 3
             texts = ["No exemplar"] * 3
             overlay = go.Image(
@@ -141,7 +149,17 @@ def _direction_figure(report, method, k, source_class, target_class):
             figure.update_xaxes(visible=False, row=slot + 1, col=column)
             figure.update_yaxes(visible=False, row=slot + 1, col=column)
         if slot < len(rows):
-            axis = figure.layout[f"yaxis{slot * 3 + 3}"]
+            axis = figure.layout[f"yaxis{slot * 4 + 3}"]
+            marker_key = f"shapes[{slot * 4 + 3}]"
+            figure.add_vline(
+                x=record["area"],
+                visible=True,
+                line_color="#374151",
+                line_width=2,
+                row=slot + 1,
+                col=4,
+                exclude_empty_subplots=False,
+            )
             annotation_key = f"annotations[{slot * 3 + 2}].text"
             steps = [
                 dict(
@@ -153,7 +171,11 @@ def _direction_figure(report, method, k, source_class, target_class):
                             "source": [None, contour_sources[index]],
                             "meta": [{}, contour_masks[index]],
                         },
-                        {annotation_key: _threshold_text(record, classes)},
+                        {
+                            annotation_key: _threshold_text(record, classes),
+                            f"{marker_key}.x0": record["area"],
+                            f"{marker_key}.x1": record["area"],
+                        },
                         [slot * 3 + 2, k * 3 + 3 + slot],
                     ],
                 )
@@ -164,8 +186,11 @@ def _direction_figure(report, method, k, source_class, target_class):
                     visible=True,
                     active=optimum,
                     steps=steps,
-                    x=0.70,
-                    len=0.30,
+                    x=figure.layout[f"xaxis{slot * 4 + 3}"].domain[0],
+                    len=(
+                        figure.layout[f"xaxis{slot * 4 + 3}"].domain[1]
+                        - figure.layout[f"xaxis{slot * 4 + 3}"].domain[0]
+                    ),
                     y=axis.domain[0] - 0.01,
                     yanchor="top",
                     pad={"t": 0},
@@ -174,6 +199,13 @@ def _direction_figure(report, method, k, source_class, target_class):
                 )
             )
         else:
+            figure.add_vline(
+                x=0,
+                visible=False,
+                row=slot + 1,
+                col=4,
+                exclude_empty_subplots=False,
+            )
             sliders.append(dict(visible=False, steps=[]))
     grid, median, p25, p75 = (
         report.curve(method, source_class, target_class)
@@ -201,12 +233,59 @@ def _direction_figure(report, method, k, source_class, target_class):
         )
     for slot, overlay in enumerate(overlays):
         figure.add_trace(overlay, row=slot + 1, col=3)
+    for slot, curves in enumerate(example_curves):
+        for index, name in enumerate(methods):
+            curve = curves.get(name)
+            figure.add_trace(
+                go.Scatter(
+                    x=curve["areas"] if curve else [],
+                    y=curve["deltas"] if curve else [],
+                    name=name,
+                    legendgroup=name,
+                    showlegend=slot == 0,
+                    mode="lines",
+                    line={
+                        "color": qualitative.Plotly[index % len(qualitative.Plotly)],
+                        "width": 3 if name == method else 1.5,
+                    },
+                    hovertemplate=(
+                        (
+                            f"{name}<br>QuAC score: {curve['score']:.4f}<br>"
+                            "Mask area: %{x:.3f}<br>Classifier change: %{y:.4f}<extra></extra>"
+                        )
+                        if curve
+                        else None
+                    ),
+                ),
+                row=slot + 1,
+                col=4,
+            )
+        figure.update_xaxes(title_text="Mask area", range=[0, 1], row=slot + 1, col=4)
+        figure.update_yaxes(title_text="Classifier change", row=slot + 1, col=4)
+        subplot = figure.get_subplot(slot + 1, 4)
+        figure.add_annotation(
+            text=curve_titles[slot],
+            x=sum(subplot.xaxis.domain) / 2,
+            y=subplot.yaxis.domain[1],
+            xref="paper",
+            yref="paper",
+            yshift=8,
+            showarrow=False,
+            xanchor="center",
+            yanchor="bottom",
+        )
     figure.update_xaxes(title_text="Binary mask area", row=k + 1, col=1)
     figure.update_yaxes(title_text="Delta", row=k + 1, col=1)
     figure.update_layout(
         sliders=sliders,
         height=520 * k + 400,
-        width=1400,
+        width=1800,
+        legend={
+            "orientation": "h",
+            "x": 0,
+            "yanchor": "bottom",
+            "y": 1 + 65 / (520 * k + 100),
+        },
         margin={"l": 80, "r": 80, "t": 220, "b": 80, "autoexpand": False},
         title={"text": f"QuAC — {method} — {direction}", "x": 0.5, "y": 0.98},
         template="plotly_white",
@@ -219,7 +298,7 @@ def _direction_figure(report, method, k, source_class, target_class):
     _image_axes(figure, report.metadata["shape"], k)
     for slot, slider in enumerate(figure.layout.sliders):
         if slider.visible:
-            slider.y = figure.layout[f"yaxis{slot * 3 + 3}"].domain[0] - 0.01
+            slider.y = figure.layout[f"yaxis{slot * 4 + 3}"].domain[0] - 0.01
     figure.update_annotations(font={"size": 12})
     return figure
 

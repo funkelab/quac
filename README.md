@@ -50,6 +50,9 @@ Paths are relative to the config file. The default outputs are
 `quac-output/summary.html`. Open the HTML in a browser: each exemplar has its own
 mask-area slider. Select the attribution method, source class, and target class
 to inspect each direction; exemplars and curves follow the same selection.
+Each example shows its QuAC score (area under its mask-area versus classifier-change
+curve) and a plot to the right of the counterfactual comparing all attribution
+methods for that image pair. A vertical line follows the selected mask area.
 JavaScript and image records are bundled for offline use. `summarize` needs `quac[plot]`; training and
 explanation do not import the plotting module. Existing reports require an
 explicit `output.overwrite: true` to replace them.
