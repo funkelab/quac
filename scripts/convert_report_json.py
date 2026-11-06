@@ -7,9 +7,10 @@ from types import SimpleNamespace
 
 import imageio.v3 as iio
 import numpy as np
-from scipy.ndimage import convolve1d, maximum_filter, minimum_filter
+from scipy.ndimage import convolve1d
 
 from quac.report import Report
+from quac.masks import close_mask, ellipse_kernel as _ellipse_kernel
 
 
 def _resolve(value, base):
@@ -128,15 +129,6 @@ def _score(record, areas, deltas):
     return float(score)
 
 
-def _ellipse_kernel(size):
-    radius = size // 2
-    y, x = np.ogrid[:size, :size]
-    half_width = np.rint(
-        radius * np.sqrt(np.maximum(0, 1 - ((y - radius) / max(1, radius)) ** 2))
-    )
-    return abs(x - radius) <= half_width
-
-
 def _gaussian_kernel(size):
     # Match the discrete small kernels and automatic sigma used by the JSON evaluator.
     small = {
@@ -156,9 +148,7 @@ def _gaussian_kernel(size):
 
 
 def _process_mask(binary, kernel, weights):
-    # Preserve the kernel anchor for even sizes and neutral values outside the image.
-    dilated = maximum_filter(binary, footprint=kernel, mode="constant", cval=0)
-    closed = minimum_filter(dilated, footprint=kernel, mode="constant", cval=1)
+    closed = close_mask(binary, kernel)
     blurred = convolve1d(closed.astype(np.float32), weights, axis=1, mode="mirror")
     blurred = convolve1d(blurred, weights, axis=0, mode="mirror")
     return closed, blurred

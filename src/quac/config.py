@@ -63,6 +63,7 @@ class ExplanationConfig(Settings):
     samples: int = Field(3, ge=1)
     levels: int = Field(101, ge=2)
     sigma: float = Field(1.0, ge=0)
+    closing_size: int = Field(10, ge=1)
     batch_size: int = Field(16, ge=1)
     integration_steps: int = Field(50, ge=2)
 

@@ -86,6 +86,11 @@
     }
 
     function render(mask, hex, widthPercent, smoothness) {
+        if (Array.isArray(mask[0][0])) {
+            const contours = mask.map(channel => render(channel, hex, widthPercent, smoothness));
+            return contours[0].map((row, y) => row.map((_, x) =>
+                contours.reduce((pixel, contour) => contour[y][x][3] > pixel[3] ? contour[y][x] : pixel, [0, 0, 0, 0])));
+        }
         const color = hex.match(/[0-9a-f]{2}/gi).map(value => parseInt(value, 16));
         const width = Math.max(1, Math.min(mask.length, mask[0].length) * widthPercent / 100);
         return smoothness ? smooth(mask, color, width, Math.min(4, smoothness + 1)) : raster(mask, color, width);

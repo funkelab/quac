@@ -187,6 +187,12 @@ def test_smoothed_contours_use_mask_values_and_at_most_four_times_resolution(
         smooth = render(circle, 3)
         assert np.any((smooth[..., 3] > 0) & (smooth[..., 3] < 255))
         assert label(smooth[..., 3] > 0, structure=np.ones((3, 3)))[1] == 1
+        channels = np.stack([circle, np.roll(circle, 8, axis=1), np.zeros_like(circle)])
+        np.testing.assert_array_equal(render(channels, 0), raster_contour(channels))
+        np.testing.assert_array_equal(
+            render(channels, 3),
+            np.maximum.reduce([render(channel, 3) for channel in channels]),
+        )
         sizes = page.evaluate(
             """mask => {
             const create = document.createElement.bind(document), canvases = [];

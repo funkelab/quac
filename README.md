@@ -58,7 +58,8 @@ explanation do not import the plotting module. Existing reports require an
 explicit `output.overwrite: true` to replace them.
 
 Each counterfactual shows a bright pink contour around the region where the stored
-blurred blending mask exceeds 0.5. Shared controls at the top set its color, width,
+blurred blending mask exceeds 0.5. For RGB images, the contours of all three
+channel masks are overlaid. Shared controls at the top set its color, width,
 and smoothness. Width defaults to 1% of the smaller image dimension, with a minimum
 of one image pixel. The default contour uses native pixels; smoothing follows the
 blurred mask's 0.5 level crossing with 2×, 3×, or 4× antialiasing. Settings apply
@@ -111,9 +112,12 @@ and its image directory together when moving or sharing a report. Source images
 in the input dataset and model checkpoints can be moved or deleted. Database
 readers are read-only, and exported HTML summaries remain standalone.
 
-For every pair, pixels are ranked by their attribution map values. Masks select
-equidistant binary areas, using stable row-major ordering to break ties in
-attribution map values, then undergo Gaussian smoothing. Delta is the change in target-class probability.
+For every pair, channel pixels are ranked together by attribution magnitude and
+selected at evenly spaced fractions, with stable channel-first, row-major ordering
+for ties. Each channel mask undergoes elliptical morphological closing
+(`explanation.closing_size`, default 10; 1 disables closing), followed by Gaussian
+smoothing within that channel. Mask area is measured after closing and before blur,
+as a fraction of all channel pixels. Delta is the change in target-class probability.
 The optimal mask maximizes delta divided by positive binary area, with ties
 favoring smaller areas. Exemplars are ranked by their optimal delta. Curves show
 median delta and the 25th–75th percentile distribution across explanations.
@@ -141,6 +145,7 @@ explanation:
   samples: 3
   levels: 101
   sigma: 1.0
+  closing_size: 10
 summary:
   top_k: 5
 ```

@@ -165,6 +165,7 @@ def _explain_pairs(
                         options.levels,
                         options.sigma,
                         options.batch_size,
+                        options.closing_size,
                     )
                     report.add_explanation(
                         pair_id, name, attribution_map.cpu().numpy(), result

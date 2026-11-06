@@ -4,10 +4,17 @@
 quac explain --config config.yaml
 ```
 
-Pixels are ranked by attribution map values and selected at equidistant areas, including empty
-and full masks. Stable row-major order resolves equal attribution map values. Gaussian blur
-uses `explanation.sigma` (default 1); `explanation.levels` defaults to 101.
-Counterfactuals blend generated images into source images under these masks.
+Attribution channels are preserved. Channel pixels are ranked together by attribution
+magnitude and selected at evenly spaced fractions, including empty and full masks.
+Stable channel-first, row-major order resolves ties. Each channel's binary mask
+undergoes morphological closing with an elliptical kernel controlled by
+`explanation.closing_size` (default 10; use 1 to disable closing). Mask area is the
+fraction of selected channel pixels after closing and before blur, so the resulting
+areas need not be evenly spaced.
+
+Gaussian blur acts independently within each channel, using `explanation.sigma`
+(default 1); `explanation.levels` defaults to 101. Each mask blends the corresponding
+channel of the generated image into the source image.
 
 Delta is the change in target probability. The optimum maximizes delta divided by
 positive binary area, with ties favoring smaller masks. Exemplars are ranked by

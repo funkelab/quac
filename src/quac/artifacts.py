@@ -43,8 +43,8 @@ class ImageStore:
         return Path(os.path.relpath(path, self.base)).as_posix()
 
     def read(self, path: str, *, spatial: bool = False) -> np.ndarray:
-        """Read a stored path as an HW attribution map, mask, or CHW image, relative to the database."""
+        """Read an artifact as CHW, retaining HW for grayscale spatial data."""
         array = tifffile.imread(self.base / path)
-        if spatial:
+        if spatial and array.ndim == 2:
             return array
         return array[None] if array.ndim == 2 else np.moveaxis(array, -1, 0)

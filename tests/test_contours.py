@@ -61,3 +61,14 @@ def test_png_preserves_contour_pixels_and_transparency():
     encoded = contour_source(mask)
     image = np.asarray(Image.open(BytesIO(base64.b64decode(encoded.split(",", 1)[1]))))
     np.testing.assert_array_equal(image, raster_contour(mask))
+
+
+def test_channel_contours_retain_nested_boundaries():
+    masks = np.zeros((3, 20, 20))
+    masks[0, 2:18, 2:18] = 0.8
+    masks[1, 6:14, 6:14] = 0.9
+    masks[2, 9:11, 9:11] = 1
+    contour = raster_contour(masks)
+    assert contour.shape == (20, 20, 4)
+    assert contour[2, 9, 3] == contour[6, 9, 3] == contour[9, 9, 3] == 255
+    assert contour[4, 9, 3] == 0

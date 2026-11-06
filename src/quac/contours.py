@@ -11,8 +11,12 @@ DEFAULT_WIDTH = 1.0
 
 
 def raster_contour(mask, color=DEFAULT_COLOR, width_percent=DEFAULT_WIDTH):
-    """Outline mask values above 0.5 in native pixels, with a minimum width of one pixel."""
+    """Outline each channel above 0.5 in native pixels, with a minimum width of one pixel."""
     mask = np.asarray(mask)
+    if mask.ndim == 3:
+        return np.maximum.reduce(
+            [raster_contour(channel, color, width_percent) for channel in mask]
+        )
     width = math.ceil(max(1, min(mask.shape) * width_percent / 100))
     inside = mask > 0.5
     distance = distance_transform_cdt(np.pad(inside, 1), metric="taxicab")[1:-1, 1:-1]

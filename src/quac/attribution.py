@@ -12,11 +12,9 @@ METHODS = (
 
 
 def normalize(attribution_map: torch.Tensor) -> torch.Tensor:
-    """Normalize a channel attribution map to a finite [0,1] spatial attribution map."""
+    """Normalize attribution magnitudes to [0,1], preserving channels."""
     attribution_map = attribution_map.detach().abs()
-    if attribution_map.ndim == 3:
-        attribution_map = attribution_map.mean(dim=0)
-    if attribution_map.ndim != 2 or not torch.isfinite(attribution_map).all():
+    if attribution_map.ndim not in (2, 3) or not torch.isfinite(attribution_map).all():
         raise ValueError("Attribution map must be a finite HW or CHW array")
     span = attribution_map.max() - attribution_map.min()
     if span == 0:

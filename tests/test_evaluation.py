@@ -14,7 +14,7 @@ class MeanClassifier(torch.nn.Module):
 
 def test_area_masks_rank_ties_and_endpoints():
     attribution = torch.tensor([[0.0, 0.9], [0.9, 0.1]])
-    areas, cutoffs, masks = area_masks(attribution, 5, 0)
+    areas, cutoffs, masks = area_masks(attribution, 5, 0, closing_size=1)
     np.testing.assert_allclose(areas, [0, 0.25, 0.5, 0.75, 1])
     np.testing.assert_array_equal(masks[1], [[0, 1], [0, 0]])
     assert masks[0].sum() == 0 and masks[-1].sum() == 4
@@ -22,7 +22,7 @@ def test_area_masks_rank_ties_and_endpoints():
 
 def test_blur_preserves_area_measurement():
     attribution_map = torch.zeros(5, 5)
-    areas, _, blurred = area_masks(attribution_map, 6, 1)
+    areas, _, blurred = area_masks(attribution_map, 6, 1, closing_size=1)
     assert areas[1] == 0.2
     assert np.any((blurred[1] > 0) & (blurred[1] < 1))
     assert blurred.min() >= 0 and blurred.max() <= 1
@@ -74,13 +74,13 @@ def test_attributions_are_finite(method):
     attribution_map = PairAttribution(MeanClassifier(), method, 4).attribute(
         torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
     )
-    assert attribution_map.shape == (4, 4)
+    assert attribution_map.shape == (1, 4, 4)
     assert torch.isfinite(attribution_map).all()
     assert attribution_map.min() >= 0 and attribution_map.max() <= 1
 
 
 def test_constant_attribution():
-    assert torch.equal(normalize(torch.ones(3, 4, 4)), torch.zeros(4, 4))
+    assert torch.equal(normalize(torch.ones(3, 4, 4)), torch.zeros(3, 4, 4))
 
 
 @pytest.mark.parametrize("method", ["DDeepLift", "VanillaDeepLift"])
@@ -92,10 +92,88 @@ def test_deeplift_eager_baselines(method):
         torch.zeros(1, 4, 4), torch.ones(1, 4, 4), 0, 1
     )
     assert torch.isfinite(attribution_map).all()
-    assert attribution_map.shape == (4, 4)
+    assert attribution_map.shape == (1, 4, 4)
 
 
 def test_deeplift_torchscript_error_is_actionable():
     classifier = torch.jit.script(MeanClassifier())
     with pytest.raises(ValueError, match="eager"):
         PairAttribution(classifier, "DDeepLift")
+
+
+def test_closing_fills_holes_per_channel_and_measures_closed_area():
+    attribution = torch.zeros(3, 7, 7)
+    attribution[0, 2:5, 2:5] = 1
+    attribution[0, 3, 3] = 0
+    areas, _, masks = area_masks(attribution, 148, 0, closing_size=3)
+    assert masks[8, 0, 3, 3] == 1
+    assert not masks[8, 1:].any()
+    assert areas[8] == 9 / 147
+    blurred_areas, _, blurred = area_masks(attribution, 148, 1, closing_size=3)
+    np.testing.assert_array_equal(areas, blurred_areas)
+    assert np.any((blurred[8, 0] > 0) & (blurred[8, 0] < 1))
+    assert not blurred[8, 1:].any()
+    np.testing.assert_array_equal(masks[0], np.zeros((3, 7, 7)))
+    np.testing.assert_array_equal(masks[-1], np.ones((3, 7, 7)))
+
+
+def test_rgb_channels_survive_evaluation_storage_and_summary(tmp_path):
+    from quac.report import Report
+    from quac.plotting import summarize
+
+    classifier = MeanClassifier()
+    source = torch.zeros(3, 7, 7)
+    generated = torch.ones_like(source)
+    attribution = torch.zeros_like(source)
+    attribution[0, 2:5, 2:5] = 1
+    attribution[0, 3, 3] = 0
+    attribution[1, 1:3, 1:3] = 0.5
+    normalized = normalize(attribution)
+    np.testing.assert_array_equal(normalized, attribution)
+    source_logits = classifier(source[None])[0]
+    generated_logits = classifier(generated[None])[0]
+    result = evaluate(
+        classifier,
+        source,
+        generated,
+        normalized,
+        1,
+        2,
+        source_logits.softmax(0)[1].item(),
+        levels=148,
+        sigma=1,
+        closing_size=3,
+    )
+    assert result.masks.shape == (148, 3, 7, 7)
+    np.testing.assert_array_equal(result.counterfactuals, result.masks)
+    assert not result.counterfactuals[8, 1:].any()
+    path = tmp_path / "report.sqlite"
+    with Report.create(path, {"classes": ["a", "b"], "shape": [3, 7, 7]}) as report:
+        pair = report.add_pair(
+            "source.tif",
+            0,
+            1,
+            0,
+            source,
+            generated,
+            source_logits,
+            source_logits.softmax(0),
+            generated_logits,
+            generated_logits.softmax(0),
+        )
+        explanation = report.add_explanation(pair, "residual", normalized, result)
+        report.finish()
+    with Report(path) as report:
+        stored = report.thresholds(explanation)
+        np.testing.assert_array_equal(stored[8]["mask"], result.masks[8])
+        np.testing.assert_array_equal(
+            stored[8]["counterfactual"], result.counterfactuals[8]
+        )
+        row = report.top("residual")[0]
+        np.testing.assert_array_equal(
+            report.images.read(row["attribution_map_path"], spatial=True), normalized
+        )
+    figure = summarize(path, 1)
+    assert len(figure.layout.sliders[0].steps) == 148
+    mask = figure.data[6].meta["quac_contour"]["mask"]
+    assert np.asarray(mask).shape == (3, 7, 7)

@@ -27,7 +27,11 @@ def report_path(tmp_path):
         dict(
             data={"source": str(tmp_path / "images")},
             explanation=dict(
-                methods=["residual", "random"], samples=1, levels=5, sigma=0
+                methods=["residual", "random"],
+                samples=1,
+                levels=5,
+                sigma=0,
+                closing_size=1,
             ),
             output={"directory": str(tmp_path / "output")},
         )
@@ -63,6 +67,7 @@ def multiclass_report_path(tmp_path):
             "samples": 1,
             "levels": 5,
             "sigma": 0,
+            "closing_size": 1,
         },
         output={"directory": tmp_path / "output"},
     )
