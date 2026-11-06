@@ -80,6 +80,11 @@ small networks and a short training run to demonstrate the whole workflow.
 Generating meaningful images requires longer training; inspect the generated
 images before interpreting explanations.
 
+For RGB images, the [three-class color example](examples/rgb_classes/README.md)
+creates blue, green, and red markers in different locations. It includes a
+TorchScript classifier and configuration for channel-specific masks and all six
+source-to-target directions.
+
 ## Python API and report queries
 
 ```python

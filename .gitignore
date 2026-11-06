@@ -14,6 +14,8 @@ docs/_build
 # Local example artifacts
 examples/two_classes/images/
 examples/two_classes/classifier.pt
+examples/rgb_classes/images/
+examples/rgb_classes/classifier.pt
 **/quac-output/
 
 # Packaging artifacts

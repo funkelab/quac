@@ -1,0 +1,21 @@
+data:
+  source: images
+classifier:
+  checkpoint: classifier.pt
+generator:
+  base_channels: 8
+  max_channels: 32
+  mapping_width: 32
+training:
+  steps: 50
+  batch_size: 4
+  log_every: 10
+explanation:
+  methods: [DIntegratedGradients, residual]
+  samples: 1
+  levels: 21
+  integration_steps: 16
+  closing_size: 3
+  sigma: 1.0
+summary:
+  top_k: 2
