@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import imageio.v3 as iio
 import numpy as np
+from scipy.ndimage import convolve1d, maximum_filter, minimum_filter
 
 from quac.report import Report
 
@@ -127,6 +128,42 @@ def _score(record, areas, deltas):
     return float(score)
 
 
+def _ellipse_kernel(size):
+    radius = size // 2
+    y, x = np.ogrid[:size, :size]
+    half_width = np.rint(
+        radius * np.sqrt(np.maximum(0, 1 - ((y - radius) / max(1, radius)) ** 2))
+    )
+    return abs(x - radius) <= half_width
+
+
+def _gaussian_kernel(size):
+    # Match the discrete small kernels and automatic sigma used by the JSON evaluator.
+    small = {
+        1: [1],
+        3: [1, 2, 1],
+        5: [1, 4, 6, 4, 1],
+        7: [2, 7, 14, 18, 14, 7, 2],
+        9: [4, 13, 30, 51, 60, 51, 30, 13, 4],
+    }
+    if size in small:
+        weights = np.array(small[size], dtype=float)
+    else:
+        sigma = 0.15 * size + 0.35
+        offsets = np.arange(size) - size // 2
+        weights = np.exp(-(offsets**2) / (2 * sigma**2))
+    return weights / weights.sum()
+
+
+def _process_mask(binary, kernel, weights):
+    # Preserve the kernel anchor for even sizes and neutral values outside the image.
+    dilated = maximum_filter(binary, footprint=kernel, mode="constant", cval=0)
+    closed = minimum_filter(dilated, footprint=kernel, mode="constant", cval=1)
+    blurred = convolve1d(closed.astype(np.float32), weights, axis=1, mode="mirror")
+    blurred = convolve1d(blurred, weights, axis=0, mode="mirror")
+    return closed, blurred
+
+
 class Reconstructor:
     """Rebuild the threshold sweep with a TorchScript classifier and explicit processing settings."""
 
@@ -146,12 +183,6 @@ class Reconstructor:
         import torch
         from quac.classifier import load_classifier
 
-        try:
-            import cv2
-        except ImportError as error:
-            raise ValueError(
-                "Reconstruction requires opencv-python-headless; install it with pip"
-            ) from error
         if (
             batch_size < 1
             or closing_size < 1
@@ -163,15 +194,12 @@ class Reconstructor:
             raise ValueError(
                 "Require a positive batch/closing size, positive odd blur size, and finite increasing threshold bounds"
             )
-        self.cv2 = cv2
         self.device = torch.device(device)
         self.classifier = load_classifier(Path(checkpoint), self.device)
         self.batch_size, self.scale, self.shift = batch_size, scale, shift
         self.threshold_min, self.threshold_max = threshold_min, threshold_max
-        self.kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (closing_size, closing_size)
-        )
-        self.blur_size = blur_size
+        self.kernel = _ellipse_kernel(closing_size)
+        self.blur_kernel = _gaussian_kernel(blur_size)
         self.metadata = dict(
             images="complete threshold sweep",
             logits="classifier",
@@ -225,17 +253,11 @@ class Reconstructor:
             )
         masks, measured_areas = [], []
         for cutoff in cutoffs:
-            binary = self.cv2.morphologyEx(
-                (attribution > cutoff).astype(np.uint8),
-                self.cv2.MORPH_CLOSE,
-                self.kernel,
+            binary, mask = _process_mask(
+                attribution > cutoff, self.kernel, self.blur_kernel
             )
             measured_areas.append(float(binary.mean()))
-            masks.append(
-                self.cv2.GaussianBlur(
-                    binary.astype(np.float32), (self.blur_size, self.blur_size), 0
-                )
-            )
+            masks.append(mask)
         if not np.allclose(measured_areas, areas, atol=1e-6, rtol=0):
             raise ValueError(
                 "Reconstructed mask areas disagree with the report; check threshold bounds and closing size"
@@ -474,8 +496,8 @@ def main():
         epilog="Without a classifier checkpoint, keeps full curves and scores, but only the saved "
         "counterfactual is selectable and logits are unavailable. RGB masks must be identical across channels; attribution channels "
         "are averaged. Images use the JSON report reader's normalization. Install this checkout "
-        "with `pip install -e .` before running. Reconstruction additionally requires "
-        "opencv-python-headless. Threshold count comes from the recorded curve; processing defaults "
+        "with `pip install -e .` before running. "
+        "Threshold count comes from the recorded curve; processing defaults "
         "match main's Processor. Reconstruction verifies recorded probabilities and mask areas; "
         "use the original settings and input preprocessing. Reconstructed RGB attribution channels "
         "must agree to define one spatial blending mask.",

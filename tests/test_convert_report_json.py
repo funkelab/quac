@@ -112,7 +112,6 @@ def test_reconstructs_complete_sweep_without_saved_counterfactual(
     import torch
     from conftest import MeanClassifier
 
-    pytest.importorskip("cv2")
     model = MeanClassifier().eval()
     checkpoint = json_report.parent / "classifier.pt"
     torch.jit.trace(model, torch.zeros(1, 1, 4, 4)).save(str(checkpoint))
@@ -196,3 +195,24 @@ def test_reconstructs_complete_sweep_without_saved_counterfactual(
             reconstructor=bad_reconstructor,
         )
     assert not (json_report.parent / "bad.sqlite").exists()
+
+
+def test_mask_processing_preserves_border_and_even_kernel_anchor():
+    module = runpy.run_path(str(SCRIPT))
+    process = module["_process_mask"]
+    ellipse = module["_ellipse_kernel"]
+    gaussian = module["_gaussian_kernel"]
+    binary = np.zeros((3, 3), dtype=bool)
+    binary[0, 0] = True
+    closed, blurred = process(binary, ellipse(1), gaussian(3))
+    np.testing.assert_array_equal(closed, binary)
+    np.testing.assert_array_equal(
+        blurred, [[0.25, 0.125, 0], [0.125, 0.0625, 0], [0, 0, 0]]
+    )
+    binary = np.zeros((4, 5), dtype=bool)
+    binary[0, 0] = binary[1, 2] = binary[3, 4] = True
+    closed, blurred = process(binary, ellipse(2), gaussian(1))
+    np.testing.assert_array_equal(
+        closed, [[1, 1, 0, 0, 0], [1, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+    )
+    np.testing.assert_array_equal(blurred, closed)
