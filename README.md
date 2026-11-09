@@ -1,70 +1,60 @@
 # Quantitative Attribution with Counterfactuals
 
-QuAC explains image classifiers by generating images conditioned on a target
-class, computing attribution maps for source/generated image pairs, and blending
-progressively larger regions of each generated image into its source image to
-form counterfactuals. A SQLite report stores scores, predictions, and paths to
-image files. Image artifacts live under `quac-output/images`.
+QuAC explains how an image classifiers discriminates between different classes.
 
-Install with Python 3.10–3.12:
+To do so, it generates counterfactual images by making minimal changes to a
+real image of one class, such that it gets classified as another class.
+
+## Installation
 
 ```sh
-pip install .
-# Include the optional interactive HTML summaries:
 pip install '.[plot]'
 ```
-
-Arrange grayscale or RGB images in one directory per class. All images must have
-the same dimensions and channel count. Class indices follow sorted directory
-names. Floating images must already be finite and in `[0,1]`; integer images are
-scaled by their dtype maximum. Classifiers receive float32 images in `[0,1]`.
-
-A source-only configuration is sufficient for generator training:
-
-```yaml
-data:
-  source: images
+or just
 ```
+pip install .
+```
+if you don't need the HTML plot summary.
 
-To explain predictions, additionally supply your classifier, a TorchScript model
-accepting `[N,C,H,W]` float32 images in `[0,1]` and returning `[N,num_classes]`
-logits in sorted class order:
+## Usage
+
+Organize your images such that each class is in one directory. Class
+indices will be assigned to the sorted names of those directories (e.g.,
+classes `A`, `B`, and `C` will have indices 0, 1, and 2).
+
+All images must have the same dimensions and channel count.
+
+A single YAML configuration file is used to configure QuAC. It should contain
+at least the path to the directory containing the class directories, and the
+classifier under investigation:
 
 ```yaml
 data:
-  source: images
+  source: path/to/directory
 classifier:
   checkpoint: classifier.pt
 ```
 
-Run the three stages using the same configuration:
+The classifier should be TorchScript model accepting `[N,C,H,W]` float32 images
+in `[0,1]` and returning `[N,num_classes]` logits. Importantly, the outputs of
+the classifier must follow the same order as the sorted image directories.
+
+QuAC runs in three steps: First, it trains a conversion network to translate
+images between different classes. Second, it converts each image into each
+other class, and runs attribution methods on those paired images to find the
+most important changes and create counterfactuals from them. Finally (and only
+if installed with the `[plot]` dependency group), a visual summary of the
+highest scoring counterfactuals can be produced:
 
 ```sh
-quac train --config config.yaml
-quac explain --config config.yaml
-quac summarize --config config.yaml
+quac train
+quac explain
+quac summarize
 ```
+(This assumes that a `config.yaml` exists in the same working directory, pass
+`--config <file>` to use a different one.)
 
-Paths are relative to the config file. The default outputs are
-`quac-output/checkpoints/latest.pt`, `quac-output/report.sqlite`, and
-`quac-output/summary.html`. Open the HTML in a browser: each exemplar has its own
-mask-area slider. Select the attribution method, source class, and target class
-to inspect each direction; exemplars and curves follow the same selection.
-Each example shows its QuAC score (area under its mask-area versus classifier-change
-curve) and a plot to the right of the counterfactual comparing all attribution
-methods for that image pair. A vertical line follows the selected mask area.
-JavaScript and image records are bundled for offline use. `summarize` needs `quac[plot]`; training and
-explanation do not import the plotting module. Existing reports require an
-explicit `output.overwrite: true` to replace them.
-
-Each counterfactual shows contours where the stored blurred blending masks exceed
-0.5. Grayscale contours default to bright pink. RGB contours default to red, green,
-and blue for the corresponding channels, with a separate color selector for each
-channel. Overlapping contours combine their colors. Shared controls at the top set
-width and smoothness. Width defaults to 1% of the smaller image dimension, with a minimum
-of one image pixel. The default contour uses native pixels; smoothing follows the
-blurred mask's 0.5 level crossing with 2×, 3×, or 4× antialiasing. Settings apply
-across exemplars, mask areas, attribution methods, and class directions.
+Once done, you will find an interactive summary in `quac-output/summary.html`.
 
 ## Self-contained example
 
@@ -76,15 +66,10 @@ quac summarize -c examples/two_classes/config.yaml
 ```
 
 The setup creates small synthetic images differing in a localized bright marker
-and exports a classifier that detects that detail. The example configuration uses
-small networks and a short training run to demonstrate the whole workflow.
-Generating meaningful images requires longer training; inspect the generated
-images before interpreting explanations.
-
-For RGB images, the [three-class color example](examples/rgb_classes/README.md)
-creates blue, green, and red markers in different locations. It includes a
-TorchScript classifier and configuration for channel-specific masks and all six
-source-to-target directions.
+and exports a classifier that detects that detail. The example configuration
+uses small networks and a short training run to demonstrate the whole workflow.
+Generating good counterfactuals requires longer training (around 5000
+iterations).
 
 ## Python API and report queries
 
@@ -116,7 +101,7 @@ curve AUCs, resolved configuration, model hashes, and run status stay in SQLite.
 The report API loads the referenced files when returning images. Keep the database
 and its image directory together when moving or sharing a report. Source images
 in the input dataset and model checkpoints can be moved or deleted. Database
-readers are read-only, and exported HTML summaries remain standalone.
+readers are read-only.
 
 For every pair, channel pixels are ranked together by attribution magnitude and
 selected at evenly spaced fractions, with stable channel-first, row-major ordering
@@ -193,6 +178,5 @@ playwright install chromium
 QUAC_BROWSER_TESTS=1 pytest tests/test_browser.py
 ```
 
-The StarGAN implementation is adapted from NAVER's StarGAN v2; see [NOTICE](NOTICE).
-Project documentation is at
-https://funkelab.github.io/quac/.
+The StarGAN implementation is adapted from NAVER's StarGAN v2; see
+[NOTICE](NOTICE). Project documentation is at https://funkelab.github.io/quac/.
