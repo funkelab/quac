@@ -72,3 +72,12 @@ def test_channel_contours_retain_nested_boundaries():
     assert contour.shape == (20, 20, 4)
     assert contour[2, 9, 3] == contour[6, 9, 3] == contour[9, 9, 3] == 255
     assert contour[4, 9, 3] == 0
+    np.testing.assert_array_equal(contour[2, 9], [255, 0, 0, 255])
+    np.testing.assert_array_equal(contour[6, 9], [0, 255, 0, 255])
+    np.testing.assert_array_equal(contour[9, 9], [0, 0, 255, 255])
+    custom = raster_contour(masks, ["#ffff00", "#00ffff", "#ff00ff"])
+    np.testing.assert_array_equal(custom[2, 9], [255, 255, 0, 255])
+    np.testing.assert_array_equal(custom[6, 9], [0, 255, 255, 255])
+    np.testing.assert_array_equal(custom[9, 9], [255, 0, 255, 255])
+    overlap = raster_contour(np.ones((3, 5, 5)))
+    np.testing.assert_array_equal(overlap[0, 0], [255, 255, 255, 255])

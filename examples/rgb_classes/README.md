@@ -28,8 +28,8 @@ the same filename share the background across classes. Use `--count` to change
 the number of images per class or `--directory` to choose their destination.
 
 The evaluation uses a 3×3 elliptical closing kernel and Gaussian blur with sigma
-1 independently in each channel. The summary overlays each channel's contour
-and compares integrated-gradients and residual attribution curves for each example.
+1 independently in each channel. The summary overlays red, green, and blue channel
+contours with independent color selectors, and compares integrated-gradients and residual attribution curves for each example.
 
 The small generator and 50 training steps provide a quick workflow demonstration.
 Increase `training.steps` for better generated images, and inspect them before

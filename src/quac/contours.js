@@ -1,5 +1,6 @@
 (() => {
     const defaultColor = "#ff1493";
+    const rgbColors = ["#ff0000", "#00ff00", "#0000ff"];
 
     function raster(mask, color, width) {
         const height = mask.length, columns = mask[0].length;
@@ -87,10 +88,17 @@
 
     function render(mask, hex, widthPercent, smoothness) {
         if (Array.isArray(mask[0][0])) {
-            const contours = mask.map(channel => render(channel, hex, widthPercent, smoothness));
-            return contours[0].map((row, y) => row.map((_, x) =>
-                contours.reduce((pixel, contour) => contour[y][x][3] > pixel[3] ? contour[y][x] : pixel, [0, 0, 0, 0])));
+            const colors = Array.isArray(hex) ? hex : mask.map(() => hex);
+            const contours = mask.map((channel, i) => render(channel, colors[i], widthPercent, smoothness));
+            return contours[0].map((row, y) => row.map((_, x) => {
+                const pixels = contours.map(contour => contour[y][x]);
+                const alpha = Math.max(...pixels.map(pixel => pixel[3]));
+                return alpha ? [0, 1, 2].map(channel => Math.round(
+                    Math.max(...pixels.map(pixel => pixel[channel] * pixel[3])) / alpha
+                )).concat(alpha) : [0, 0, 0, 0];
+            }));
         }
+        if (Array.isArray(hex)) hex = hex[0];
         const color = hex.match(/[0-9a-f]{2}/gi).map(value => parseInt(value, 16));
         const width = Math.max(1, Math.min(mask.length, mask[0].length) * widthPercent / 100);
         return smoothness ? smooth(mask, color, width, Math.min(4, smoothness + 1)) : raster(mask, color, width);
@@ -115,6 +123,12 @@
     function attach(plot) {
         if (plot._quacContoursAttached) return;
         plot._quacContoursAttached = true;
+        const rgb = plot.data.some(trace => {
+            const mask = trace.meta?.quac_contour?.mask;
+            return mask?.length === 3 && Array.isArray(mask[0][0]);
+        });
+        const labels = rgb ? ["Red channel color", "Green channel color", "Blue channel color"] : ["Contour color"];
+        const defaults = rgb ? rgbColors : [defaultColor];
         const controls = document.createElement("div");
         controls.className = "quac-contour-controls";
         controls.setAttribute("role", "region");
@@ -130,13 +144,13 @@
                 .quac-contour-controls input[type=range] { width:110px; }
                 .quac-contour-controls output { min-width:95px; }
             </style>
-            <label>Contour color<input type="color" aria-label="Contour color" value="${defaultColor}"></label>
+            ${labels.map((label, i) => `<label>${label}<input type="color" aria-label="${label}" value="${defaults[i]}"></label>`).join("")}
             <label>Contour width (%)<input type="number" aria-label="Contour width (%)" min="0" max="100"
                 step="0.1" value="1" title="Percent of the smaller image dimension; at least one image pixel"></label>
             <label>Contour smoothness<input type="range" aria-label="Contour smoothness" min="0" max="3" step="1" value="0">
                 <output>No smoothing</output></label>`;
         plot.before(controls);
-        const color = controls.querySelector("[type=color]");
+        const colors = [...controls.querySelectorAll("[type=color]")];
         const width = controls.querySelector("[type=number]");
         const smoothness = controls.querySelector("[type=range]");
         const resolution = controls.querySelector("output");
@@ -150,13 +164,14 @@
                     const percent = Number.isFinite(width.valueAsNumber) ? Math.max(0, Math.min(100, width.valueAsNumber)) : 1;
                     const level = Number(smoothness.value);
                     resolution.value = level ? `${level + 1}× antialiasing` : "No smoothing";
-                    const style = `${color.value}:${percent}:${level}`;
+                    const palette = colors.map(color => color.value);
+                    const style = `${palette.join(",")}:${percent}:${level}`;
                     const indices = [], images = [], metadata = [];
                     plot.data.forEach((trace, index) => {
                         const contour = trace.meta?.quac_contour;
                         if (!contour || contour.style === style) return;
                         indices.push(index);
-                        images.push(imageSource(render(contour.mask, color.value, percent, level)));
+                        images.push(imageSource(render(contour.mask, palette, percent, level)));
                         metadata.push({...trace.meta, quac_contour: {...contour, style}});
                     });
                     if (indices.length) await Plotly.restyle(plot, {source: images, meta: metadata}, indices);
@@ -164,7 +179,7 @@
             } finally { busy = false; }
         }
         const schedule = () => requestAnimationFrame(update);
-        for (const input of [color, width, smoothness]) input.addEventListener("input", schedule);
+        for (const input of [...colors, width, smoothness]) input.addEventListener("input", schedule);
         plot.on("plotly_afterplot", schedule);
         schedule();
     }

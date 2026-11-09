@@ -24,10 +24,10 @@ the counterfactual's currently selected mask area and follows its slider.
 
 A contour on each counterfactual outlines pixels whose stored blurred blending
 mask exceeds 0.5: those channel values draw predominantly from the generated image.
-For RGB images, each channel's contour is drawn separately and the contours are
-overlaid in the shared color.
-The shared controls at the top set the contour color (bright pink by default),
-width, and smoothness. Width is a percentage of the smaller image dimension,
+For RGB images, each channel's contour defaults to its corresponding red, green, or
+blue color. Three color selectors at the top customize the channels independently.
+Overlapping contours combine their colors. Grayscale images have one color selector,
+defaulting to bright pink. Width and smoothness controls apply to all contours. Width is a percentage of the smaller image dimension,
 defaulting to 1%, with a minimum of one image pixel. Native contours use whole
 pixels, rounding the width upward. Smoothness defaults to none. Higher settings
 interpolate the 0.5 level crossing from the blurred mask and antialias the contour

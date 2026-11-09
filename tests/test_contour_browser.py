@@ -188,7 +188,9 @@ def test_smoothed_contours_use_mask_values_and_at_most_four_times_resolution(
         assert np.any((smooth[..., 3] > 0) & (smooth[..., 3] < 255))
         assert label(smooth[..., 3] > 0, structure=np.ones((3, 3)))[1] == 1
         channels = np.stack([circle, np.roll(circle, 8, axis=1), np.zeros_like(circle)])
-        np.testing.assert_array_equal(render(channels, 0), raster_contour(channels))
+        np.testing.assert_array_equal(
+            render(channels, 0), raster_contour(channels, "#ff1493")
+        )
         np.testing.assert_array_equal(
             render(channels, 3),
             np.maximum.reduce([render(channel, 3) for channel in channels]),
@@ -208,4 +210,97 @@ def test_smoothed_contours_use_mask_values_and_at_most_four_times_resolution(
             circle.tolist(),
         )
         assert sizes == [[48 * 4, 40 * 4]]
+        browser.close()
+
+
+def test_rgb_colors_follow_channels_and_persist_across_selections(rgb_report_path):
+    from playwright.sync_api import sync_playwright
+    from quac.plotting import write_summary
+
+    html = write_summary(rgb_report_path, rgb_report_path.with_suffix(".html"), 1)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1850, "height": 1200})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(html.as_uri())
+        controls = [
+            page.get_by_label(f"{channel} channel color", exact=True)
+            for channel in ("Red", "Green", "Blue")
+        ]
+        controls[0].wait_for()
+        assert page.locator("input[type=color]").count() == 3
+        assert [control.input_value() for control in controls] == [
+            "#ff0000",
+            "#00ff00",
+            "#0000ff",
+        ]
+        snapshot = page.evaluate("""() => {
+            const plot = document.querySelector('.js-plotly-plot');
+            return {mask: plot.data[6].meta.quac_contour.mask, contour: plot.data[6].source, image: plot.data[2].z};
+        }""")
+        np.testing.assert_array_equal(
+            _pixels(snapshot["contour"]), raster_contour(snapshot["mask"])
+        )
+        palette = ["#ffff00", "#00ffff", "#ff00ff"]
+        for control, color in zip(controls, palette):
+            control.evaluate(
+                "(element, color) => { element.value = color; element.dispatchEvent(new Event('input', {bubbles:true})); }",
+                color,
+            )
+
+        def verify():
+            page.wait_for_function(
+                """style => document.querySelector('.js-plotly-plot').data[6].meta.quac_contour.style === style""",
+                arg=",".join(palette) + ":1:0",
+            )
+            state = page.evaluate("""() => {
+                const trace = document.querySelector('.js-plotly-plot').data[6];
+                return {mask: trace.meta.quac_contour.mask, contour: trace.source};
+            }""")
+            np.testing.assert_array_equal(
+                _pixels(state["contour"]), raster_contour(state["mask"], palette)
+            )
+
+        verify()
+        assert (
+            page.evaluate("document.querySelector('.js-plotly-plot').data[2].z")
+            == snapshot["image"]
+        )
+        rail = page.locator(".slider-rail-touch-rect").first.bounding_box()
+        page.mouse.click(rail["x"] + rail["width"] - 1, rail["y"] + rail["height"] / 2)
+        page.wait_for_function(
+            "document.querySelector('.js-plotly-plot').layout.sliders[0].active === 4"
+        )
+        verify()
+        for menu, label in ((0, "residual"), (1, "c"), (2, "a")):
+            page.locator(".updatemenu-header").nth(menu).click()
+            page.locator(".updatemenu-dropdown-button:visible").get_by_text(
+                label, exact=True
+            ).click()
+            page.wait_for_function(
+                """selection => {
+                const plot = document.querySelector('.js-plotly-plot');
+                const menu = plot.layout.updatemenus[selection.menu];
+                return menu.buttons[menu.active].label === selection.label;
+            }""",
+                arg={"menu": menu, "label": label},
+            )
+            verify()
+        page.get_by_label("Contour smoothness", exact=True).focus()
+        page.keyboard.press("End")
+        page.wait_for_function(
+            """style => document.querySelector('.js-plotly-plot').data[6].meta.quac_contour.style === style""",
+            arg=",".join(palette) + ":1:3",
+        )
+        state = page.evaluate(
+            """palette => {
+            const trace = document.querySelector('.js-plotly-plot').data[6];
+            return {contour: trace.source, pixels: QuacContours.render(trace.meta.quac_contour.mask, palette, 1, 3)};
+        }""",
+            palette,
+        )
+        np.testing.assert_array_equal(_pixels(state["contour"]), state["pixels"])
+        assert [control.input_value() for control in controls] == palette
+        assert not errors
         browser.close()

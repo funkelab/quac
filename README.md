@@ -57,10 +57,11 @@ JavaScript and image records are bundled for offline use. `summarize` needs `qua
 explanation do not import the plotting module. Existing reports require an
 explicit `output.overwrite: true` to replace them.
 
-Each counterfactual shows a bright pink contour around the region where the stored
-blurred blending mask exceeds 0.5. For RGB images, the contours of all three
-channel masks are overlaid. Shared controls at the top set its color, width,
-and smoothness. Width defaults to 1% of the smaller image dimension, with a minimum
+Each counterfactual shows contours where the stored blurred blending masks exceed
+0.5. Grayscale contours default to bright pink. RGB contours default to red, green,
+and blue for the corresponding channels, with a separate color selector for each
+channel. Overlapping contours combine their colors. Shared controls at the top set
+width and smoothness. Width defaults to 1% of the smaller image dimension, with a minimum
 of one image pixel. The default contour uses native pixels; smoothing follows the
 blurred mask's 0.5 level crossing with 2×, 3×, or 4× antialiasing. Settings apply
 across exemplars, mask areas, attribution methods, and class directions.

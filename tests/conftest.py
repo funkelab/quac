@@ -54,11 +54,10 @@ class ThreeClassGenerator:
         )
 
 
-@pytest.fixture
-def multiclass_report_path(tmp_path):
+def _multiclass_report(tmp_path, channels):
     for label, name in enumerate(["a", "b", "c"]):
         for index in range(2):
-            image = torch.full((1, 4, 4), 0.1 + 0.4 * label + 0.02 * index)
+            image = torch.full((channels, 4, 4), 0.1 + 0.4 * label + 0.02 * index)
             write_image(image, tmp_path / "images" / name / f"{index}.tif")
     config = Config(
         data={"source": tmp_path / "images"},
@@ -74,3 +73,13 @@ def multiclass_report_path(tmp_path):
     return explain(
         config, generator=ThreeClassGenerator(), classifier=ThreeClassClassifier()
     )
+
+
+@pytest.fixture
+def multiclass_report_path(tmp_path):
+    return _multiclass_report(tmp_path, 1)
+
+
+@pytest.fixture
+def rgb_report_path(tmp_path):
+    return _multiclass_report(tmp_path, 3)
