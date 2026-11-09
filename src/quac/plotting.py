@@ -103,6 +103,7 @@ def _direction_figure(report, method, k, source_class, target_class):
             overlay = go.Image(
                 source=contour_sources[optimum],
                 meta=contour_masks[optimum],
+                zsmooth=False,
                 hoverinfo="skip",
             )
             images = [
@@ -129,6 +130,7 @@ def _direction_figure(report, method, k, source_class, target_class):
             overlay = go.Image(
                 source=contour_source(np.zeros(report.metadata["shape"][-2:])),
                 meta={"quac_contour": None},
+                zsmooth=False,
                 hoverinfo="skip",
             )
         overlays.append(overlay)

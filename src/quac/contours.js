@@ -166,15 +166,16 @@
                     resolution.value = level ? `${level + 1}× antialiasing` : "No smoothing";
                     const palette = colors.map(color => color.value);
                     const style = `${palette.join(",")}:${percent}:${level}`;
+                    const smoothing = level ? "fast" : false;
                     const indices = [], images = [], metadata = [];
                     plot.data.forEach((trace, index) => {
                         const contour = trace.meta?.quac_contour;
-                        if (!contour || contour.style === style) return;
+                        if (!contour || (contour.style === style && trace.zsmooth === smoothing)) return;
                         indices.push(index);
                         images.push(imageSource(render(contour.mask, palette, percent, level)));
                         metadata.push({...trace.meta, quac_contour: {...contour, style}});
                     });
-                    if (indices.length) await Plotly.restyle(plot, {source: images, meta: metadata}, indices);
+                    if (indices.length) await Plotly.restyle(plot, {source: images, meta: metadata, zsmooth: smoothing}, indices);
                 } while (dirty);
             } finally { busy = false; }
         }

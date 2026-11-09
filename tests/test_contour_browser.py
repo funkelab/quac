@@ -304,3 +304,83 @@ def test_rgb_colors_follow_channels_and_persist_across_selections(rgb_report_pat
         assert [control.input_value() for control in controls] == palette
         assert not errors
         browser.close()
+
+
+@pytest.mark.parametrize("fixture", ["report_path", "rgb_report_path"])
+def test_antialiasing_survives_mask_slider_updates(fixture, request):
+    from playwright.sync_api import sync_playwright
+    from quac.plotting import write_summary
+
+    report = request.getfixturevalue(fixture)
+    html = write_summary(report, report.with_suffix(".html"), 1)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1850, "height": 1200})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(html.as_uri())
+        smoothness = page.get_by_label("Contour smoothness", exact=True)
+        smoothness.wait_for()
+
+        def verify(level):
+            page.wait_for_function(
+                """level => {
+                const plot = document.querySelector('.js-plotly-plot');
+                const trace = plot.data[6];
+                const image = [...plot.querySelectorAll('.imagelayer image')]
+                    .find(element => element.getAttribute('href') === trace.source);
+                return trace.meta.quac_contour.style.endsWith(`:1:${level}`) &&
+                    plot._fullData[6].zsmooth === (level ? 'fast' : false) && image &&
+                    (getComputedStyle(image).imageRendering === 'pixelated') === !level;
+            }""",
+                arg=level,
+            )
+            state = page.evaluate(
+                """level => {
+                const plot = document.querySelector('.js-plotly-plot');
+                const trace = plot.data[6];
+                const palette = [...document.querySelectorAll('.quac-contour-controls input[type=color]')].map(input => input.value);
+                return {source: trace.source, pixels: QuacContours.render(trace.meta.quac_contour.mask, palette, 1, level)};
+            }""",
+                level,
+            )
+            actual = _pixels(state["source"]).astype(float)
+            expected = np.asarray(state["pixels"], dtype=float)
+            np.testing.assert_array_equal(actual[..., 3], expected[..., 3])
+            np.testing.assert_allclose(
+                actual[..., :3] * actual[..., 3:] / 255,
+                expected[..., :3] * expected[..., 3:] / 255,
+                atol=1,
+            )
+            if level:
+                alpha = np.asarray(state["pixels"])[..., 3]
+                assert np.any((alpha > 0) & (alpha < 255))
+
+        smoothness.focus()
+        page.keyboard.press("End")
+        verify(3)
+        rail = page.locator(".slider-rail-touch-rect").first.bounding_box()
+        for step in (2, 1, 3, 2):
+            page.mouse.click(
+                rail["x"] + rail["width"] * step / 4, rail["y"] + rail["height"] / 2
+            )
+            page.wait_for_function(
+                "step => document.querySelector('.js-plotly-plot').layout.sliders[0].active === step",
+                arg=step,
+            )
+            verify(3)
+        smoothness.focus()
+        page.keyboard.press("Home")
+        verify(0)
+        page.keyboard.press("End")
+        verify(3)
+        page.locator(".updatemenu-header").first.click()
+        page.locator(".updatemenu-dropdown-button:visible").get_by_text(
+            "residual", exact=True
+        ).click()
+        page.wait_for_function(
+            "document.querySelector('.js-plotly-plot').layout.meta.method === 'residual'"
+        )
+        verify(3)
+        assert not errors
+        browser.close()
