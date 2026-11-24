@@ -372,8 +372,9 @@ def convert_report(
                         )
                     source_path = _resolve(record["query_path"], base)
                     generated_path = _resolve(record.get("generated_path"), base)
-                    source_image, generated_image = _image(source_path), _image(
-                        generated_path
+                    source_image, generated_image = (
+                        _image(source_path),
+                        _image(generated_path),
                     )
                     if source_image.shape != shape or generated_image.shape != shape:
                         raise ValueError(f"All image shapes must match {shape}")

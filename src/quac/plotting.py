@@ -41,8 +41,9 @@ def _image_axes(figure, shape, rows):
         x0, x1 = xaxis.domain
         y0, y1 = yaxis.domain
         scale = min((x1 - x0) * plot_width / width, (y1 - y0) * plot_height / height)
-        half_width, half_height = width * scale / (2 * plot_width), height * scale / (
-            2 * plot_height
+        half_width, half_height = (
+            width * scale / (2 * plot_width),
+            height * scale / (2 * plot_height),
         )
         xaxis.update(
             domain=[(x0 + x1) / 2 - half_width, (x0 + x1) / 2 + half_width],

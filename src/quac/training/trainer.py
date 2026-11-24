@@ -236,7 +236,9 @@ def _step(loss, optimizers, names):
         optimizers[name].step()
 
 
-def train_stargan(model, dataset, config, directory, validation_dataset=None, classifier=None):
+def train_stargan(
+    model, dataset, config, directory, validation_dataset=None, classifier=None
+):
     """Train latent vector and reference image branches and save resumable checkpoints.
 
     A validation dataset is scored every ``training.validate_every`` steps; with a
@@ -344,7 +346,9 @@ def train_stargan(model, dataset, config, directory, validation_dataset=None, cl
             if validation_dataset is not None and (
                 step % options.validate_every == 0 or step == options.steps
             ):
-                metrics, pairs = _validate(model, validation_dataset, classifier, config)
+                metrics, pairs = _validate(
+                    model, validation_dataset, classifier, config
+                )
                 translation = (
                     f" translation_rate={metrics['translation_rate']:.3f}"
                     if pairs
