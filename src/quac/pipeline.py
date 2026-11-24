@@ -47,7 +47,7 @@ def train(config: Config) -> Path:
         dataset,
         config,
         config.output.directory / "checkpoints",
-        validation=validation,
+        validation_dataset=validation,
         classifier=classifier,
     )
 

@@ -145,7 +145,7 @@ def test_validation_logging_spares_training_rng(tmp_path, monkeypatch, sampling)
         )
     )
     weights = []
-    for options in [{}, dict(validation=validation, classifier=MeanClassifier())]:
+    for options in [{}, dict(validation_dataset=validation, classifier=MeanClassifier())]:
         torch.manual_seed(0)
         model = StarGAN(
             dataset.shape, dataset.classes, config.generator, torch.device("cpu")
@@ -197,7 +197,7 @@ def test_workers_and_resume_reproduce_uninterrupted_training(tmp_path):
         )
         directory = tmp_path / f"checkpoints-{steps}-{workers}"
         # Validating only while resuming also checks that it spares training RNG.
-        validation = dict(validation=dataset, classifier=MeanClassifier())
+        validation = dict(validation_dataset=dataset, classifier=MeanClassifier())
         path = train_stargan(
             model, dataset, options, directory, **(validation if checkpoint else {})
         )
