@@ -30,10 +30,25 @@ def train(config: Config) -> Path:
 
     config = config.resolve_paths(Path.cwd())
     device = initialize(config)
-    dataset = ImageDataset(config.data.source)
+    dataset = ImageDataset(config.data.source, config.data.check_shapes)
+    validation = None
+    if config.data.validation is not None:
+        validation = ImageDataset(config.data.validation, config.data.check_shapes)
+        if validation.classes != dataset.classes or validation.shape != dataset.shape:
+            raise ValueError(
+                "Validation classes and image shape must match the training source"
+            )
+    classifier = None
+    if config.classifier.checkpoint is not None:
+        classifier = load_classifier(config.classifier.checkpoint, device)
     model = build_generator(dataset, config.generator, device)
     return train_stargan(
-        model, dataset, config, config.output.directory / "checkpoints"
+        model,
+        dataset,
+        config,
+        config.output.directory / "checkpoints",
+        validation_dataset=validation,
+        classifier=classifier,
     )
 
 
@@ -58,7 +73,7 @@ def explain(
         raise FileExistsError(
             f"Report already exists: {config.output.report}; set output.overwrite: true"
         )
-    dataset = ImageDataset(config.data.source)
+    dataset = ImageDataset(config.data.source, config.data.check_shapes)
     checkpoint = (
         config.generator.checkpoint
         or config.output.directory / "checkpoints" / "latest.pt"

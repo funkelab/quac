@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -6,7 +7,8 @@ import torch
 from quac.config import Config, GeneratorConfig
 from quac.data import ImageDataset, write_image
 from quac.generators.stargan import ImageAdapter, StarGAN
-from quac.training.trainer import train_stargan
+from quac.training.trainer import _validate, train_stargan
+from conftest import MeanClassifier
 
 
 class Spy(torch.nn.Module):
@@ -93,3 +95,118 @@ def test_real_training_checkpoint_and_resume(tmp_path):
     )
     with pytest.raises(ValueError, match="class order"):
         incompatible.load(path)
+
+
+class FakeRun:
+    def __init__(self):
+        self.logs = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *error):
+        self.finished = True
+
+    def log(self, payload, step):
+        self.logs.setdefault(step, {}).update(payload)
+
+
+@pytest.mark.parametrize("sampling", ["latent", "reference"])
+def test_validation_logging_spares_training_rng(tmp_path, monkeypatch, sampling):
+    torch.set_num_threads(1)
+    for split in ["images", "validation"]:
+        for name in ["a", "b"]:
+            for index in range(2):
+                write_image(
+                    torch.rand(1, 13, 19), tmp_path / split / name / f"{index}.tif"
+                )
+    dataset = ImageDataset(tmp_path / "images")
+    validation = ImageDataset(tmp_path / "validation")
+    run = FakeRun()
+    wandb = SimpleNamespace(
+        init=lambda **options: run,
+        Table=lambda columns, data: data,
+        plot=SimpleNamespace(scatter=lambda table, x, y, title: table),
+    )
+    monkeypatch.setitem(sys.modules, "wandb", wandb)
+    config = Config.model_validate(
+        dict(
+            data={"source": str(dataset.source)},
+            generator=dict(
+                sampling=sampling,
+                style_dim=4,
+                latent_dim=2,
+                base_channels=4,
+                max_channels=8,
+                mapping_width=8,
+            ),
+            training=dict(steps=2, batch_size=3, log_every=1, validate_every=1),
+            wandb={"enabled": True},
+        )
+    )
+    weights = []
+    for options in [
+        {},
+        dict(validation_dataset=validation, classifier=MeanClassifier()),
+    ]:
+        torch.manual_seed(0)
+        model = StarGAN(
+            dataset.shape, dataset.classes, config.generator, torch.device("cpu")
+        )
+        train_stargan(model, dataset, config, tmp_path / "checkpoints", **options)
+        weights.append(next(model.nets["generator"].parameters()).detach())
+    torch.testing.assert_close(weights[0], weights[1])
+    assert run.finished and set(run.logs) == {1, 2}
+    logged = run.logs[2]
+    for name in ["D", "G", "D_latent", "G_reference"]:
+        assert f"train/{name}" in logged and f"validation/{name}" in logged
+    for pair in ["a->b", "b->a"]:
+        assert len(logged[f"validation/scatter/{pair}"]) == 2
+        assert 0 <= logged[f"validation/{pair}/translation_rate"] <= 1
+    repeated = [_validate(model, validation, MeanClassifier(), config)[0] for _ in "ab"]
+    assert repeated[0] == repeated[1]
+
+
+def test_workers_and_resume_reproduce_uninterrupted_training(tmp_path):
+    torch.set_num_threads(1)
+    for name in ["a", "b"]:
+        for index in range(3):
+            write_image(
+                torch.rand(1, 13, 19), tmp_path / "images" / name / f"{index}.tif"
+            )
+    dataset = ImageDataset(tmp_path / "images")
+    config = Config.model_validate(
+        dict(
+            data={"source": str(dataset.source)},
+            generator=dict(
+                style_dim=4,
+                latent_dim=2,
+                base_channels=4,
+                max_channels=8,
+                mapping_width=8,
+            ),
+            training=dict(steps=2, batch_size=2),
+        )
+    )
+
+    def train(steps, workers, checkpoint=None):
+        options = config.model_copy(deep=True)
+        options.training.steps = steps
+        options.training.num_workers = workers
+        options.generator.checkpoint = checkpoint
+        torch.manual_seed(0)
+        model = StarGAN(
+            dataset.shape, dataset.classes, options.generator, torch.device("cpu")
+        )
+        directory = tmp_path / f"checkpoints-{steps}-{workers}"
+        # Validating only while resuming also checks that it spares training RNG.
+        validation = dict(validation_dataset=dataset, classifier=MeanClassifier())
+        path = train_stargan(
+            model, dataset, options, directory, **(validation if checkpoint else {})
+        )
+        return path, next(model.ema["generator"].parameters()).detach()
+
+    _, uninterrupted = train(2, 0)
+    checkpoint, _ = train(1, 2)
+    _, resumed = train(2, 2, checkpoint)
+    torch.testing.assert_close(uninterrupted, resumed, rtol=0, atol=0)

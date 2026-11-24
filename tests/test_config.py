@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
@@ -15,6 +13,19 @@ def test_minimal_config(tmp_path):
     assert config.classifier.checkpoint is None
     assert config.explanation.levels == 101
     assert "img_size" not in type(config.generator).model_fields
+    assert config.data.validation is None and not config.wandb.enabled
+    assert config.data.check_shapes and config.training.num_workers == 0
+
+
+def test_validation_and_wandb_config(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "data:\n  source: images\n  validation: held_out\n"
+        "wandb:\n  enabled: true\n  mode: offline\n  tags: [demo]\n"
+    )
+    config = load_config(path)
+    assert config.data.validation == tmp_path / "held_out"
+    assert config.wandb.mode == "offline" and config.wandb.tags == ["demo"]
 
 
 @pytest.mark.parametrize(
@@ -23,6 +34,7 @@ def test_minimal_config(tmp_path):
         {"data": {"source": ".", "scale": 2}},
         {"data": {"source": "."}, "explanation": {"levels": 1}},
         {"data": {"source": "."}, "training": {"lr": -1}},
+        {"data": {"source": "."}, "wandb": {"mode": "cloud"}},
     ],
 )
 def test_invalid_config(value):

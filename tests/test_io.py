@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import torch
 
-from quac.data import ImageDataset, read_image, write_image
+from quac.data import ImageDataset, image_shape, read_image, write_image
 
 
 @pytest.mark.parametrize("channels", [1, 3])
@@ -37,3 +37,12 @@ def test_dataset_discovery(tmp_path):
     write_image(torch.zeros(3, 9, 13), tmp_path / "apple/two.tif")
     with pytest.raises(ValueError, match="shape"):
         ImageDataset(tmp_path)
+    assert ImageDataset(tmp_path, check_shapes=False).shape == (1, 9, 13)
+
+
+@pytest.mark.parametrize("name", ["png", "jpg", "bmp", "tif"])
+@pytest.mark.parametrize("channels", [1, 3])
+def test_header_shape_matches_decoded_shape(tmp_path, name, channels):
+    path = tmp_path / f"image.{name}"
+    write_image(torch.zeros(channels, 9, 13), path)
+    assert image_shape(path) == tuple(read_image(path).shape)
