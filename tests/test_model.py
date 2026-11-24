@@ -145,7 +145,10 @@ def test_validation_logging_spares_training_rng(tmp_path, monkeypatch, sampling)
         )
     )
     weights = []
-    for options in [{}, dict(validation_dataset=validation, classifier=MeanClassifier())]:
+    for options in [
+        {},
+        dict(validation_dataset=validation, classifier=MeanClassifier()),
+    ]:
         torch.manual_seed(0)
         model = StarGAN(
             dataset.shape, dataset.classes, config.generator, torch.device("cpu")
